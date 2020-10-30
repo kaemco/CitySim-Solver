@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="CitySim" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="debug">
+				<Option output="./bin/Debug/CitySim" prefix_auto="0" extension_auto="0" />
+				<Option working_dir="../Simulations/withCitySim/Nesrine" />
+				<Option object_output="./obj/Debug" />
+				<Option deps_output="C:/Documents and Settings/cgiller/Bureau/SVN/Dtool/.deps" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option parameters="/home/kaempf/kaemco/Simulations/buildingsAsphalt.xml" />
+				<Option projectResourceIncludeDirsRelation="1" />
+				<Compiler>
+					<Add option="-Wall" />
+					<Add option="-g" />
+					<Add option="-fno-inline" />
+					<Add option="-DDEBUG" />
+				</Compiler>
+			</Target>
+			<Target title="release">
+				<Option output="./bin/Release/CitySim" prefix_auto="0" extension_auto="0" />
+				<Option working_dir="./bin/Release/" />
+				<Option object_output="./obj/Release/" />
+				<Option deps_output="C:/Documents and Settings/cgiller/Bureau/SVN/Dtool/.deps" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option parameters="/home/kaempf/kaemco/Simulations/boxesR.xml" />
+				<Option projectResourceIncludeDirsRelation="1" />
+				<Compiler>
+					<Add option="-march=corei7-avx" />
+					<Add option="-O2" />
+					<Add option="-fopenmp" />
+					<Add option="-fPIC" />
+				</Compiler>
+				<Linker>
+					<Add option="-static -fopenmp" />
+				</Linker>
+			</Target>
+		</Build>
+		<VirtualTargets>
+			<Add alias="All" targets="debug;release;" />
+		</VirtualTargets>
+		<Compiler>
+			<Add option="-std=c++11" />
+			<Add option="-DTIXML_USE_STL" />
+			<Add directory="VFCLibrary" />
+			<Add directory="Sky" />
+			<Add directory="Tinyxml" />
+		</Compiler>
+		<Linker>
+			<Add library="GLU" />
+			<Add library="gfortran" />
+		</Linker>
+		<Unit filename="LAPACK/daxpy.f" />
+		<Unit filename="LAPACK/dcombssq.f" />
+		<Unit filename="LAPACK/dcopy.f" />
+		<Unit filename="LAPACK/ddot.f" />
+		<Unit filename="LAPACK/dgemm.f" />
+		<Unit filename="LAPACK/dgemv.f" />
+		<Unit filename="LAPACK/dger.f" />
+		<Unit filename="LAPACK/dgesv.f" />
+		<Unit filename="LAPACK/dgetrf.f" />
+		<Unit filename="LAPACK/dgetrf2.f" />
+		<Unit filename="LAPACK/dgetri.f" />
+		<Unit filename="LAPACK/dgetrs.f" />
+		<Unit filename="LAPACK/disnan.f" />
+		<Unit filename="LAPACK/dlae2.f" />
+		<Unit filename="LAPACK/dlaev2.f" />
+		<Unit filename="LAPACK/dlaisnan.f" />
+		<Unit filename="LAPACK/dlamch.f" />
+		<Unit filename="LAPACK/dlanst.f" />
+		<Unit filename="LAPACK/dlansy.f" />
+		<Unit filename="LAPACK/dlapy2.f" />
+		<Unit filename="LAPACK/dlarf.f" />
+		<Unit filename="LAPACK/dlarfb.f" />
+		<Unit filename="LAPACK/dlarfg.f" />
+		<Unit filename="LAPACK/dlarft.f" />
+		<Unit filename="LAPACK/dlartg.f" />
+		<Unit filename="LAPACK/dlascl.f" />
+		<Unit filename="LAPACK/dlaset.f" />
+		<Unit filename="LAPACK/dlasr.f" />
+		<Unit filename="LAPACK/dlasrt.f" />
+		<Unit filename="LAPACK/dlassq.f" />
+		<Unit filename="LAPACK/dlaswp.f" />
+		<Unit filename="LAPACK/dlatrd.f" />
+		<Unit filename="LAPACK/dnrm2.f" />
+		<Unit filename="LAPACK/dorg2l.f" />
+		<Unit filename="LAPACK/dorg2r.f" />
+		<Unit filename="LAPACK/dorgql.f" />
+		<Unit filename="LAPACK/dorgqr.f" />
+		<Unit filename="LAPACK/dorgtr.f" />
+		<Unit filename="LAPACK/dscal.f" />
+		<Unit filename="LAPACK/dsteqr.f" />
+		<Unit filename="LAPACK/dsterf.f" />
+		<Unit filename="LAPACK/dswap.f" />
+		<Unit filename="LAPACK/dsyev.f" />
+		<Unit filename="LAPACK/dsymv.f" />
+		<Unit filename="LAPACK/dsyr2.f" />
+		<Unit filename="LAPACK/dsyr2k.f" />
+		<Unit filename="LAPACK/dsytd2.f" />
+		<Unit filename="LAPACK/dsytrd.f" />
+		<Unit filename="LAPACK/dtrmm.f" />
+		<Unit filename="LAPACK/dtrmv.f" />
+		<Unit filename="LAPACK/dtrsm.f" />
+		<Unit filename="LAPACK/dtrti2.f" />
+		<Unit filename="LAPACK/dtrtri.f" />
+		<Unit filename="LAPACK/idamax.f" />
+		<Unit filename="LAPACK/ieeeck.f" />
+		<Unit filename="LAPACK/iladlc.f" />
+		<Unit filename="LAPACK/iladlr.f" />
+		<Unit filename="LAPACK/ilaenv.f" />
+		<Unit filename="LAPACK/iparmq.f" />
+		<Unit filename="LAPACK/lsame.f" />
+		<Unit filename="LAPACK/xerbla.f" />
+		<Unit filename="Sky/cPerezSkyModel.cpp" />
+		<Unit filename="Sky/cPerezSkyModel.h" />
+		<Unit filename="Tinyxml/tinystr.cpp" />
+		<Unit filename="Tinyxml/tinystr.h" />
+		<Unit filename="Tinyxml/tinyxml.cpp" />
+		<Unit filename="Tinyxml/tinyxml.h" />
+		<Unit filename="Tinyxml/tinyxmlerror.cpp" />
+		<Unit filename="Tinyxml/tinyxmlparser.cpp" />
+		<Unit filename="VFCLibrary/DATAInsolationFactors.cpp" />
+		<Unit filename="VFCLibrary/DATAInsolationFactors.h" />
+		<Unit filename="VFCLibrary/DATARadiationScene.cpp" />
+		<Unit filename="VFCLibrary/DATARadiationScene.h" />
+		<Unit filename="VFCLibrary/DATASurface.cpp" />
+		<Unit filename="VFCLibrary/DATASurface.h" />
+		<Unit filename="VFCLibrary/DATASurfaceDelegateABC.h" />
+		<Unit filename="VFCLibrary/DATASurfaceIterator.cpp" />
+		<Unit filename="VFCLibrary/DATASurfaceIterator.h" />
+		<Unit filename="VFCLibrary/DATAViewFactorSetSparse.cpp" />
+		<Unit filename="VFCLibrary/DATAViewFactorSetSparse.h" />
+		<Unit filename="VFCLibrary/GENAngle.cpp" />
+		<Unit filename="VFCLibrary/GENAngle.h" />
+		<Unit filename="VFCLibrary/GENAssert.cpp" />
+		<Unit filename="VFCLibrary/GENAssert.h" />
+		<Unit filename="VFCLibrary/GENFixedVector.h" />
+		<Unit filename="VFCLibrary/GENGluTriangulator.cpp" />
+		<Unit filename="VFCLibrary/GENGluTriangulator.h" />
+		<Unit filename="VFCLibrary/GENHandle.h" />
+		<Unit filename="VFCLibrary/GENPoint.cpp" />
+		<Unit filename="VFCLibrary/GENPoint.h" />
+		<Unit filename="VFCLibrary/GENPoint.inl" />
+		<Unit filename="VFCLibrary/GENWrappedArray.h" />
+		<Unit filename="VFCLibrary/GEOMBoundingSphereCalc.cpp" />
+		<Unit filename="VFCLibrary/GEOMBoundingSphereCalc.h" />
+		<Unit filename="VFCLibrary/GEOMPolygonInfo.h" />
+		<Unit filename="VFCLibrary/GEOMSphere.cpp" />
+		<Unit filename="VFCLibrary/GEOMSphere.h" />
+		<Unit filename="VFCLibrary/GEOMSphericalBasis.cpp" />
+		<Unit filename="VFCLibrary/GEOMSphericalBasis.h" />
+		<Unit filename="VFCLibrary/RENBoundingSphereABC.h" />
+		<Unit filename="VFCLibrary/RENClipper.cpp" />
+		<Unit filename="VFCLibrary/RENClipper.h" />
+		<Unit filename="VFCLibrary/RENIndexedFaceSet.cpp" />
+		<Unit filename="VFCLibrary/RENIndexedFaceSet.h" />
+		<Unit filename="VFCLibrary/RENIndexedFaceSetBuilder.cpp" />
+		<Unit filename="VFCLibrary/RENIndexedFaceSetBuilder.h" />
+		<Unit filename="VFCLibrary/RENMatrix.cpp" />
+		<Unit filename="VFCLibrary/RENMatrix.h" />
+		<Unit filename="VFCLibrary/RENOpenGLRenderer.cpp" />
+		<Unit filename="VFCLibrary/RENOpenGLRenderer.h" />
+		<Unit filename="VFCLibrary/RENRasteriser.cpp" />
+		<Unit filename="VFCLibrary/RENRasteriser.h" />
+		<Unit filename="VFCLibrary/RENRasteriserFlatShading.cpp" />
+		<Unit filename="VFCLibrary/RENRasteriserFlatShading.h" />
+		<Unit filename="VFCLibrary/RENRenderTarget.cpp" />
+		<Unit filename="VFCLibrary/RENRenderTarget.h" />
+		<Unit filename="VFCLibrary/RENSoftwareRenderer.cpp" />
+		<Unit filename="VFCLibrary/RENSoftwareRenderer.h" />
+		<Unit filename="VFCLibrary/RENUtilities.cpp" />
+		<Unit filename="VFCLibrary/RENUtilities.h" />
+		<Unit filename="VFCLibrary/RENVertex.cpp" />
+		<Unit filename="VFCLibrary/RENVertex.h" />
+		<Unit filename="VFCLibrary/RENVertexProcessor.cpp" />
+		<Unit filename="VFCLibrary/RENVertexProcessor.h" />
+		<Unit filename="VFCLibrary/SKYCell.cpp" />
+		<Unit filename="VFCLibrary/SKYCell.h" />
+		<Unit filename="VFCLibrary/SKYPatch.cpp" />
+		<Unit filename="VFCLibrary/SKYPatch.h" />
+		<Unit filename="VFCLibrary/SKYRegularPatch.cpp" />
+		<Unit filename="VFCLibrary/SKYRegularPatch.h" />
+		<Unit filename="VFCLibrary/SKYSiteLocation.h" />
+		<Unit filename="VFCLibrary/SKYSun.cpp" />
+		<Unit filename="VFCLibrary/SKYSun.h" />
+		<Unit filename="VFCLibrary/SKYTopPatch.cpp" />
+		<Unit filename="VFCLibrary/SKYTopPatch.h" />
+		<Unit filename="VFCLibrary/SKYTregenza.cpp" />
+		<Unit filename="VFCLibrary/SKYTregenza.h" />
+		<Unit filename="VFCLibrary/SKYVaultABC.h" />
+		<Unit filename="VFCLibrary/VFCDiffuse.h" />
+		<Unit filename="VFCLibrary/VFCDiffuseIntegrator.h" />
+		<Unit filename="VFCLibrary/VFCDirect.cpp" />
+		<Unit filename="VFCLibrary/VFCDirect.h" />
+		<Unit filename="VFCLibrary/VFCFishEyeRenderer.h" />
+		<Unit filename="VFCLibrary/VFCSWGeometry.cpp" />
+		<Unit filename="VFCLibrary/VFCSWGeometry.h" />
+		<Unit filename="VFCLibrary/VFCVISGeometry.cpp" />
+		<Unit filename="VFCLibrary/VFCVISGeometry.h" />
+		<Unit filename="VFCLibrary/VFCViewFactorCalculation.cpp" />
+		<Unit filename="VFCLibrary/VFCViewFactorCalculation.h" />
+		<Unit filename="VFCLibrary/bicgstab.h" />
+		<Unit filename="building.cpp" />
+		<Unit filename="building.h" />
+		<Unit filename="climate.cpp" />
+		<Unit filename="climate.h" />
+		<Unit filename="district.cpp" />
+		<Unit filename="district.h" />
+		<Unit filename="main.cpp" />
+		<Unit filename="models.cpp" />
+		<Unit filename="models.h" />
+		<Unit filename="occupants.cpp" />
+		<Unit filename="occupants.h" />
+		<Unit filename="plant.cpp" />
+		<Unit filename="plant.h" />
+		<Unit filename="scene.cpp" />
+		<Unit filename="scene.h" />
+		<Unit filename="surface.cpp" />
+		<Unit filename="surface.h" />
+		<Unit filename="util.cpp" />
+		<Unit filename="util.h" />
+		<Unit filename="zone.cpp" />
+		<Unit filename="zone.h" />
+		<Extensions>
+			<code_completion />
+			<debugger />
+			<envvars />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

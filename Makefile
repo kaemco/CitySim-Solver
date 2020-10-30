@@ -1,0 +1,74 @@
+CXX		= g++
+F95		= gfortran
+CXXFLAGS	= -std=c++11 -O2 -fopenmp -fPIC -DTIXML_USE_STL
+LDFLAGS		= -lGLU -lgfortran -fopenmp
+CXXFLAGS_D	= -std=c++11 -g -DDEBUG -DTIXML_USE_STL
+LDFLAGS_D	= -lGLU -lgfortran
+INCLUDES	= -I./Sky -I./Tinyxml -I./VFCLibrary
+DEFINES		=
+AR		= ar
+EXEC		= CitySim
+EXEC_D		= CitySimd
+LIB		= lib$(EXEC).a
+
+MAINSRC		= building.cpp district.cpp models.cpp plant.cpp scene.cpp zone.cpp climate.cpp occupants.cpp result.cpp util.cpp surface.cpp
+LAPACKSRC	= $(wildcard ./LAPACK/*.f)
+SKYSRC		= $(wildcard ./Sky/*.cpp)
+TINYXMLSRC	= $(wildcard ./Tinyxml/*.cpp)
+VFCLIBRARYSRC	= $(wildcard ./VFCLibrary/*.cpp)
+
+MAINOBJ		= $(patsubst %.cpp, %.o, $(MAINSRC))
+LAPACKOBJ	= $(patsubst %.f, %.o, $(LAPACKSRC))
+SKYOBJ		= $(patsubst %.cpp, %.o, $(SKYSRC))
+TINYXMLOBJ	= $(patsubst %.cpp, %.o, $(TINYXMLSRC))
+VFCLIBRARYOBJ	= $(patsubst %.cpp, %.o, $(VFCLIBRARYSRC))
+
+MAINOBJ_D	= $(patsubst %.cpp, %d.o, $(MAINSRC))
+LAPACKOBJ_D	= $(patsubst %.f, %d.o, $(LAPACKSRC))
+SKYOBJ_D	= $(patsubst %.cpp, %d.o, $(SKYSRC))
+TINYXMLOBJ_D	= $(patsubst %.cpp, %d.o, $(TINYXMLSRC))
+VFCLIBRARYOBJ_D	= $(patsubst %.cpp, %d.o, $(VFCLIBRARYSRC))
+
+all: $(EXEC) $(EXEC_D) $(LIB)
+
+$(EXEC): main.o $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+	cp $(EXEC) ~/bin
+	rm $(EXEC)
+
+$(EXEC_D): maind.o $(MAINOBJ_D) $(LAPACKOBJ_D) $(SKYOBJ_D) $(TINYXMLOBJ_D) $(VFCLIBRARYOBJ_D)
+	$(CXX) -o $@ $^ $(LDFLAGS_D)
+	cp $(EXEC_D) ~/bin
+	rm $(EXEC_D)
+
+$(LIB): $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
+	$(AR) rcs $@ $^
+	cp $(LIB) ~/lib/CitySim
+	cp $(wildcard ./*.h) ~/lib/CitySim
+	cp $(wildcard ./Sky/*.h) ~/lib/CitySim
+	cp $(wildcard ./Tinyxml/*.h) ~/lib/CitySim
+	cp $(wildcard ./VFCLibrary/*.h) ~/lib/CitySim
+	cp $(wildcard ./VFCLibrary/*.inl) ~/lib/CitySim
+	cp main.cpp ~/lib/CitySim
+	@echo "all: main.cpp $(LIB)" > ~/lib/CitySim/Makefile
+	@echo "	$(CXX) $(CXXFLAGS) -L. main.cpp -l$(EXEC) $(LDFLAGS) -o $(EXEC)" >> ~/lib/CitySim/Makefile
+	rm $(LIB)
+
+%.o: %.cpp
+	$(CXX) $(INCLUDES) $(DEFINES) $(CXXFLAGS) -c $< -o $*.o
+
+%.o: %.f
+	$(F95) -c -O2 $< -o $*.o
+
+%d.o: %.cpp
+	$(CXX) $(INCLUDES) $(DEFINES) $(CXXFLAGS_D) -c $< -o $*d.o
+
+%d.o: %.f
+	$(F95) -c -g $< -o $*d.o
+
+clean: $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ) $(MAINOBJ_D) $(LAPACKOBJ_D) $(SKYOBJ_D) $(TINYXMLOBJ_D) $(VFCLIBRARYOBJ_D)
+	rm -f $^
+	rm -f *.o
+
+clear: 
+	rm -f *.o

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="VFCLibrary" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug Win32">
+				<Option output="debug\lib\libVFCLibrary" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="Debug" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-DWIN32" />
+					<Add option="-D_DEBUG" />
+					<Add option="-D_LIB" />
+					<Add option="-D_USE_MATH_DEFINES" />
+					<Add option="-D_STLP_DEBUG" />
+					<Add option="-Wall" />
+					<Add option="-O0" />
+					<Add directory=".\" />
+				</Compiler>
+				<ResourceCompiler>
+					<Add directory=".\" />
+				</ResourceCompiler>
+				<Linker>
+					<Add library="glu32" />
+				</Linker>
+			</Target>
+			<Target title="Release Win32">
+				<Option output="release\lib\libVFCLibrary" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="Release" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-Wall" />
+					<Add option="-DWIN32" />
+					<Add option="-DNDEBUG" />
+					<Add option="-D_LIB" />
+					<Add option="-D_USE_MATH_DEFINES" />
+					<Add directory=".\" />
+					<Add directory="..\Include" />
+				</Compiler>
+				<ResourceCompiler>
+					<Add directory=".\" />
+					<Add directory="..\Include" />
+				</ResourceCompiler>
+			</Target>
+		</Build>
+		<Unit filename="DATAInsolationFactors.cpp" />
+		<Unit filename="DATAInsolationFactors.h" />
+		<Unit filename="DATARadiationScene.cpp" />
+		<Unit filename="DATARadiationScene.h" />
+		<Unit filename="DATASurface.cpp" />
+		<Unit filename="DATASurface.h" />
+		<Unit filename="DATASurfaceDelegateABC.h" />
+		<Unit filename="DATASurfaceIterator.cpp" />
+		<Unit filename="DATASurfaceIterator.h" />
+		<Unit filename="DATAViewFactorSetSparse.cpp" />
+		<Unit filename="DATAViewFactorSetSparse.h" />
+		<Unit filename="GENAngle.cpp" />
+		<Unit filename="GENAngle.h" />
+		<Unit filename="GENAssert.cpp" />
+		<Unit filename="GENAssert.h" />
+		<Unit filename="GENFixedVector.h" />
+		<Unit filename="GENGluTriangulator.cpp" />
+		<Unit filename="GENGluTriangulator.h" />
+		<Unit filename="GENHandle.h" />
+		<Unit filename="GENPoint.cpp" />
+		<Unit filename="GENPoint.h" />
+		<Unit filename="GENPoint.inl" />
+		<Unit filename="GENWrappedArray.h" />
+		<Unit filename="GEOMBoundingSphereCalc.cpp" />
+		<Unit filename="GEOMBoundingSphereCalc.h" />
+		<Unit filename="GEOMPolygonInfo.h" />
+		<Unit filename="GEOMSphere.cpp" />
+		<Unit filename="GEOMSphere.h" />
+		<Unit filename="GEOMSphericalBasis.cpp" />
+		<Unit filename="GEOMSphericalBasis.h" />
+		<Unit filename="RENBoundingSphereABC.h" />
+		<Unit filename="RENClipper.cpp" />
+		<Unit filename="RENClipper.h" />
+		<Unit filename="RENIndexedFaceSet.cpp" />
+		<Unit filename="RENIndexedFaceSet.h" />
+		<Unit filename="RENIndexedFaceSetBuilder.cpp" />
+		<Unit filename="RENIndexedFaceSetBuilder.h" />
+		<Unit filename="RENMatrix.cpp" />
+		<Unit filename="RENMatrix.h" />
+		<Unit filename="RENRasteriser.cpp" />
+		<Unit filename="RENRasteriser.h" />
+		<Unit filename="RENRasteriserFlatShading.cpp" />
+		<Unit filename="RENRasteriserFlatShading.h" />
+		<Unit filename="RENRenderTarget.cpp" />
+		<Unit filename="RENRenderTarget.h" />
+		<Unit filename="RENSoftwareRenderer.cpp" />
+		<Unit filename="RENSoftwareRenderer.h" />
+		<Unit filename="RENUtilities.cpp" />
+		<Unit filename="RENUtilities.h" />
+		<Unit filename="RENVertex.cpp" />
+		<Unit filename="RENVertex.h" />
+		<Unit filename="RENVertexProcessor.cpp" />
+		<Unit filename="RENVertexProcessor.h" />
+		<Unit filename="SKYCell.cpp" />
+		<Unit filename="SKYCell.h" />
+		<Unit filename="SKYPatch.cpp" />
+		<Unit filename="SKYPatch.h" />
+		<Unit filename="SKYRegularPatch.cpp" />
+		<Unit filename="SKYRegularPatch.h" />
+		<Unit filename="SKYSiteLocation.h" />
+		<Unit filename="SKYSun.cpp" />
+		<Unit filename="SKYSun.h" />
+		<Unit filename="SKYTopPatch.cpp" />
+		<Unit filename="SKYTopPatch.h" />
+		<Unit filename="SKYTregenza.cpp" />
+		<Unit filename="SKYTregenza.h" />
+		<Unit filename="SKYVaultABC.h" />
+		<Unit filename="VFCDiffuse.h" />
+		<Unit filename="VFCDiffuseIntegrator.h" />
+		<Unit filename="VFCDirect.cpp" />
+		<Unit filename="VFCDirect.h" />
+		<Unit filename="VFCFishEyeRenderer.h" />
+		<Unit filename="VFCSWGeometry.cpp" />
+		<Unit filename="VFCSWGeometry.h" />
+		<Unit filename="VFCVISGeometry.cpp" />
+		<Unit filename="VFCVISGeometry.h" />
+		<Unit filename="VFCViewFactorCalculation.cpp" />
+		<Unit filename="VFCViewFactorCalculation.h" />
+		<Unit filename="bicgstab.h" />
+		<Extensions>
+			<code_completion />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>
