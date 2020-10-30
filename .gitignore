@@ -1,0 +1,12 @@
+# objects
+*.o
+# codeblocks specific
+*.layout
+*.depend
+bin/
+obj/
+# codeblocks search results
+CppCheckResults.xml
+CitySim.cscope_file_list
+# remove .svn
+.svn/

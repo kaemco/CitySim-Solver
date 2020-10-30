@@ -1,0 +1,41 @@
+#!/bin/bash
+currentPath="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+echo "Current path:" $currentPath
+cd $currentPath
+
+echo "Compiling Citysim..."
+cd ..
+make -f Makefile.webservice
+if [[ $? -ne 0 ]]
+then
+	echo "CitySim lib compilation failed"
+	exit
+fi
+
+#echo ""
+#echo "Copying CitySim library files..."
+#cd $currentPath
+#cp ../Solver/WS_lib/* lib/CitySim
+
+echo "Creating CitySimWebS..."
+cd $currentPath/src
+soapcpp2 -S -L -x CitySimWebS.h
+if [[ $? -ne 0 ]]
+then
+        echo "WebService creation failed"
+        exit
+fi
+
+echo "Compiling CitySimWebS..."
+cd $currentPath
+make
+if [[ $? -ne 0 ]]
+then
+	echo "Compilation failed"
+	exit
+fi
+
+echo "Copying wsdl file in dev folder..."
+cp src/CitySimWebS.wsdl /var/www/CitySimWS/dev/
+
+echo "All done!"
