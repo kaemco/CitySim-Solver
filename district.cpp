@@ -176,7 +176,99 @@ District::District(TiXmlHandle XMLHandler, XmlScene* pScene):pScene(pScene),occu
 
         for(auto dec : districtEnergyCenters) { dec->substationsConstructionFinished(); } // To check that substations have all been found, find loops and regulated paths...
 
+// loading the geometry of the pedestrians
+        logStream << "Loading geometry of pedestrian(s)." << endl << flush;
+        i=0;
+        while (XMLHandler.FirstChild("District").ChildElement("Pedestrian",i).ToElement()) {
 
+            // check if the building should be simulated or not (in the building tag itself)
+            if (string(XMLHandler.FirstChild("District").ChildElement("Pedestrian",i).ToElement()->Attribute("Simulate"))==string("false")) {
+
+                // if simulate=false, then easy, we just add surfaces to the ground for the SW calculation only
+                logStream << "Pedestrian: " << string(XMLHandler.FirstChild("District").ChildElement("Pedestrian",i).ToElement()->Attribute("id")) << "\twith key: " << string(XMLHandler.FirstChild("District").ChildElement("Pedestrian",i).ToElement()->Attribute("key"));
+                logStream << "\tnot thermally simulated." << endl << flush;
+
+                // loop on the zones
+                TiXmlElement *zoneElem = XMLHandler.FirstChild("District").ChildElement("Pedestrian",i).FirstChildElement("Zone").ToElement();
+                while (zoneElem) { // zoning exists
+
+                    // loading the wall vertices and put them in a vector
+                    TiXmlHandle zoneHdl = zoneElem;
+                    elem = zoneHdl.FirstChildElement("Wall").ToElement();
+                    while(elem){
+
+                        // reads the vertices and creates a shading, with an id
+                        surfaces.push_back(new Surface(elem,nullptr,&logStream));
+
+                        // checks the size of the surface
+                        if ((surfaces.back()->getArea() <= 0.f) || (surfaces.back()->getRadius() <= 0.f)) {
+                            logStream << "(Warning) Wall id=" << surfaces.back()->getId() << " has a too small surface area or radius, removing it" << endl << flush;
+                            delete surfaces.back();
+                            surfaces.pop_back();
+                        }
+                        elem = elem->NextSiblingElement("Wall");
+                    }
+
+                    // loading the roof vertices
+                    elem = zoneHdl.FirstChildElement("Roof").ToElement();
+                    while(elem){
+
+                        // reads the vertices and creates a shading, with an id
+                        surfaces.push_back(new Surface(elem,nullptr,&logStream));
+
+                        // checks the size of the surface
+                        if ((surfaces.back()->getArea() <= 0.f) || (surfaces.back()->getRadius() <= 0.f)) {
+                            logStream << "(Warning) Roof id=" << surfaces.back()->getId() << " has a too small surface area or radius, removing it" << endl << flush;
+                            delete surfaces.back();
+                            surfaces.pop_back();
+                        }
+                        elem = elem->NextSiblingElement("Roof");
+                    }
+
+                    // loading the floor vertices
+                    elem = zoneHdl.FirstChildElement("Floor").ToElement();
+                    while(elem){
+
+                        // reads the vertices and creates a shading, with an id
+                        surfaces.push_back(new Surface(elem,nullptr,&logStream));
+
+                        // checks the size of the surface
+                        if ((surfaces.back()->getArea() <= 0.f) || (surfaces.back()->getRadius() <= 0.f)) {
+                            logStream << "(Warning) Roof id=" << surfaces.back()->getId() << " has a too small surface area or radius, removing it" << endl << flush;
+                            delete surfaces.back();
+                            surfaces.pop_back();
+                        }
+                        elem = elem->NextSiblingElement("Floor");
+                    }
+
+                    // loading the surface vertices and put them in a vector (obstructing surfaces)
+                    elem = zoneHdl.FirstChildElement("Surface").ToElement();
+                    while(elem){
+
+                        surfaces.push_back(new Surface(elem,nullptr,&logStream));
+
+                        // checks the size of the surface
+                        if ((surfaces.back()->getArea() <= 0.f) || (surfaces.back()->getRadius() <= 0.f)) {
+                            logStream << "(Warning) Surface id=" << surfaces.back()->getId() << " has a too small surface area or radius, removing it" << endl << flush;
+                            delete surfaces.back();
+                            surfaces.pop_back();
+                        }
+                        elem = elem->NextSiblingElement("Surface");
+                    }
+
+                    // go to the next zone
+                    zoneElem = zoneElem->NextSiblingElement("Zone");
+                }
+            }
+            else {
+                // the building should be simulated, we then add it to the vector of buildings
+                pedestrians.push_back(new Pedestrian(XMLHandler.FirstChild("District").ChildElement("Pedestrian",i),this));
+            }
+            ++i;
+        }
+        logStream << pedestrians.size() << " loaded." << endl << flush;
+
+        for(auto dec : districtEnergyCenters) { dec->substationsConstructionFinished(); } // To check that substations have all been found, find loops and regulated paths...
         logStream << "Loading wind turbine(s): ";
         i=0;
         while (XMLHandler.FirstChild("District").ChildElement("WindTurbine",i).ToElement()) {
@@ -272,6 +364,28 @@ void District::addBuilding(Building *b) {
         for (unsigned int k=0; k<buildings.back()->getZone(j)->getnSurfaces(); ++k) {
             // add the surface to the Ground surfaces (meaning NO daylight calculation)
             getScene()->getDATARadiationScene()->AddGroundSurface(GENHandle<Surface>(buildings.back()->getZone(j)->getSurface(k)));
+        }
+    }
+
+    return;
+}
+
+void District::addPedestrian(Pedestrian *b) {
+
+    // adds the building in the building vector
+    pedestrians.push_back(b);
+
+    // adds the building in the DATARadiationScene
+    for (unsigned int j=0; j<buildings.back()->getnZones(); ++j) { // loop on all zones in the building
+        // loop for the walls on this zone
+        for (unsigned int k=0; k<buildings.back()->getZone(j)->getnWalls(); ++k) {
+            // add the surface to the Buildings surfaces (daylight calculation)
+            getScene()->getDATARadiationScene()->AddDiffuseSamplingPoint(GENHandle<Wall>(buildings.back()->getZone(j)->getWall(k)));
+        }
+        // loop for the roofs on this zone
+        for (unsigned int k=0; k<buildings.back()->getZone(j)->getnRoofs(); ++k) {
+            // add the surface to the Ground surfaces (meaning NO daylight calculation)
+            getScene()->getDATARadiationScene()->AddDiffuseSamplingPoint(GENHandle<Roof>(buildings.back()->getZone(j)->getRoof(k)));
         }
     }
 

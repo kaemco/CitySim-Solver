@@ -25,6 +25,7 @@ private:
 
     // elements in the District
     vector<Building*> buildings;
+    vector<Pedestrian*> pedestrians;
     vector<Surface*> surfaces; //!< obstructing surfaces
     vector<Tree*> trees; //!< trees in the district
 
@@ -69,6 +70,13 @@ public:
     Building* getBuilding(unsigned int i) { return buildings[i]; }
     vector<Building*>* getBuildings() { return &buildings; }
     void addBuilding(Building* b);
+
+    size_t getnPedestrians() { return pedestrians.size(); }
+    Building* getPedestrian(unsigned int i) { return pedestrians[i]; }
+    vector<Pedestrian*>* getPedestrians() { return &pedestrians; }
+    void addPedestrian(Pedestrian* b);
+
+
     vector<Tree*>* getTrees() { return &trees; }
     size_t getnTrees() { return trees.size(); }
     Tree* getTree(size_t i) { return trees.at(i); }
