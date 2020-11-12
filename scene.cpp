@@ -1644,12 +1644,6 @@ void XmlScene::addAllSurfacesToScene(){
                 // add the surface to the Buildings surfaces (daylight calculation)
                 scene.AddDiffuseSamplingPoint(GENHandle<Wall>(pDistrict->getBuilding(i)->getZone(j)->getWall(k)));
             }
-            // loop for the roofs on this zone
-            for (unsigned int k=0; k<pDistrict->getPedestrian(i)->getZone(j)->getnRoofs(); ++k) {
-                logStream << "Building " << i << "\tZone: " << j << "\tRoof " << k << endl << flush;
-                // add the surface to the Ground surfaces (meaning NO daylight calculation)
-                scene.AddDiffuseSamplingPoint(GENHandle<Roof>(pDistrict->getBuilding(i)->getZone(j)->getRoof(k)));
-            }
         }
     }
     logStream << "Pedestrians' surfaces added to the scene." << endl << flush;
