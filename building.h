@@ -354,96 +354,13 @@ public:
 
 };
 
-class Pedestrian : Building {
+class Pedestrian : public Building { 
+
 public:
-    enum ResultsPositions {DAY_RESULTS_POSITION=0, MONTH_RESULTS_POSITION=365, YEAR_RESULTS_POSITION=365+12};
-    enum DiplayableResults {HEATING_DEMAND, COOLING_DEMAND, TEMPERATURE, N_RESULTS};
-
-private:
-
-    // identifies the district it is in, to access global values
-    District* pDistrict = nullptr;
-
-    // the ID of the building and its key to a database
-    unsigned int id=0;
-    string key="";
-    string name="";
-
-    // indicates to simulate the building with EnergyPlus
-    bool simulateEP = false;
-    string fmuFile, tmpPath;
-
-    // the vector containing the building Zones, it should be created by the constructor of building
-    vector<Zone*> zones;
-
-    // the matrices representing the building for the thermal model (constant throughout the simulation)
-    vector<vector<float>> C; ///< Matrix of the capacitances, (W/K)
-    vector<vector<float>> G1; ///< Matrix of the fixed conductances of the building (including the links between the zones), (W/K)
-
-    // for the HVAC model
-    bool HVACpresence=false;
-    double coileff,coilHTWeff;
-    bool evaporativeCooling=false;
-    double TminSupply, TmaxSupply, deltaT;
-
-    // to provide the heat needed by the HVAC model and store the tank temperature
-    Tank* heatStock = nullptr;
-    Tank* dhwStock = nullptr;
-    Tank* coldStock = nullptr;
-    vector<float> heatStockTemperature, dhwStockT, coldStockTemperature;
-
-    // the energy conversion unit
-    EnergyConversionSystem* heatingUnit = nullptr;
-    EnergyConversionSystem* coolingUnit = nullptr;
-
-    // whole building consumption on an hourly basis, emptied from time to time to prevent memory stagnation
-    vector<float> electricConsumption, fuelConsumption, machinePower, solarPVProduction, solarThermalProduction;
-
-    // save in a Compressed Row Storage sparse matrix format the links between the thermal zones
-    vector<pair<float,float> > linksAn;
-    vector<unsigned int> linksAj, linksAi;
-
-    // eco-indicators
-    float nre = 0.f, gwp = 0.f, ubp = 0.f;
-
-    // blinds parameters
-    float blindsLambda = 0.2f; // shape of the sigmoid curve
-    float blindsIrradianceCutOff = 100.f; // 100 W/m≤ for the cut-off
-
-    // mrt parameters
-    bool mrt = false;
-    float mrtEpsilon = 0.97f;
-
-    // Cognet: Start of added code.
-    // Variables for computations at each time step. (HS = hot storage, DHW = domestic hot water, CS = cold storage).
-    map<string, float> imposedHeatDemand; // Stores values if one wants to impose the heat demanded to the heatingUnit. Format map["d42h4"]=3200.
-    double heatingNeeds, coolingNeeds; // Sum over the building's zones' space heating/cooling needs.
-    double HS_needs, DHW_needs, CS_needs; // Thermal power needed the tanks (power that will be asked to heating/cooling unit (the unit may not be powerful enough to fulfill the need) ).
-    double HS_SolPp, DHW_SolPp, CS_SolPp; // Solar thermal power provided for the tanks.
-    double SolTherFracLeft; // Solar thermal power is used by different applications : HS tank, DHW tank or feed-in substation. Since the temperatures change, the power available changes. When one uses a portion of the available power (only 40%), then it sets this variable to the fraction that is still available (here 60%).
-    double HS_Pp, DHW_Pp, CS_Pp; // Thermal power provided for the tanks (power that the heating/cooling unit will provide).
-    double VdotUsed; // Domestic hot water consumption summed over zones [m^3/s].
-    float Tamb; // "Ambiant teperature", where the water tanks are located.
-    // Cognet: End of added code.
-public:
-
-    ostream logStream;
 
     // the constructor of the building, which reads in the XML file and the destructor that removes the Zones
     Pedestrian(TiXmlHandle hdl, District* pDistrict);
-    Pedestrian(vector<Wall*> walls, vector<Roof*> roofs, vector<Floor*> floors, vector<Surface*> surfaces, District* pDistrict);
-    Pedestrian(const ns__BuildingW* buildingXMLWrapper, District* pDistrict, double yearlyElecCons=0, unsigned int heatingBeginDay=0, unsigned int heatingEndDay=0); // definition in CitySimWebS.cpp
     ~Pedestrian();
-    void clear() {
-        heatStockTemperature.clear();
-        dhwStockT.clear();
-        coldStockTemperature.clear();
-        electricConsumption.clear();
-        fuelConsumption.clear();
-        machinePower.clear();
-        solarThermalProduction.clear();
-        for (vector<Zone*>::iterator it=zones.begin();it!=zones.end();++it) (*it)->clear();
-    }
 };
 
 class Tree {

@@ -72,7 +72,7 @@ public:
     void addBuilding(Building* b);
 
     size_t getnPedestrians() { return pedestrians.size(); }
-    Building* getPedestrian(unsigned int i) { return pedestrians[i]; }
+    Building* getPedestrian(unsigned int i) { pedestrians[i]; }
     vector<Pedestrian*>* getPedestrians() { return &pedestrians; }
     void addPedestrian(Pedestrian* b);
 
