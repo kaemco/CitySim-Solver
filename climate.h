@@ -12,8 +12,6 @@
 #include <cstdlib>
 #include <map>
 
-//#include "CitySimWS.h"
-#include "CitySimWebS.h"
 #include "models.h"
 #include "GENAngle.h"
 
@@ -55,7 +53,6 @@ private :
 public :
 
     Climate(string filename, ostream* logFileStream=NULL);
-    Climate(const ns__ClimateW* climateXMLWrapper, ostream* pLogFileStream=NULL); // defined in CitySimWebS.cpp
     ~Climate() { delete[] Td; }
     void clear() {
         Igh.clear(); Igh_vis.clear();

@@ -11,9 +11,6 @@
 #include "DATASurfaceDelegateABC.h"
 #include "GEOMPolygonInfo.h"
 
-// include for the CitySim webservice
-#include "CitySimWebS.h"
-
 class Building;
 class XmlScene;
 
@@ -153,8 +150,6 @@ class Composite {
     Composite(TiXmlHandle hdl, map<string,Material*> materials, ostream* pLogStr=NULL);
 
     Composite(Composite const& c, float insulationTh=-1.);
-
-    Composite(ns__WallTypeW* wallTypeXMLWrapper, ostream* pLogStr=NULL); // defined in CitySimWebS.cpp
 
     size_t getnLayers() { return vLayer.size(); }
     vector<Layer>* getLayers() { return &vLayer; }

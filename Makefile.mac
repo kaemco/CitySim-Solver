@@ -1,7 +1,7 @@
 CXX		= clang++
 CXXFLAGS	= -O2 -DTIXML_USE_STL -std=c++11 -march=core2 -Wno-unused-parameter -DMONOTHREAD # -fopenmp
 LDFLAGS		= -L/usr/X11/lib -framework OpenGL #-lGLU -fopenmp
-INCLUDES	= -I./NR -I./Sky -I./Tinyxml -I./VFCLibrary -I./CitySimWS/src
+INCLUDES	= -I./NR -I./Sky -I./Tinyxml -I./VFCLibrary
 DEFINES		=
 EXEC		= CitySim
 

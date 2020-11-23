@@ -46,7 +46,6 @@ public:
     ostream logStream;
 
     District(TiXmlHandle XMLHandler, XmlScene* pScene);
-    District(const ns__DistrictW* districtXMLWrapper, XmlScene* pScene, const std::map<unsigned int, double>* electricityR=NULL, unsigned int heatingBeginDay=1, unsigned int heatingEndDay=365); // defined in CitySimWebS.cpp
     District(XmlScene* pScene); // Incomplete constructor for DXF reading, do not use without completing:
     ~District();
     void deleteDynamicallyAllocated(); // Cognet: Added this.

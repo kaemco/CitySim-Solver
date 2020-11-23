@@ -58,7 +58,6 @@
 			<Add directory="VFCLibrary" />
 			<Add directory="Sky" />
 			<Add directory="Tinyxml" />
-			<Add directory="CitySimWS/src" />
 			<Add directory="FMILibrary/include" />
 		</Compiler>
 		<Linker>

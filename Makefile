@@ -4,7 +4,7 @@ CXXFLAGS	= -std=c++11 -O2 -fopenmp -fPIC -DTIXML_USE_STL
 LDFLAGS		= -lGLU -lgfortran -fopenmp
 CXXFLAGS_D	= -std=c++11 -g -DDEBUG -DTIXML_USE_STL
 LDFLAGS_D	= -lGLU -lgfortran
-INCLUDES	= -I./Sky -I./Tinyxml -I./VFCLibrary -I./CitySimWS/src
+INCLUDES	= -I./Sky -I./Tinyxml -I./VFCLibrary
 DEFINES		=
 AR		= ar
 EXEC		= CitySim

@@ -51,13 +51,11 @@
 			<Add directory="VFCLibrary" />
 			<Add directory="Sky" />
 			<Add directory="Tinyxml" />
-			<Add directory="CitySimWS/src" />
 		</Compiler>
 		<Linker>
 			<Add library="GLU" />
 			<Add library="gfortran" />
 		</Linker>
-		<Unit filename="CitySimWS.h" />
 		<Unit filename="LAPACK/daxpy.f" />
 		<Unit filename="LAPACK/dcombssq.f" />
 		<Unit filename="LAPACK/dcopy.f" />

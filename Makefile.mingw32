@@ -3,7 +3,7 @@ CXXFLAGS	= -fopenmp -march=native -O2 -DTIXML_USE_STL
 LD		= g++
 LDFLAGS		= -fopenmp
 LIBRARIES	= -lglu32
-INCLUDES	= -I./NR -I./Sky -I./Tinyxml -I./VFCLibrary -I./CitySimWS/src
+INCLUDES	= -I./NR -I./Sky -I./Tinyxml -I./VFCLibrary
 DEFINES		=
 EXEC		= CitySim
 LIB			= lib$(EXEC).dll

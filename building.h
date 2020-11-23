@@ -91,7 +91,6 @@ public:
     // the constructor of the building, which reads in the XML file and the destructor that removes the Zones
     Building(TiXmlHandle hdl, District* pDistrict);
     Building(vector<Wall*> walls, vector<Roof*> roofs, vector<Floor*> floors, vector<Surface*> surfaces, District* pDistrict);
-    Building(const ns__BuildingW* buildingXMLWrapper, District* pDistrict, double yearlyElecCons=0, unsigned int heatingBeginDay=0, unsigned int heatingEndDay=0); // definition in CitySimWebS.cpp
     ~Building();
     void clear() {
         heatStockTemperature.clear();

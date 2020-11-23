@@ -193,7 +193,6 @@ public:
 
     XmlScene():Scene(),pDistrict(new District(this)) {}
     XmlScene(string inputFile, ostream* pLogFileStr=NULL, bool climateFileRequired=true);
-    XmlScene(string simulationName, const ns__ClimateW* climateXMLWrapper, const ns__DistrictW* districtXMLWrapper, const std::map<unsigned int, double>* electricityR=NULL, ostream* pLogFileStr=NULL); // defined in CitySimWebS.cpp, by default year with off period in summer, no more , unsigned int beginDay, unsigned int beginMonth, unsigned int endDay, unsigned int endMonth arguments
 
     ~XmlScene();
     void clear() {
