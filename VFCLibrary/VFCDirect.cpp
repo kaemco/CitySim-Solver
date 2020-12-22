@@ -59,13 +59,13 @@ void VFCDirect::Initialise(RenderClass_t *renderer,
     std::cerr << "Smallest surface radius: " << m_scene->GetSmallestSurface().SurfaceDelegate()->getRadius() << std::endl;
     #endif
 
-    // previous value was fixed to 12 pixelsPerMetre, not adaptive to the smallestSurface
-	const static float pixelsPerMetre=12.f/m_scene->GetSmallestSurface().SurfaceDelegate()->getRadius(); //12; // aim for 12 pixels per smallest surface
+    // previous value was fixed to 12 pixelsPerMetre, not adaptive to the smallestSurface // 120 pixels
+	const static float pixelsPerMetre=120.f/m_scene->GetSmallestSurface().SurfaceDelegate()->getRadius(); //test 120 pixels per smallest surface
 	#ifndef WS
     std::cerr << "Pixels per metre: " << pixelsPerMetre << std::endl;
     #endif
 
-	m_renderWindowDim=std::min(static_cast<unsigned int>(pixelsPerMetre*modelRadius),512u); // TODO: change to 2048u
+	m_renderWindowDim=std::min(static_cast<unsigned int>(pixelsPerMetre*modelRadius),8192u); // TODO: change to 2048u // test 8192u
     std::cerr << "Direct renderer window dimension: " << m_renderWindowDim << std::endl;
 
 	m_renderTarget.SetSize(m_renderWindowDim,m_renderWindowDim);
