@@ -453,7 +453,7 @@ void Model::ThermalStepImplicitTemperature(Ground *pGround, Climate* pClimate, u
     Thermal_Kgrounds(pClimate, pGround, day, hour);
 
     // checks if the type of Ground is defined
-    if (pGround->getCompositeType()==NULL) {
+    if (pGround->getComposite()==NULL) {
         // returns the surface temperature from the climate file and do not set the layer temperature as they don't exist
         pGround->setTemperature(pClimate->getTgroundCelsius(day,hour));
         // saves the water consumed
@@ -464,7 +464,7 @@ void Model::ThermalStepImplicitTemperature(Ground *pGround, Climate* pClimate, u
     // outside air temperature
     float Tout = pClimate->getToutCelsius(day,hour);
     // gets the ground temperature according to Darren's model
-    float Tground = pClimate->getTgroundCelsius(day,hour,pGround->getComposite().getDepth(),pGround->getComposite().getDiffusivity(),pGround->getComposite().getDepth());
+    float Tground = pClimate->getTgroundCelsius(day,hour,pGround->getComposite()->getDepth(),pGround->getComposite()->getDiffusivity(),pGround->getComposite()->getDepth());
 
     // Evapotranspiration process on the grounds, sets the climate dependent variables
     //pGround->set_YX(pClimate,day,hour);
@@ -480,7 +480,7 @@ void Model::ThermalStepImplicitTemperature(Ground *pGround, Climate* pClimate, u
     float Lambda = deltaT/term2;
 
     // get the number of layers in the ground
-    int NP = pGround->getCompositeType()->getnLayers();
+    int NP = pGround->getComposite()->getnLayers();
 
     // source term of the equation (first and last are non-zero)
     double b[NP];
@@ -528,7 +528,7 @@ void Model::ThermalStepImplicitTemperature_simplified(Ground *pGround, Climate* 
     Thermal_Kgrounds(pClimate, pGround, day, hour);
 
     // checks if the type of Ground is defined
-    if (pGround->getCompositeType()==NULL) {
+    if (pGround->getComposite()==NULL) {
         // returns the surface temperature from the climate file and do not set the layer temperature as they don't exist
         pGround->setTemperature(pClimate->getTgroundCelsius(day,hour));
         // saves the water consumed -> 0
@@ -539,7 +539,7 @@ void Model::ThermalStepImplicitTemperature_simplified(Ground *pGround, Climate* 
     // outside air temperature
     float Tout = pClimate->getToutCelsius(day,hour);
     // gets the ground temperature according to Darren's model
-    float Tground = pClimate->getTgroundCelsius(day,hour,pGround->getComposite().getDepth(),pGround->getComposite().getDiffusivity(),pGround->getComposite().getDepth());
+    float Tground = pClimate->getTgroundCelsius(day,hour,pGround->getComposite()->getDepth(),pGround->getComposite()->getDiffusivity(),pGround->getComposite()->getDepth());
 
     // Evapotranspiration process on the grounds, sets the climate dependent variables
     pGround->set_YX(pClimate,day,hour);

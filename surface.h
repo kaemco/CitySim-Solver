@@ -149,8 +149,6 @@ class Composite {
 
     Composite(TiXmlHandle hdl, map<string,Material*> materials, ostream* pLogStr=NULL);
 
-    Composite(Composite const& c, float insulationTh=-1.);
-
     size_t getnLayers() { return vLayer.size(); }
     vector<Layer>* getLayers() { return &vLayer; }
     Layer* getLayer(unsigned int i) { return &(vLayer.at(i));}
@@ -266,7 +264,6 @@ protected:
     string name="";
 
     Composite* composite=nullptr; // a pointer to the Composite
-    int insulationThickness=-1; // Thickness of insulation layer (if it exists) in cm
 
     // other values
     float shortWaveReflectance = 0.2f; //!< Surface short wave reflectance (Lambertian) \in[0,1]
@@ -357,7 +354,7 @@ public:
         // opaque part
         //file << tab << "\t<energy:ThermalComponent>" << endl;
         file << tab << "<energy:area uom=\"m2\">" << (1.f-glazingRatio)*area << "</energy:area>" << endl;
-        file << tab << "<energy:construction xlink:href=\"#op_" << getComposite().getId() << "\"/>" << endl;
+        file << tab << "<energy:construction xlink:href=\"#op_" << getComposite()->getId() << "\"/>" << endl;
         //file << tab << "\t\t<energy:isGroundCoupled>false</energy:isGroundCoupled>" << endl;
         //file << tab << "\t\t<energy:isSunExposed>true</energy:isSunExposed>" << endl;
         //file << tab << "\t</energy:ThermalComponent>" << endl;
@@ -533,8 +530,7 @@ public:
 
 // added methods to get surface characteristics
 
-    Composite getComposite() { return Composite(*composite,(float)insulationThickness); }
-    Composite* getCompositeType() { return composite; }
+    Composite* getComposite() { return composite; }
     void setComposite(Composite* c) { composite = c; }
     virtual float getShortWaveReflectance() { return shortWaveReflectance; }
     void setShortWaveReflectance(float r) { shortWaveReflectance=r; }
@@ -545,13 +541,6 @@ public:
 
     float getAzimuth() { return fmod(norm.Azimuth().degrees()+360.f,360.f); } // between 0 and 360∞, the original methode returns atan2(x,y) which is 0∞ for y and 90∞ for x (clockwise)
     float getAltitude() { return norm.Altitude().degrees(); }
-
-    int getInsulationThickness(){
-        if (insulationThickness!=-1) return insulationThickness;
-        else if (composite != NULL && composite->getInsulationLayer()!=NULL) return composite->getInsulationLayer()->getxx();
-        else return -1;
-    }
-    void setInsulationThickness(int t){ insulationThickness = t;}
 
     //float getGlazingRatio() { return glazingRatio; }
     float getGlazingGvalue() { return glazingGvalue; }
@@ -760,9 +749,9 @@ public:
 
     SType getType(){return WALL;}
 
-    float getNRE() { return area*(1.f-glazingRatio)*getComposite().getNRE(); }
-    float getGWP() { return area*(1.f-glazingRatio)*getComposite().getGWP(); }
-    float getUBP() { return area*(1.f-glazingRatio)*getComposite().getUBP(); }
+    float getNRE() { return area*(1.f-glazingRatio)*getComposite()->getNRE(); }
+    float getGWP() { return area*(1.f-glazingRatio)*getComposite()->getGWP(); }
+    float getUBP() { return area*(1.f-glazingRatio)*getComposite()->getUBP(); }
     float getWallArea() { return (1.f-glazingRatio)*area; } // only the wall area, without the glazing
 
     // status of the blinds
@@ -786,7 +775,6 @@ public:
         file << "\" ShortWaveReflectance=\"" << shortWaveReflectance << "\" GlazingRatio=\"" << glazingRatio <<
             "\" GlazingGValue=\"" << glazingGvalue << "\" GlazingUValue=\"" << glazingUvalue << "\" OpenableRatio=\"" << glazingOpenableRatio;
         file.precision(ss); // restore default
-        if(insulationThickness!=-1) file << "\" insulationThickness=\"" << insulationThickness;
         file << "\">" << endl;
         Surface::writeXML(file, tab+"\t");
         file << tab << "</Wall>" << endl;
@@ -809,7 +797,7 @@ public:
     }
 
     SType getType(){return FLOOR;}
-    float getUAground() { return pow((double)(getComposite().getResistance() + 1.f/3.f),(double)-1.)*area; /* hc_int = 3 from CIBSE guide */ }
+    float getUAground() { return pow((double)(getComposite()->getResistance() + 1.f/3.f),(double)-1.)*area; /* hc_int = 3 from CIBSE guide */ }
 
     void writeXML(ofstream& file, string tab=""){
         file << tab << "<Floor id=\"" << id << "\" type=\"";
@@ -828,7 +816,7 @@ public:
         // opaque part
         //file << tab << "\t<energy:ThermalComponent>" << endl;
         file << tab << "<energy:area uom=\"m2\">" << area << "</energy:area>" << endl;
-        file << tab << "<energy:construction xlink:href=\"#op_" << getComposite().getId() << "\"/>" << endl;
+        file << tab << "<energy:construction xlink:href=\"#op_" << getComposite()->getId() << "\"/>" << endl;
         //file << tab << "\t\t<energy:isGroundCoupled>true</energy:isGroundCoupled>" << endl;
         //file << tab << "\t\t<energy:isSunExposed>false</energy:isSunExposed>" << endl;
         //file << tab << "\t</energy:ThermalComponent>" << endl;
@@ -874,7 +862,7 @@ public:
 
     SType getType(){return ROOF;}
 
-    float getKr() { return pow((double)getComposite().getResistance() + 1.f/3.f,(double)-1.); /* hc_int=3 from CIBSE guide */ }
+    float getKr() { return pow((double)getComposite()->getResistance() + 1.f/3.f,(double)-1.); /* hc_int=3 from CIBSE guide */ }
     float getKappa() { return getKr()/(getKr() + get_hc() + get_hr()); }
     float getRoofArea() { return (1.f-glazingRatio)*area; } // only the roof area, without the glazing
 
@@ -946,7 +934,7 @@ public:
         // the temperature of each layer is initialized to 15 celsius
         /// TODO: check this initial condition of 8∞C
         if (composite) layerTemperature.assign(composite->getnLayers(),8.f);
-        if (composite) getComposite().getSimplifiedNode(C1,G1,G2); ///TODO: check if no composite what happens
+        if (composite) getComposite()->getSimplifiedNode(C1,G1,G2); ///TODO: check if no composite what happens
     }
 
     SType getType(){return GROUND;}
@@ -982,7 +970,7 @@ public:
     void setDetailedSimulation(bool value) { detailedSimulation = value; }
 
     // gets the double conductance of layer i
-    float getG(unsigned int i) { return 2.f*getComposite().getLayer(i)->getConductance(); }
+    float getG(unsigned int i) { return 2.f*getComposite()->getLayer(i)->getConductance(); }
 
     // get the conductance between the nodes
     float getk(unsigned int i) {
@@ -1006,7 +994,7 @@ public:
 
     float getCapacitance(unsigned int i, unsigned int j) {
         // diagonal matrix with zeroes elsewhere
-        if (i==j) return getComposite().getCapacitance(i);
+        if (i==j) return getComposite()->getCapacitance(i);
         else return 0.f;
     }
 

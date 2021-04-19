@@ -328,11 +328,11 @@ void District::writeXML(ofstream& file, string tab){
 
     // shading surfaces
     for (vector<Surface*>::iterator itSurfaces=getSurfaces()->begin(); itSurfaces != getSurfaces()->end(); ++itSurfaces) {
-        if((*itSurfaces)->getCompositeType()!=nullptr) usedComposites.insert((*itSurfaces)->getCompositeType());
+        if((*itSurfaces)->getComposite()!=nullptr) usedComposites.insert((*itSurfaces)->getComposite());
     }
     // ground surfaces
     for (forward_list<Ground*>::iterator itSurfaces=getGrounds()->begin(); itSurfaces != getGrounds()->end(); ++itSurfaces) {
-        if((*itSurfaces)->getCompositeType()!=nullptr) usedComposites.insert((*itSurfaces)->getCompositeType());
+        if((*itSurfaces)->getComposite()!=nullptr) usedComposites.insert((*itSurfaces)->getComposite());
     }
     // Buildings
     for (vector<Building*>::iterator itBuildings = getBuildings()->begin(); itBuildings != getBuildings()->end(); ++itBuildings) {
@@ -341,19 +341,19 @@ void District::writeXML(ofstream& file, string tab){
             if((*itZones)->getDHWYearProfile()!=nullptr) usedDHWProfiles.insert((*itZones)->getDHWYearProfile());
             // walls
             for (vector<Wall*>::iterator itSurfaces = (*itZones)->getWalls()->begin(); itSurfaces != (*itZones)->getWalls()->end(); ++itSurfaces) {
-                if((*itSurfaces)->getCompositeType()!=nullptr) usedComposites.insert((*itSurfaces)->getCompositeType());
+                if((*itSurfaces)->getComposite()!=nullptr) usedComposites.insert((*itSurfaces)->getComposite());
             }
             // roofs
             for (vector<Roof*>::iterator itSurfaces = (*itZones)->getRoofs()->begin(); itSurfaces != (*itZones)->getRoofs()->end(); ++itSurfaces) {
-                if((*itSurfaces)->getCompositeType()!=nullptr) usedComposites.insert((*itSurfaces)->getCompositeType());
+                if((*itSurfaces)->getComposite()!=nullptr) usedComposites.insert((*itSurfaces)->getComposite());
             }
             // floors
             for (vector<Floor*>::iterator itSurfaces = (*itZones)->getFloors()->begin(); itSurfaces != (*itZones)->getFloors()->end(); ++itSurfaces) {
-                if((*itSurfaces)->getCompositeType()!=nullptr) usedComposites.insert((*itSurfaces)->getCompositeType());
+                if((*itSurfaces)->getComposite()!=nullptr) usedComposites.insert((*itSurfaces)->getComposite());
             }
             // surfaces
             for (vector<Surface*>::iterator itSurfaces = (*itZones)->getSurfaces()->begin(); itSurfaces != (*itZones)->getSurfaces()->end(); ++itSurfaces) {
-                if((*itSurfaces)->getCompositeType()!=nullptr) usedComposites.insert((*itSurfaces)->getCompositeType());
+                if((*itSurfaces)->getComposite()!=nullptr) usedComposites.insert((*itSurfaces)->getComposite());
             }
         }
     }

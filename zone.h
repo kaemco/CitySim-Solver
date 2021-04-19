@@ -181,18 +181,18 @@ public:
     size_t getnWalls() { return walls.size(); }
     Wall* getWall(unsigned int i) { return walls[i]; }
     float getWallArea() { float area = 0.f; for (size_t index=0;index<walls.size();++index) area += walls[index]->getWallArea(); return area; }
-    float getWallGWP()  { float gwp = 0.f; for (size_t index=0;index<walls.size();++index) gwp += walls[index]->getWallArea()*walls[index]->getComposite().getGWP(); return gwp; }
-    float getWallNRE()  { float nre = 0.f; for (size_t index=0;index<walls.size();++index) nre += walls[index]->getWallArea()*walls[index]->getComposite().getNRE(); return nre; }
-    float getWallUBP()  { float ubp = 0.f; for (size_t index=0;index<walls.size();++index) ubp += walls[index]->getWallArea()*walls[index]->getComposite().getUBP(); return ubp; }
+    float getWallGWP()  { float gwp = 0.f; for (size_t index=0;index<walls.size();++index) gwp += walls[index]->getWallArea()*walls[index]->getComposite()->getGWP(); return gwp; }
+    float getWallNRE()  { float nre = 0.f; for (size_t index=0;index<walls.size();++index) nre += walls[index]->getWallArea()*walls[index]->getComposite()->getNRE(); return nre; }
+    float getWallUBP()  { float ubp = 0.f; for (size_t index=0;index<walls.size();++index) ubp += walls[index]->getWallArea()*walls[index]->getComposite()->getUBP(); return ubp; }
     vector<Wall*>* getWalls() { return &walls; }
 
     size_t getnRoofs() { return roofs.size(); }
     Roof* getRoof(unsigned int i) { return roofs[i]; }
     vector<Roof*>* getRoofs() { return &roofs; }
     float getRoofArea() { float area = 0.f; for (size_t index=0;index<roofs.size();++index) area += roofs[index]->getRoofArea(); return area; }
-    float getRoofGWP()  { float gwp = 0.f;  for (size_t index=0;index<roofs.size();++index) gwp += roofs[index]->getRoofArea()*roofs[index]->getComposite().getGWP(); return gwp; }
-    float getRoofNRE()  { float nre = 0.f;  for (size_t index=0;index<roofs.size();++index) nre += roofs[index]->getRoofArea()*roofs[index]->getComposite().getNRE(); return nre; }
-    float getRoofUBP()  { float ubp = 0.f;  for (size_t index=0;index<roofs.size();++index) ubp += roofs[index]->getRoofArea()*roofs[index]->getComposite().getUBP(); return ubp; }
+    float getRoofGWP()  { float gwp = 0.f;  for (size_t index=0;index<roofs.size();++index) gwp += roofs[index]->getRoofArea()*roofs[index]->getComposite()->getGWP(); return gwp; }
+    float getRoofNRE()  { float nre = 0.f;  for (size_t index=0;index<roofs.size();++index) nre += roofs[index]->getRoofArea()*roofs[index]->getComposite()->getNRE(); return nre; }
+    float getRoofUBP()  { float ubp = 0.f;  for (size_t index=0;index<roofs.size();++index) ubp += roofs[index]->getRoofArea()*roofs[index]->getComposite()->getUBP(); return ubp; }
 
     size_t getnSurfaces() { return surfaces.size(); }
     Surface* getSurface(unsigned int i) { return surfaces[i]; }
@@ -202,9 +202,9 @@ public:
     Floor* getFloor(unsigned int i) { return floors[i]; }
     vector<Floor*>* getFloors() { return &floors; }
     float getFloorArea() { float area = 0.f; for (size_t index=0;index<floors.size();++index) area += floors[index]->getArea(); return area; }
-    float getFloorGWP()  { float gwp = 0.f;  for (size_t index=0;index<floors.size();++index) gwp += floors[index]->getArea()*floors[index]->getComposite().getGWP(); return gwp; }
-    float getFloorNRE()  { float nre = 0.f;  for (size_t index=0;index<floors.size();++index) nre += floors[index]->getArea()*floors[index]->getComposite().getNRE(); return nre; }
-    float getFloorUBP()  { float ubp = 0.f;  for (size_t index=0;index<floors.size();++index) ubp += floors[index]->getArea()*floors[index]->getComposite().getUBP(); return ubp; }
+    float getFloorGWP()  { float gwp = 0.f;  for (size_t index=0;index<floors.size();++index) gwp += floors[index]->getArea()*floors[index]->getComposite()->getGWP(); return gwp; }
+    float getFloorNRE()  { float nre = 0.f;  for (size_t index=0;index<floors.size();++index) nre += floors[index]->getArea()*floors[index]->getComposite()->getNRE(); return nre; }
+    float getFloorUBP()  { float ubp = 0.f;  for (size_t index=0;index<floors.size();++index) ubp += floors[index]->getArea()*floors[index]->getComposite()->getUBP(); return ubp; }
 
     float getVi() { return Vi; }
     void setVi(float v) { Vi = v; }
@@ -934,7 +934,7 @@ class ZoneN : public Zone {
     virtual void update(bool constructor=false);
 
     // gets the double conductance of layer i
-    double getG(unsigned int i) { return Swa*2.f*walls[0]->getComposite().getLayer(i)->getConductance(); }
+    double getG(unsigned int i) { return Swa*2.f*walls[0]->getComposite()->getLayer(i)->getConductance(); }
     double getG0() { return getG(0); }
     double getGn() { return getG(nNodes-2); }
     // gets the conductance between node 0 (from outside) and the outside air
@@ -1003,7 +1003,7 @@ class ZoneN : public Zone {
 
     double getC(unsigned int i) {
         if (i == 0) return Ci;
-        else return Swa*walls[0]->getComposite().getCapacitance(i-1);
+        else return Swa*walls[0]->getComposite()->getCapacitance(i-1);
     }
 
     double getSourceTerm(unsigned int i, float Tout, float Tground, float Qs=0.f) {
