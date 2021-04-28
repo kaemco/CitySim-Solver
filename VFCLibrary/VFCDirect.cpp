@@ -29,6 +29,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 using std::vector;
 using std::list;
@@ -59,14 +60,17 @@ void VFCDirect::Initialise(RenderClass_t *renderer,
     std::cerr << "Smallest surface radius: " << m_scene->GetSmallestSurface().SurfaceDelegate()->getRadius() << std::endl;
     #endif
 
-    // previous value was fixed to 12 pixelsPerMetre, not adaptive to the smallestSurface // 12 pixels
-	const static float pixelsPerMetre=12.f/m_scene->GetSmallestSurface().SurfaceDelegate()->getRadius(); //test 12 pixels per smallest surface
+    // previous value was fixed to 12 pixelsPerMetre, not adaptive to the smallestSurface
+	const static float pixelsPerMetre=max(12.f,12.f/m_scene->GetSmallestSurface().SurfaceDelegate()->getRadius()); // minimum 12 px/m or 12 px/smallest_surface
 	#ifndef WS
     std::cerr << "Pixels per metre: " << pixelsPerMetre << std::endl;
     #endif
 
-	m_renderWindowDim=std::min(static_cast<unsigned int>(pixelsPerMetre*modelRadius),8192u); // test 8192u
+	m_renderWindowDim=std::min(static_cast<unsigned int>(pixelsPerMetre*2*modelRadius),8192u); // adaptive windows size, capped to 8192 px
     std::cerr << "Direct renderer window dimension: " << m_renderWindowDim << std::endl;
+    if (m_renderWindowDim == 8192u){
+    	std::cerr << "WARNING: the direct renderer window dimension might be too small for this scene." << std::endl;
+    }
 
 	m_renderTarget.SetSize(m_renderWindowDim,m_renderWindowDim);
 	m_renderer->SetOrthogonal(modelRadius*2,modelRadius*2,1+2*modelRadius,1);
