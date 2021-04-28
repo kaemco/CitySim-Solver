@@ -119,6 +119,7 @@ Composite::Composite(TiXmlHandle hdl, map<string,Material*> materials, ostream* 
     logStream << "Composite " << id << ", Uvalue = " << Uvalue << endl << flush;
 }
 
+<<<<<<< HEAD
 Composite::Composite(Composite const& c, float insulationTh):logStream(c.logStream.rdbuf()) {
 
     id = c.id;
@@ -136,6 +137,8 @@ Composite::Composite(Composite const& c, float insulationTh):logStream(c.logStre
     }
 }
 
+=======
+>>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
 void Composite::getSimplifiedNode(float& Cw, float& Kw1, float& Kw2) {
 
     // creation of C and R (of size vLayer.size())
@@ -361,9 +364,12 @@ Wall::Wall(TiXmlHandle hdl, Building* pBuilding, ostream* pLogStr):Surface(hdl, 
     if (hdl.ToElement()->Attribute("type")) {
         // gets the type according to the value in "type"
         composite = b->getDistrict()->getComposite(hdl.ToElement()->Attribute("type"));
+<<<<<<< HEAD
 
         if (hdl.ToElement()->Attribute("insulationThickness"))
             insulationThickness = to<float>(hdl.ToElement()->Attribute("insulationThickness"));
+=======
+>>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
     }
     else if (hdl.ToElement()->Attribute("Uvalue")) {
         // gets or creates a new WallType in the building for this special wall
@@ -382,9 +388,12 @@ Floor::Floor(TiXmlHandle hdl, Building* pBuilding, ostream* pLogStr):Surface(hdl
     if (hdl.ToElement()->Attribute("type")) {
         // gets the type according to the value in "type"
         composite = b->getDistrict()->getComposite(hdl.ToElement()->Attribute("type"));
+<<<<<<< HEAD
 
         if (hdl.ToElement()->Attribute("insulationThickness"))
             insulationThickness = to<float>(hdl.ToElement()->Attribute("insulationThickness"));
+=======
+>>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
     }
     else if (hdl.ToElement()->Attribute("Uvalue")) {
         // gets or creates a new WallType in the building for this special wall
@@ -407,9 +416,12 @@ Roof::Roof(TiXmlHandle hdl, Building* pBuilding, ostream* pLogStr):Surface(hdl, 
     if (hdl.ToElement()->Attribute("type")) {
         // gets the type according to the value in "type"
         composite = b->getDistrict()->getComposite(hdl.ToElement()->Attribute("type"));
+<<<<<<< HEAD
 
         if (hdl.ToElement()->Attribute("insulationThickness"))
             insulationThickness = to<float>(hdl.ToElement()->Attribute("insulationThickness"));
+=======
+>>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
     }
     else if (hdl.ToElement()->Attribute("Uvalue")) {
         // gets or creates a new WallType in the building for this special wall
