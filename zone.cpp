@@ -63,11 +63,7 @@ void Zone::update(bool constructor){
         Sro += roofs[i]->getRoofArea();
         Swi += roofs[i]->getGlazingArea();
         SwiO += roofs[i]->getGlazingArea()*roofs[i]->getGlazingOpenableRatio();
-<<<<<<< HEAD
-        Kroof += roofs[i]->getComposite().getUvalue()*roofs[i]->getRoofArea();
-=======
         Kroof += roofs[i]->getComposite()->getUvalue()*roofs[i]->getRoofArea();
->>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
         Kwindow += roofs[i]->getGlazingUvalue()*roofs[i]->getGlazingArea();
         roofs[i]->updateGlazingGvalueHemispherical();
     }
@@ -327,11 +323,7 @@ void Zone2N::update(bool constructor){
         Kw2 = 1.f;
     }
     else {
-<<<<<<< HEAD
-        walls[0]->getComposite().getSimplifiedNode(Cw, Kw1, Kw2);
-=======
         walls[0]->getComposite()->getSimplifiedNode(Cw, Kw1, Kw2);
->>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
         // multiply with the total walls area
         Cw *= Swa;
     }
@@ -397,11 +389,7 @@ void Zone3N::update(bool constructor){
         Kr2 = 1.f;
     }
     else {
-<<<<<<< HEAD
-        roofs[0]->getComposite().getSimplifiedNode(Cr, Kr1, Kr2);
-=======
         roofs[0]->getComposite()->getSimplifiedNode(Cr, Kr1, Kr2);
->>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
         // multiply with the total roofs area
         Cr *= Sro;
     }
@@ -472,11 +460,7 @@ void Zone3N_floor::update(bool constructor){
         //Kw2 = 1.;
         //Ki = 0.; // the computation of the wall temperature is completely disconnected from the air node temperature
     }
-<<<<<<< HEAD
-    else floors[0]->getComposite().getSimplifiedNode(Cf, Kf1, Kf2);
-=======
     else floors[0]->getComposite()->getSimplifiedNode(Cf, Kf1, Kf2);
->>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
 
     // multiply with the total floor area
     Sf = 0.f;
@@ -553,11 +537,7 @@ void Zone4N::update(bool constructor){
         Kf2 = 1.f;
     }
     else  {
-<<<<<<< HEAD
-        floors[0]->getComposite().getSimplifiedNode(Cf, Kf1, Kf2);
-=======
         floors[0]->getComposite()->getSimplifiedNode(Cf, Kf1, Kf2);
->>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
         // multiply with the total floor area
         Sf = 0.f;
         for (size_t i=0; i<floors.size(); ++i) Sf += floors[i]->getArea();
@@ -603,11 +583,7 @@ void ZoneN::update(bool constructor){
     }
     else {
         // intialisation
-<<<<<<< HEAD
-        nNodes=walls[0]->getCompositeType()->getnLayers()+1; // plus one node for the internal air
-=======
         nNodes=walls[0]->getComposite()->getnLayers()+1; // plus one node for the internal air
->>>>>>> cf042395e1dcb11627fd9bf5653a3121bccaadb0
     }
 
     Tw.assign(nNodes-1, 15.f);
