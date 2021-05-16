@@ -49,12 +49,12 @@ void DATAInsolationFactors::GetSunPositionsToRender(const SKYSiteLocation &locat
 	}
 }
 
-float DATAInsolationFactors::GetIndexedViewFactor(unsigned int dayIndex, unsigned int hourIndex) const
+float DATAInsolationFactors::GetIndexedViewFactor(int dayIndex, int hourIndex) const
 {
 	GENAssert(dayIndex>=0 && dayIndex<m_interpolationDaysPerYear);
 	GENAssert(hourIndex>=0 && hourIndex<m_interpolationPeriodsPerDay);
 
-	unsigned int arrayIndex=(dayIndex+1)%m_interpolationDaysPerYear;
+    int arrayIndex=(dayIndex+1)%m_interpolationDaysPerYear;
 	if (arrayIndex>=m_storedInterpolationDaysPerYear) arrayIndex=m_interpolationDaysPerYear-arrayIndex;
 
 	return m_insolationFactors[arrayIndex*m_interpolationPeriodsPerDay+hourIndex];
@@ -67,7 +67,7 @@ float DATAInsolationFactors::GetIndexedViewFactor(unsigned int sunIndex) const
 
 void DATAInsolationFactors::SetInsolationFactor(int sunPositionIndex, float vf)
 {
-	GENAssert(sunPositionIndex>=0 && sunPositionIndex<m_insolationFactors.size());
+    GENAssert(sunPositionIndex>=0 && sunPositionIndex<static_cast<int>(m_insolationFactors.size()));
 	m_insolationFactors[sunPositionIndex]=vf;
 }
 

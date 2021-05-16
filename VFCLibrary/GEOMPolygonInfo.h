@@ -318,9 +318,9 @@ private:
 
 	GENPoint m_normal;
 	GENPoint m_centroid;
-	float m_area;
+    float m_area = 0.f; // JK - initialisation
 	float m_volume = 0.f; // JK - 18.04.2015 - added volume
-	bool m_verticesAreAnticlockwise;
+    bool m_verticesAreAnticlockwise = true; // JK - initialisation
 };
 
 /* A vertex converter class suitable for any vertex classes that define their

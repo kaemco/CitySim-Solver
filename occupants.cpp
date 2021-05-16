@@ -79,9 +79,7 @@ double StochasticOccupantsPresence::getT01(double pcurr, double pnext, double sh
     // beta:  adjusted value of shuff
 
     double T01; // Probability to leave the space
-    double beta;
-
-    beta=shuff; // default: no adjustment needed
+    double beta=shuff; // default: no adjustment needed
 
     if (pnext == 0.) T01=0.;
     else if (pnext == 1.) T01=1.;
@@ -139,7 +137,6 @@ double StochasticOccupantsPresence::getT11(double pcurr, double pnext, double sh
 
     double T11; // Probability to stay in the space
     double beta = shuff; // default: no adjustment needed
-    ///TODO: check this bit!! beta set but not used!!
 
     if (pnext == 0.) { T11=0.; }
     else if (pnext == 1.) { T11=1.; }
@@ -157,7 +154,7 @@ double StochasticOccupantsPresence::getT11(double pcurr, double pnext, double sh
             }
             else { beta=shuff; }
 
-            T11=1.-(1.-pcurr)*getT01(pcurr,pnext,shuff)/pcurr;
+            T11=1.-(1.-pcurr)*getT01(pcurr,pnext,beta)/pcurr;
         }
         else if (pcurr<pnext) {
             if (shuff < (pnext-pcurr)/(2.-(pnext+pcurr))) { beta=(pnext-pcurr)/(2.-(pnext+pcurr)); }
@@ -168,7 +165,7 @@ double StochasticOccupantsPresence::getT11(double pcurr, double pnext, double sh
                     { beta=(1.-pcurr+pnext)/(1.-pcurr-pnext); }
                 else { beta=shuff; }
             }
-            T11=1./pcurr*(pnext-(1.-pcurr)*getT01(pcurr,pnext,shuff));
+            T11=1./pcurr*(pnext-(1.-pcurr)*getT01(pcurr,pnext,beta));
         }
         else {// Case of (pcurr>pnext)
             if (shuff<(pcurr-pnext)/(pnext+pcurr))
@@ -180,7 +177,7 @@ double StochasticOccupantsPresence::getT11(double pcurr, double pnext, double sh
                     { beta=(1.-pcurr+pnext)/(1.-pcurr-pnext); }
                 else { beta=shuff; }
             }
-            T11=1./pcurr*(pnext-(1.-pcurr)*getT01(pcurr,pnext,shuff));
+            T11=1./pcurr*(pnext-(1.-pcurr)*getT01(pcurr,pnext,beta));
         }
     }
 

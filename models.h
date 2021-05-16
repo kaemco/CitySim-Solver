@@ -80,12 +80,12 @@ public :
     static double HVAC_moistureControl(double Tmax, double &T2, double T3, double &deltaTHVAC, double deltaT, double T5, double &w2, double w5prime, double Patm, double &evaporation, bool evaporativeCooling);
     static double HVAC_enthalpyDryAir(double T);
     static double HVAC_enthalpyWaterVapour(double T);
-    static double HVAC_humidify(double T2, double w2, double T3, double w3);
+    static double HVAC_humidify(/*double T2, */double w2, double T3, double w3);
     static double HVAC_reheat(double T3, double w3, double Patm);
     static double HVAC_bulbTemperature(double w, double RH, double Patm);
     static double HVAC_bulbTemperature(double cooling, double t2prime, double w2prime, double Patm);
-    static void HVAC_heat(double T2, double w2, double T3, double w3, double Patm, double &heating, double &humidification);
-    static void HVAC_cool(double T2, double w2, double T3, double &w3, double T5, double w5, double Patm, double &cooling, double& reheating, double &humidification);
+    static void HVAC_heat(double T2, double w2, double T3, double w3, /*double Patm,*/ double &heating, double &humidification);
+    static void HVAC_cool(double T2, double w2, double T3, double &w3, /*double T5, double w5,*/ double Patm, double &cooling, double& reheating, double &humidification);
 
     static void HVAC_Control(Building* pBuilding, Climate* pClimate, unsigned int day, unsigned int hour);
     static void noHVAC_Control(Building* pBuilding, Climate* pClimate, unsigned int day, unsigned int hour);
