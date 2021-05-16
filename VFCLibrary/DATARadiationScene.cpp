@@ -215,7 +215,7 @@ const DATASurface& DATARadiationScene::GetSurface(unsigned int index) const
 
 const DATASurface& DATARadiationScene::GetSmallestSurface() const
 {
-    unsigned int index;
+    unsigned int index=numeric_limits<unsigned int>::signaling_NaN();
     double smallestSurface = std::numeric_limits<double>::max();
 	for (unsigned int i=0; i<m_surfaces.size(); ++i)
 	{

@@ -107,7 +107,7 @@ Composite::Composite(TiXmlHandle hdl, map<string,Material*> materials, ostream* 
                 addLayer(to<float>(elem->Attribute("thickness")), m,
                         /*isInsulationLayer:*/(elem->Attribute("insulation")!=NULL && to<string>(elem->Attribute("insulation"))=="true"));
             }
-            catch(exception e){
+            catch(exception& e){
                 logStream << "ERROR: could not find material with id=" << elem->Attribute("materialID") << ". " << e.what() << endl;
             }
             elem = elem->NextSiblingElement();

@@ -134,7 +134,7 @@ bool SKYSun::SunUp() const
 
 void SKYSun::CalculateSunrise()
 {
-	const float t1=tan(m_latitudeN.radians())*tan(m_declination.radians()); // approximation equation
+    //const float t1=tan(m_latitudeN.radians())*tan(m_declination.radians()); // approximation equation
 	// JK - better equation for sunrise and sunset
 	const float t=-(sin(-0.83f/180.f*M_PI)-sin(m_latitudeN.radians())*sin(m_declination.radians()))/(cos(m_latitudeN.radians())*cos(m_declination.radians()));
 
