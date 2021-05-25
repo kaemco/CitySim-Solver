@@ -97,20 +97,16 @@ void GENGluTriangulator::RegisterCallbacks(GENGluTriangulatorCallbacks *callback
 {
 	m_callbacks=callbacks;
 	gluTessCallback(m_triangulator, GLU_TESS_VERTEX_DATA,
-				(GLvoid (CALLBACK*) ()) &vertexCallback);
+                (void (CALLBACK*) ()) &vertexCallback);
 	gluTessCallback(m_triangulator, GLU_TESS_BEGIN_DATA,
-				(GLvoid (CALLBACK*) ()) &beginCallback);
+                (void (CALLBACK*) ()) &beginCallback);
 	gluTessCallback(m_triangulator, GLU_TESS_ERROR,
-				(GLvoid (CALLBACK*) ()) &errorCallBack);
+                (void (CALLBACK*) ()) &errorCallBack);
 	gluTessCallback(m_triangulator, GLU_TESS_COMBINE_DATA,
-				(GLvoid (CALLBACK*) ()) &combineDataCallback);
+                (void (CALLBACK*) ()) &combineDataCallback);
 
 	// registering this callback forces the triangulator to generate only triangles (not triangle strips or fans)
 	gluTessCallback(m_triangulator, GLU_TESS_EDGE_FLAG,
-				(GLvoid (CALLBACK*) ()) &edgeFlagCallback);
+                (void (CALLBACK*) ()) &edgeFlagCallback);
 
 }
-
-
-
-

@@ -26,7 +26,7 @@ public:
 	float GetInsolationFactor_linear_interp(const SKYSun &Sun) const;
 
 	// Public for CIBSE tests - not ideal
-	float GetIndexedViewFactor(unsigned int dayIndex, unsigned int hourIndex) const;
+    float GetIndexedViewFactor(int dayIndex, int hourIndex) const;
 	float GetIndexedViewFactor(unsigned int sunIndex) const;
 
 	// use to change number of days/time points used in view factor interpolation

@@ -79,7 +79,7 @@ void Scene::computeProjectedSolidAngles() {
     // computes the projected solid angles of the vault (ground, sky and hemisphere) -> to get the SVF, GVF for each surface
     vector<double> sky(scene.SurfaceCount(), 0.), ground(scene.SurfaceCount(), 0.), hemisphere(scene.SurfaceCount(), 0.); // the seen projected hemisphere from and on the surface itself
     #pragma omp parallel for schedule(dynamic)
-    for (int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
+    for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
         // diffuse part
         for (DATAViewFactorSetSparse::const_iterator factors=scene.GetSurface(surfaceIndex).SWViewFactors().GetVFs();
             factors!=scene.GetSurface(surfaceIndex).SWViewFactors().GetLastVF();
@@ -788,7 +788,7 @@ void Radscene::computeShortWave(unsigned int day, unsigned int hour) {
 
         // now the main loop on surfaces
         #pragma omp parallel for schedule(dynamic)
-        for (int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
+        for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
             // diffuse part sky
             for (DATAViewFactorSetSparse::const_iterator factors=scene.GetSurface(surfaceIndex).SWViewFactors().GetVFs();
                 factors!=scene.GetSurface(surfaceIndex).SWViewFactors().GetLastVF();
@@ -821,7 +821,7 @@ void Radscene::computeShortWave(unsigned int day, unsigned int hour) {
             // using the CRS sparse matrix format, multiplication of the matrix by the former vector
             vector<float> irradiationSWnew(irradiationSW);
             #pragma omp parallel for schedule(dynamic)
-            for (int i=0; i < getnAi(); ++i) { // loop on the number of elements
+            for (unsigned int i=0; i < getnAi(); ++i) { // loop on the number of elements
                 for (unsigned int index=getAi(i); index < getAi(i+1); ++index) {
                     irradiationSWnew[i] += getAn(index) * irradiationSWn[getAj(index)];
                 }
@@ -1544,11 +1544,11 @@ XmlScene::XmlScene(string inputFile, ostream* pLogFileStr, bool climateFileRequi
         string climateFilePath = climate->Attribute("location");
         if (!std::ifstream(climateFilePath.c_str())) {
             // construct path based on .xml file location
-            string relativeClimateFilePath = inputFile.substr(0,inputFile.find_last_of('/\\'));
+            string relativeClimateFilePath = inputFile.substr(0,inputFile.find_last_of("/\\"));
             if (climateFilePath.substr(0,2)=="./")
                 climateFilePath = climateFilePath.substr(2,climateFilePath.length()-2); // keep only the name of the file
             while (climateFilePath.substr(0,3)=="../"){
-                relativeClimateFilePath = relativeClimateFilePath.substr(0,relativeClimateFilePath.find_last_of('/\\'));
+                relativeClimateFilePath = relativeClimateFilePath.substr(0,relativeClimateFilePath.find_last_of("/\\"));
                 climateFilePath = climateFilePath.substr(3,climateFilePath.length()-3);
             }
             // gets the delimiter
@@ -1562,7 +1562,7 @@ XmlScene::XmlScene(string inputFile, ostream* pLogFileStr, bool climateFileRequi
                 logStream << "climate file = " << climateFilePath << endl;
                 readClimate(climateFilePath);
             }
-            catch(string e){
+            catch(string& e){
                 logStream << "XmlScene caught exception" << endl;
                 if (climateFileRequired) throw e;
                 else logStream << "No climate file loaded" << endl;
@@ -2490,7 +2490,7 @@ void XmlScene::computeShortWave_Beam(unsigned int day, unsigned int hour) {
 
         // now the main loop on surfaces
         #pragma omp parallel for schedule(dynamic)
-        for (int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
+        for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
             // direct part
             if (sunVisibleFarField(pSun->GetPosition().Azimuth().degrees(), pSun->GetPosition().Altitude().degrees()) && Ibn > 0.f) {
                 double cosTheta = GEN::dot_product(scene.GetSurface(surfaceIndex).Normal(),pSun->GetPosition());
@@ -2541,7 +2541,7 @@ void XmlScene::computeShortWave_Diffuse() {
 
     // now the main loop on surfaces
     #pragma omp parallel for schedule(dynamic)
-    for (int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
+    for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
         // diffuse part sky
         for (DATAViewFactorSetSparse::const_iterator factors=scene.GetSurface(surfaceIndex).SWViewFactors().GetVFs();
             factors!=scene.GetSurface(surfaceIndex).SWViewFactors().GetLastVF();
@@ -2592,7 +2592,7 @@ void XmlScene::computeShortWave_Interreflected() {
         // using the CRS sparse matrix format, multiplication of the matrix by the former vector
         vector<float> irradiationSWnew(irradiationSW);
         #pragma omp parallel for schedule(dynamic)
-        for (int i=0; i < getnAi(); ++i) { // loop on the number of elements
+        for (unsigned int i=0; i < getnAi(); ++i) { // loop on the number of elements
             for (unsigned int index=getAi(i); index < getAi(i+1); ++index) {
                 irradiationSWnew[i] += getAn(index) * irradiationSWn[getAj(index)];
             }
@@ -2657,7 +2657,7 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
 
         // now the main loop on surfaces
         #pragma omp parallel for schedule(dynamic)
-        for (int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
+        for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
             // diffuse part sky
             for (DATAViewFactorSetSparse::const_iterator factors=scene.GetSurface(surfaceIndex).SWViewFactors().GetVFs();
                 factors!=scene.GetSurface(surfaceIndex).SWViewFactors().GetLastVF();
@@ -2721,7 +2721,7 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
             // using the CRS sparse matrix format, multiplication of the matrix by the former vector
             vector<float> irradiationSWnew(irradiationSW);
             #pragma omp parallel for schedule(dynamic)
-            for (int i=0; i < getnAi(); ++i) { // loop on the number of elements
+            for (unsigned int i=0; i < getnAi(); ++i) { // loop on the number of elements
                 for (unsigned int index=getAi(i); index < getAi(i+1); ++index) {
                     irradiationSWnew[i] += getAn(index) * irradiationSWn[getAj(index)];
                 }
@@ -2733,7 +2733,7 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
 #ifdef DEBUG
         // adds the inter-reflexions to the irradiance IAM - normal direction efficacy
         float theta = 0.f;
-        for (int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
+        for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
             if (((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()) {
                 irradiationSW_IAM[surfaceIndex] += (irradiationSWn[surfaceIndex] - irradiationSW[surfaceIndex])
                                                     * ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta);
@@ -2814,7 +2814,7 @@ void XmlScene::computeDaylight(unsigned int day, unsigned int hour) {
             // using the CRS sparse matrix format, multiplication of the matrix by the former vector
             vector<float> illuminanceNew(illuminance);
             #pragma omp parallel for schedule(dynamic)
-            for (int i=0; i < getnAi(); ++i) { // loop on the number of elements
+            for (unsigned int i=0; i < getnAi(); ++i) { // loop on the number of elements
                 for (unsigned int index=getAi(i); index < getAi(i+1); ++index) {
                     illuminanceNew[i] += getAn(index) * illuminanceN[getAj(index)];
                 }
@@ -2834,7 +2834,7 @@ void XmlScene::computeDaylight(unsigned int day, unsigned int hour) {
 
         // loop on building's surfaces
         #pragma omp parallel for schedule(dynamic)
-        for (int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
+        for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
             // only on building surfaces
             if (scene.GetSurface(surfaceIndex).IsBuildingSurface()) {
 
@@ -2971,7 +2971,7 @@ void XmlScene::computeLongWave(unsigned int day, unsigned int hour) {
 
     // loop on building's surfaces
     #pragma omp parallel for schedule(dynamic)
-    for (int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
+    for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
 
         // the average temperature of the surroundings in kelvins, for this surfaceIndex
         double Tenv4 = 0.;
@@ -3036,7 +3036,7 @@ int XmlScene::computeWarmUp() {
 void XmlScene::computeThermal(unsigned int day, unsigned int hour) {
 
     #pragma omp parallel for schedule(dynamic)
-    for (int i=0; i<pDistrict->getnBuildings(); ++i) {
+    for (unsigned int i=0; i<pDistrict->getnBuildings(); ++i) {
         //logStream << "Building " << i << "\tNumber of thread: " << omp_get_thread_num() << endl << flush;
         Model::ThermalStepImplicit(pDistrict->getBuilding(i),pClimate,day,hour);
     }
@@ -3047,7 +3047,7 @@ void XmlScene::computeThermal(unsigned int day, unsigned int hour) {
 
     // evaluates the new buildings' temperature according to what is available
     #pragma omp parallel for schedule(dynamic)
-    for (int i=0; i<pDistrict->getnBuildings(); ++i) {
+    for (unsigned int i=0; i<pDistrict->getnBuildings(); ++i) {
         if (Model::thermalExplicit) {
             Model::ThermalStepExplicitTemperature(pDistrict->getBuilding(i),pClimate,day,hour);
             timeSteps2Simulated+=Model::dt/Model::dt2;
@@ -3057,7 +3057,7 @@ void XmlScene::computeThermal(unsigned int day, unsigned int hour) {
 
     // evaluates the tree temperature
     #pragma omp parallel for schedule(dynamic)
-    for (int i=0;i<pDistrict->getnTrees();++i) {
+    for (unsigned int i=0;i<pDistrict->getnTrees();++i) {
         Model::ThermalStepTree(pDistrict->getTree(i),pClimate,day,hour);
     }
 

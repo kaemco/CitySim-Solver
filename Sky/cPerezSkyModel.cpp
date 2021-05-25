@@ -1,12 +1,9 @@
 #include "cPerezSkyModel.h"
 #include <iostream>
-#include <stdio.h>
+#include <limits>
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstdio>
-//#include <math.h>
-
-#define M_PI        3.14159265358979323846264338327950288
 
 // Perez all weather sky model coefficients
 double cPerezSkyModel::m_a1[8]= {1.3525,-1.2219,-1.1000,-0.5484,-0.6000,-1.0156,-1.0000,-1.0500};
@@ -70,7 +67,7 @@ bool cPerezSkyModel::SetSkyConditions(double Idh, double Ibn, double sunAltitude
 	double PerezBrightness, PerezClearness;
 	double E0,day_angle, AirMass;
 
-	int i, intClearness;
+    int i, intClearness=std::numeric_limits<unsigned int>::signaling_NaN();
 	// if no sun, return no luminance
 	if (Idh <= 0) // Idh = 0 impossible car il y a une division par Idh plus tard
 	{

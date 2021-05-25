@@ -1,6 +1,10 @@
 #ifndef _INC_GENWRAPPEDARRAY_INCLUDED
 #define _INC_GENWRAPPEDARRAY_INCLUDED
 
+#include <cstdlib>
+#include <algorithm>
+#include <exception>
+
 /* Just wraps a simple dynamically allocated array, but using this means you don't need to
  * worry about deleting the array - it will be automatically deleted when this class goes out of scope
  */
@@ -75,7 +79,7 @@ private:
 		try {
 			tmp=new STORED_TYPE[size];
 			m_arraySize=size;
-		} catch (std::exception e) {
+        } catch (std::exception& e) {
 			delete[] tmp;
 			throw e;
 		}

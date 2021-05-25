@@ -2785,7 +2785,7 @@ DistrictEnergyCenter::~DistrictEnergyCenter() {
 }
 
 double DistrictEnergyCenter::getMu(double temp) {
-    float mu_;
+    float mu_ = 0.0004; // JK - added default value to 0.0004
     if (mu==muPossibilities[0]){ mu_ = 0.0004; }
     else if (mu==muPossibilities[1]) { mu_ = 0.00002939*exp( 507.88/(temp-(149.3-273.15)) ); } // Check for temperature range where this formula is valid?
     return mu_;
@@ -3613,7 +3613,7 @@ void Network::convergeHydraulic(float rho) {
     double jacobian[jacobian_n*jacobian_n];
 
     // NLEQ-RES algorithm (based on Newton's algorithm)
-    double lambda_n = 1.0, lambdaPrime_n, mu_n, muPrime_n, muPrime_nm1, residualNorm_nm1, residualNorm_n, residualNorm_np1, theta_n;
+    double lambda_n = 1.0, lambdaPrime_n, mu_n, muPrime_n, muPrime_nm1=0., residualNorm_nm1=0., residualNorm_n, residualNorm_np1, theta_n;
     vector<float> x_n (nbLoops()+nbRegPaths());
 
     // Initial step.
@@ -3710,9 +3710,9 @@ void Network::convergeHydraulic(float rho) {
 
 void Network::convergeToEquilibrium(float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour) {
 
-    float sumErrM, sumDesiredM = 0.f, relErrM = 1.f, derivRelErrM = -1.f, sumDeltaKv, sumKv, relFluctuationKv = 1.f, derivRelErrP = -1.f;
+    float sumErrM, sumDesiredM = 0.f/*, relErrM = 1.f, derivRelErrM = -1.f*/, sumDeltaKv, sumKv/*, relFluctuationKv = 1.f, derivRelErrP = -1.f*/;
     vector<float> prevRelErrM (0), prevRelErrP (0);
-    float sumErrP, sumDesiredP, relErrP = 1.f, sumDeltaRpm, sumRpm, relFluctuationRpm = 1.f;
+    float sumErrP, sumDesiredP/*, relErrP = 1.f*/, sumDeltaRpm, sumRpm/*, relFluctuationRpm = 1.f*/;
     for (auto& ssnp : substationNodePairs) { sumDesiredM += ssnp->getDesiredMassFlow(); } // Substations update valve positions.
 
     updateDesiredMassFlow(cp, pClim, day, hour); // Inform prosumers, so that they can determine the supply target temperature.

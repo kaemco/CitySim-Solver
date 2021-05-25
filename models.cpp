@@ -178,8 +178,8 @@ void Model::ThermalStepImplicit(Building *pBuilding, Climate *pClimate, unsigned
     // shows the conductance matrix
     //cout << "variable conductance matrix: " << G << endl;
 
-    for (int i=0;i<NP;i++) {
-        for (int j=0;j<NP;j++) {
+    for (unsigned int i=0;i<NP;i++) {
+        for (unsigned int j=0;j<NP;j++) {
             // G1 contains the (timely) fixed conductances of the building, that are added to the variable conductances initialised in G
             G[i][j]+=pBuilding->getG1(i,j); // previously G[i][j]=G1[i][j]+G2[i][j]
         }
@@ -281,8 +281,8 @@ void Model::ThermalStepImplicit(Building *pBuilding, Climate *pClimate, unsigned
     // sauvegarde de la tempÈrature prÈvue (qui sera la bonne si tout va bien)
     double Aprime[NP*NP];
     double bprime[NP];
-    for (int i=0;i<NP;i++) {
-      for (int j=0;j<NP;j++) {
+    for (unsigned int i=0;i<NP;i++) {
+      for (unsigned int j=0;j<NP;j++) {
         Aprime[i+NP*j]=pBuilding->getC(i,j)-dt*G[i][j];
       }
       bprime[i]=T[i]+dt*b[i];
@@ -405,8 +405,8 @@ void Model::ThermalStepImplicitTemperature(Building *pBuilding, Climate* pClimat
         }
     }
 
-    for (int i=0;i<NP;i++) {
-        for (int j=0;j<NP;j++) {
+    for (unsigned int i=0;i<NP;i++) {
+        for (unsigned int j=0;j<NP;j++) {
             // G1 contains the (timely) fixed conductances of the building, that are added to the variable conductances initialised in G
             G[i][j]+=pBuilding->getG1(i,j); // previously G[i][j]=G1[i][j]+G2[i][j]
         }
@@ -415,8 +415,8 @@ void Model::ThermalStepImplicitTemperature(Building *pBuilding, Climate* pClimat
     // evaluation of the temperatures
     double Aprime[NP*NP];
     double bprime[NP];
-    for (int i=0;i<NP;i++) {
-      for (int j=0;j<NP;j++) {
+    for (unsigned int i=0;i<NP;i++) {
+      for (unsigned int j=0;j<NP;j++) {
         Aprime[i+NP*j]=pBuilding->getC(i,j)-dt*G[i][j];
       }
       bprime[i]=T[i]+dt*b[i];
@@ -763,17 +763,17 @@ void Model::ThermalStepExplicitTemperature(Building *pBuilding, Climate* pClimat
             }
         }
 
-        for (int i=0;i<NP;i++) {
-            for (int j=0;j<NP;j++) {
+        for (unsigned int i=0;i<NP;i++) {
+            for (unsigned int j=0;j<NP;j++) {
                 // G1 contains the (timely) fixed conductances of the building, that are added to the variable values initialised in G
                 G[i][j]+=pBuilding->getG1(i,j); // previously G[i][j]=G1[i][j]+G2[i][j]
             }
         }
 
         // EXPLICIT Scheme
-        for (int i=0;i<NP;++i) {
+        for (unsigned int i=0;i<NP;++i) {
           Texpl[i]=Tc[i]+dt2*b[i];
-              for (int j=0;j<NP;++j) {
+              for (unsigned int j=0;j<NP;++j) {
                 Texpl[i]+=dt2*G[i][j]*T[j];
               }
         }
@@ -1115,15 +1115,15 @@ void Model::HVAC_Needs(Building *pBuilding,Climate* pClimate,unsigned int day,un
 
         // recalculate final state (5) for VERIFICATION
         t5 = tSupplyHVAC - HVAC_temperatureChange(deltat, t2, t3) - qs/(m1dot*1000.0*(1.007+ws*1.84));
-        double w5 = HVAC_totalMoistureContent(ws, ql, m1dot);
+        //double w5 = HVAC_totalMoistureContent(ws, ql, m1dot);
 
         // heating & cooling routines
         double hel = 0.0;
         double hul = 0.0;
         double col = 0.0;
         double rel = 0.0;
-        HVAC_heat(t2, w2, tSupplyHVAC, ws, patm, hel, hul);
-        HVAC_cool(t2, w2, tSupplyHVAC, ws, t5, w5, patm, col, rel, hul);
+        HVAC_heat(t2, w2, tSupplyHVAC, ws, /*patm,*/ hel, hul);
+        HVAC_cool(t2, w2, tSupplyHVAC, ws, /*t5, w5,*/ patm, col, rel, hul);
 
         // saving the results into the zone
         pBuilding->getZone(i)->setHVACHeat(hel*m1dot);
@@ -1469,7 +1469,7 @@ void Model::noHVAC_Control(Building* pBuilding, Climate* pClimate, unsigned int 
     pBuilding->setFuelConsumption(0.);
 
     // Heat stock temperature after one time step
-    double HS_T1, DHW_T1, CS_T1;
+    double HS_T1, DHW_T1=DHW_T0, CS_T1;
 
     // computation of the total demand in heat and cold for the building
     for (size_t i=0; i<pBuilding->getnZones(); ++i) {
@@ -2347,7 +2347,7 @@ double Model::HVAC_totalMoistureContent(double w, double Ql, double mdot) { if (
 
     }
 
-    double Model::HVAC_humidify(double T2, double w2, double T3, double w3) {
+    double Model::HVAC_humidify(/*double T2, */double w2, double T3, double w3) {
 
         if ( w3 > w2 ) {
 
@@ -2431,7 +2431,7 @@ double Model::HVAC_totalMoistureContent(double w, double Ql, double mdot) { if (
 
     }
 
-    void  Model::HVAC_heat(double T2, double w2, double T3, double w3, double Patm, double &heating, double &humidification) {
+    void  Model::HVAC_heat(double T2, double w2, double T3, double w3, /*double Patm,*/ double &heating, double &humidification) {
 
         if ( T3 > T2 && w3 >= w2 ) { // alors le heating a un sens
 
@@ -2440,13 +2440,13 @@ double Model::HVAC_totalMoistureContent(double w, double Ql, double mdot) { if (
             double deltaHg = w2*(HVAC_enthalpyWaterVapour(T3) - HVAC_enthalpyWaterVapour(T2));
             heating = 1000*(deltaHa + deltaHg); // heating the air and the vapour content in J/kg
             // humidification bit
-            humidification = HVAC_humidify(T2,w2,T3,w3);
+            humidification = HVAC_humidify(/*T2,*/w2,T3,w3);
 
         }
 
     }
 
-    void  Model::HVAC_cool(double T2, double w2, double T3, double &w3, double T5, double w5, double Patm, double &cooling, double& reheating, double &humidification) {
+    void  Model::HVAC_cool(double T2, double w2, double T3, double &w3, /*double T5, double w5,*/ double Patm, double &cooling, double& reheating, double &humidification) {
 
         if ( T3 < T2 ) { // alors le cooling a un sens
 
@@ -2458,7 +2458,7 @@ double Model::HVAC_totalMoistureContent(double w, double Ql, double mdot) { if (
                     double deltaHg = w2*(HVAC_enthalpyWaterVapour(T3) - HVAC_enthalpyWaterVapour(T2));
                     cooling = 1000*(deltaHa + deltaHg); // cool the air and the vapour content in J/kg
 
-                    humidification = HVAC_humidify(T2,w2,T3,w3);
+                    humidification = HVAC_humidify(/*T2,*/w2,T3,w3);
 
             }
             else { // cooling et dÈshumidification (reheat)
