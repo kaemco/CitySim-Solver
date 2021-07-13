@@ -1343,7 +1343,7 @@ float Climate::getTgroundCelsius(unsigned int day, unsigned int hour, float dept
         if (Tground.empty() || depth > 0.f) {
 
             // returns a calculated ground temperature from Darren Robinson's equation
-            return meanAnnualTemperature - (meanDailyTemperature[hotDay]-meanDailyTemperature[coolDay])
+            return meanAnnualTemperature - (meanDailyTemperature[hotDay]-meanDailyTemperature[coolDay])/2.f //Modified by Max (added the divided by 2 for the amplitude)
                                            *exp(-depth*sqrt(M_PI/(365.f*alpha)))
                                            *cos(2.f*M_PI*(static_cast<float>(day)-static_cast<float>(coolDay+1)-depth*0.5f*sqrt(365.f/(M_PI*alpha)))/365.f);
 
