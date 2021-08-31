@@ -27,6 +27,11 @@ class PipePair;
 class Pipe;
 class TemperatureSetpoint;
 class PressureSetpoint;
+class PIDController;
+class PIDControllerValve;
+class EfficiencyPump;
+class MassFlowSetpoint;
+class MCR;
 
 using namespace std;
 
@@ -44,8 +49,11 @@ protected:
     double toutsoc = 20.;
     double gtsoc = 800.;
     string name = "No name";
+
+#ifdef DEBUG
     // IAM characteristics
-    double iam = 1.0;
+    vector<pair<float,double>> iam;
+#endif // DEBUG
 
     ostream logStream;
 
@@ -61,14 +69,14 @@ public:
         etampref(pv.etampref),tref(pv.tref),tcnoct(pv.tcnoct),muvoc(pv.muvoc),vmp(pv.vmp),toutsoc(pv.toutsoc),gtsoc(pv.toutsoc),logStream(std::cout.rdbuf()) {}
 
     PhotoVoltaic(TiXmlHandle hdl, ostream* pLogStr=nullptr);
-    virtual ~PhotoVoltaic() {}
+    virtual ~PhotoVoltaic();
 
     void writeXML(ofstream& file, float ratio, string tab);
 
     virtual double getMaxPowerEfficiency(double gt, double tout);
     string getName(){ return name;}
 
-    double getIAM(float elevation) { return iam; } // the elevation is given in radians
+    double getIAM(float elevation); //!< Returns ths IAM with the elevation is given in radians
 
 };
 
@@ -291,6 +299,8 @@ protected:
 
     double thermalPowerNeeded; // Cognet: Added this. Now first setThermalPowerNeeded(), then use getThermalPower() to see thermal power that can be provided.
 
+    double thermalPowerNeededHS; // Added by Max
+    double thermalPowerNeededDHW; // Added by Max
 
 public:
     ostream logStream;
@@ -326,6 +336,7 @@ public:
     virtual double getCO2Production(double time, double thermalPower1, double thermalPower2, double sourceTemp) { return 0.0; }
     virtual double getFuelConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp) { return 0.0; }
     virtual double getElectricConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp) { return 0.0; }
+    virtual float getThermalPowerMax(double sourceTemp){return 0.f;} // Added by Max. Useful for the MCR
 
     // version simplifi�e
 //    virtual string getLabel() { return "EnergyConversionSytem"; } // Cognet: Spelling error, replace with next line.
@@ -333,6 +344,8 @@ public:
 
     //    virtual double getThermalPower(double thermalPowerNeeded, double sourceTemperature) { return 0.0; } // Cognet: Deleted this.
     virtual double getThermalPower(double sourceTemperature) { return 0.0; } // Cognet: Added this. Now first setThermalPowerNeeded(), then use getThermalPower() to see thermal power that can be provided.
+    virtual double getThermalPowerHS(double sourceTemperature) { return 0.0; } // Added by Max. Useful for the 2stages HP.
+    virtual double getThermalPowerDHW(double sourceTemperature) { return 0.0; } // Added by Max. Useful for the 2stages HP.
 
     virtual double getFuelConsumption(double time, double thermalPower, double sourceTemp) { return 0.0; }
     virtual double getElectricConsumption(double time, double thermalPower, double sourceTemp) { return 0.0; }
@@ -349,6 +362,9 @@ public:
     virtual bool getGround(float &z0, float &z1, float &alpha) { return ground; }
 
     virtual void setThermalPowerNeeded(double tPN) { thermalPowerNeeded=tPN; } // Cognet: Added this.
+
+    virtual void setThermalPowerNeededHS(double tPN) { thermalPowerNeededHS=tPN; } // Added by Max.
+    virtual void setThermalPowerNeededDHW(double tPN) { thermalPowerNeededDHW=tPN; } // Added by Max.
 
     virtual void writeXML(ofstream& file, string tab)=0;
     virtual void writeGML(ofstream& file, string tab) {}
@@ -517,6 +533,7 @@ public:
 
     }
 
+    float getThermalPowerMax(double sourceTemp)override{return boilerThermalPower;} //Added by Max
 };
 
 class CoGeneration: virtual public EnergyConversionSystem {
@@ -540,11 +557,11 @@ public:
     }
 
     string getLabel() { return "CoGeneration"; }
-//    virtual double getThermalPower(double thermalPowerNeeded, double sourceTemp); // Cognet: Deleted this.
+
     virtual double getThermalPower(double sourceTemp) override; // Cognet: Added this.
     virtual double getFuelConsumption(double time, double thermalPower, double sourceTemp);
     virtual double getElectricConsumption(double time, double thermalPower, double sourceTemp);
-
+    virtual float getThermalPowerMax(double sourceTemp) override {return coGenThermalPower;}
 };
 
 class HeatPump : virtual public EnergyConversionSystem {
@@ -581,11 +598,15 @@ public:
 
     double getHeatProduced(double work, double sourceTemp, double outputTemp);
     double getWorkNeeded(double thermalPower, double sourceTemp, double outputTemp);
+    double getWorkNeededEvap(double PowerEvap, double sourceTemp, double outputTemp); // Added by Max. This function allows to compute the electricity power knowing the power at the evaporator.
+    double getTargetTemp(){return targetTemp;}; // Added by Max.
+    double getHeatPumpElectricPower(){return heatPumpElectricPower;}; // Added by Max.
+    double getEtaTech(){return etaTech;}; // Added by Max.
 
 //    virtual double getThermalPower(double thermalPowerNeeded, double sourceTemp); // Cognet: Deleted this.
     virtual double getThermalPower(double sourceTemp) override; // Cognet: Added this.
     virtual double getElectricConsumption(double time, double thermalPower, double sourceTemp);
-
+    virtual float getThermalPowerMax(double sourceTemp) override{return getHeatProduced(heatPumpElectricPower,sourceTemp,targetTemp);}
 };
 
 class CoGenerationHeatPump : public CoGeneration, public HeatPump {
@@ -618,7 +639,7 @@ public:
     double getThermalPower(double sourceTemp) override; // Cognet: Added this.
     double getFuelConsumption(double time, double thermalPower, double sourceTemp);
     double getElectricConsumption(double time, double thermalPower, double sourceTemp) { return 0.0; }
-
+    float getThermalPowerMax(double sourceTemp) override {return coGenThermalPower;}
 };
 
 
@@ -627,7 +648,7 @@ public:
 class Pump {
 private:
     // Stays constant, define the Pump.
-    float efficiencyPump;
+    EfficiencyPump* efficiencyPump;
     float n0; // Nominal rotational speed [rotations/min].
     float a0; // Coefficient of polynomial for flow/pressure curve [Pa] (eg. 1247180.f).
     float a1; // Coefficient of polynomial for flow/pressure curve [Pa*s/kg] (eg. -1640.236f).
@@ -650,7 +671,7 @@ public:
      * @param thermalPow Return variable for thermal power (positive when fluid temperature increases in the direction of the flow) [W].
      */
     void computeElectricAndThermalPower(float const& pressureDiff, float const& massFlow, float const& rho, float& electricPow, float& thermalPow);
-
+    float cpdT(float const& pressureDiff, float const& rho, float const& massFlow); //Added by Max
     /**
      * @brief computePressureDiff
      * @param massFlow Mass flow through the pump (positive in normal conditions) [kg/s].
@@ -675,9 +696,6 @@ public:
 
 };
 
-
-
-
 class Valve {
 private:
     static float deltaP0_invRho0_36002; // deltaP0=1e5, invRho0=1/1e3, 3600^2=12960000, multiply them. Computed only once.
@@ -688,14 +706,14 @@ private:
     // Evolves at each time step.
     float kv; // Valve flow coefficient (opening of valve) [m^3/h].
 
-    float computeKvMin() { return kvMax*0.00001f; } // A fraction of the max.
+    float computeKvMin() { return kvMax*0.0001f; } // A fraction of the max. Modified by Max. The range of operation is reduced since for high mass flows it might give huge pressure differences from 1e-5 to 1e-4.
 
 public:
     Valve(float const& kvMax_) : kvMax(kvMax_), kv(kvMax_*0.5f) { }
-
+    virtual ~Valve() {}
     void computePressureDiffAndDerivative(float const& m, float const& rho, float& deltaP, float& dDeltaP_dm);
     float computeIdealKv(float const& rho, float const& massFlow, float const& pressureDiff);
-    void updateKv(float const& rho, float& sumDeltaKv, float& sumKv, float const& learningRate, float const& targetMassFlow, float const& targetPressureDiff);
+    void updateKv(float const& rho, float& sumDeltaKv, float& sumKv, float const& learningRate, float const& targetMassFlow, float const& targetPressureDiff, PIDControllerValve& pid, float& Targetkv, bool& ImposedValve);
     /**
      * @brief computeTemperatureIncrease
      * @param pressureDiff Pressure loss through the valve (positive in normal conditions, since the valve decreases pressure) [Pa].
@@ -707,13 +725,12 @@ public:
     void setKvToMax(float& sumDeltaKv, float& sumKv) { sumDeltaKv += abs(kv-kvMax); sumKv += kvMax; kv = kvMax; }
     void setKvToMin(float& sumDeltaKv, float& sumKv, float const& learningRate);
     void keepKvConst(float& sumDeltaKv, float& sumKv) { sumDeltaKv += 0.f; sumKv += kv; }
+    virtual int nbEdges() { return 1; } // It's only a valve.
+    float getkv(){return kv;}
 
     bool kvIsMin() { return kv==computeKvMin(); }
     bool kvIsAlmostMin() { return kv<1.5*computeKvMin(); }
 };
-
-
-
 
 
 class PIDController {
@@ -790,8 +807,6 @@ public:
 };
 
 
-
-
 //beginning of contents added by Dapeng
 class Substation : virtual public EnergyConversionSystem {
 protected:
@@ -812,10 +827,20 @@ protected:
     float thermalPowerExchanged; // Heat exchanged at heat exchanger. Positive means primary side gives heat to secondary, if everything is ok, when the substation consumes, it should reach thermalPowerNeeded [W].
     float primarySideOutputTemp; // Temperature before mixing with other fluxes, downtream from the substation heat exchanger [degree C].
 
-//    PIDControllerValve pid; // To control the valve opening, to get the desired mass flow.
+    PIDControllerValve pid; // To control the valve opening, to get the desired mass flow.
 //    PIDControllerCarla pid;
 
     Valve* valve;
+
+    // Done in order to have the case where the valve is controlled manually
+    float Targetkv; // Added by Max
+    bool ImposedValve; // Added by Max
+
+    // Control directly the mass flow instead of going through the valve
+    bool ImposedMassFlow;
+    MassFlowSetpoint* massFlowSetpoint;
+
+    void setPrimarySideOutputTemp(float outputTemp){primarySideOutputTemp=outputTemp;}
 
 public:
     static Substation* createNewSubstation(TiXmlHandle hdl,  Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
@@ -845,7 +870,7 @@ public:
      * @param m_c_n Design mass flow [kg/s]
      * @return Primary network side mass flow rate [kg/s]
      */
-    double mc(double thermalPowerNeeded, double designThermalPower, double m_c_n);
+    virtual double mc(double thermalPowerNeeded, double designThermalPower, double m_c_n);
 
     Building* getBuilding() { return pBuilding; }
     void setDEC(DistrictEnergyCenter* dec) { pDEC = dec; }
@@ -859,8 +884,8 @@ public:
     virtual void updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate, float const& massFlowSupplyToReturn);
 
     float relativeErrorMassFlow(float const& massFlow) { return (massFlow-desiredMassFlow)/desiredMassFlow; }
-    virtual void relativeErrorMassFlow(float const& massFlow, float& relErr, float& sumErr);
-    float computeDesignMassFlow();
+    virtual void errorMassFlow(float const& massFlow, float& relErr, float& absErr, float& sumErr);
+    virtual float computeDesignMassFlow();
 
     /**
      * Gives the number of graph edges that the substation is made up of. Eg 1 edge if the substation is only a valve, 3 edges if the substation is a valve, a pipe and a differential pressure regulator.
@@ -871,7 +896,7 @@ public:
     virtual void computePressureDiffAndDerivative(vector<float>::const_iterator m, float const& rho, vector<float>::iterator deltaP, vector<float>::iterator dDeltaP_dm);
     float computeOutputTemp(float const& inputTemp, float const& thermalPowerExchanged, float const& massFlow, float const& pressureDiff, float const& rho, float const& cp);
 
-    virtual void updateDesiredMassFlow(float const& cp, float const& primarySideReturnTemp, Climate* pClim, unsigned int day, unsigned int hour) { } // Only prosumers need this information, not substations that only consume.
+    virtual void updateDesiredMassFlow(float const& cp, float const& primarySideReturnTemp, Climate* pClim, unsigned int day, unsigned int hour); // Only prosumers need this information, not substations that only consume.
 
     virtual void recordTimeStep() { }
     virtual void eraseRecords(unsigned int keepValue) { }
@@ -916,7 +941,7 @@ public:
 
 
 
-class ProsumerSubstation : virtual public Substation {
+class ProsumerSubstation : public Substation {
 private:
     TemperatureSetpoint* temperatureSetpoint; // Determines the target temperature.
     PressureSetpoint* pressureSetpoint; // Determines the target pressure.
@@ -948,7 +973,10 @@ public:
     virtual void updateDesiredMassFlow(float const& cp, float const& primarySideReturnTemp, Climate* pClim, unsigned int day, unsigned int hour) override;
     void setProsumerSolarThermal();
 
-    virtual void relativeErrorMassFlow(float const& massFlow, float& relErr, float& sumErr) override;
+    virtual void errorMassFlow(float const& massFlow, float& relErr, float& absErr, float& sumErr) override;
+
+    bool getProducerMode(){return producerModeOn;}
+    void setProducerMode(bool power) {producerModeOn = power;}
 
     virtual void recordTimeStep() override { Substation::recordTimeStep(); setProsumerSolarThermal(); } // setProsumerSolarThermal
     virtual void eraseRecords(unsigned int keepValue) override { Substation::eraseRecords(keepValue); }
@@ -957,8 +985,42 @@ public:
 };
 
 
-
-
+// Added by Max
+class SubstationHeatPump: public ProsumerSubstation {
+private:
+    HeatPump* heatPump;
+public:
+    SubstationHeatPump(TiXmlHandle hdl, Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
+    virtual ~SubstationHeatPump() { logStream << "Destructor of SubstationHP" << endl; }
+    void writeXML(ofstream& file, string tab) override{ file << tab << "SubstationHeatPump saving not supported yet" << endl; }
+    string getLabel() override{ return "SubstationHeatPump"; }
+    virtual double getThermalPower(double sourceTemp) override;
+    virtual double getElectricConsumption(double time, double thermalPower, double sourceTemp) override;
+    HeatPump* getHeatPump(){return heatPump;};
+    //double mc(double thermalPowerNeeded, double sourceTemp);
+    float computeDesignMassFlow() override;
+    void setThermalPowerNeeded(double tPN) override;
+    void updateDesiredMassFlow(float const& cp, float const& primarySideReturnTemp, Climate* pClim, unsigned int day, unsigned int hour) override;
+    virtual void computeHeatExchanged(float const& primarySideCp, float const& primarySideRho, float const& primarySideInputTemp, float const& primarySideMassFlow, float const& primarySidePressureDiff, Climate* pClim, unsigned int day, unsigned int hour) override;
+    double logMeanTemperatureDifference(float Tin,float Tout);
+};
+//Added by Max
+class SubstationHeatPump2stages: public SubstationHeatPump{
+    double targetTemp2; // The target temperature for heating the surface.
+    double heatPumpElectricPower2;
+    double etaTech2;
+    // We suppose etatech is identical for both stages.
+public:
+    SubstationHeatPump2stages(TiXmlHandle hdl, Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
+    void writeXML(ofstream& file, string tab) override{ file << tab << "SubstationHP2stages saving not supported yet" << endl; }
+    string getLabel() override{ return "SubstationHP2stages"; }
+    double getThermalPower(double sourceTemp) override;
+    double getElectricConsumption(double time, double thermalPower, double sourceTemp) override;
+    double getHeatProduced(double workDHW, double workHS, double sourceTemp, double outputTemp);
+    vector<double> getWorkNeeded(double thermalPower, double sourceTemp, double outputTemp);
+    virtual void computeHeatExchanged(float const& primarySideCp, float const& primarySideRho, float const& primarySideInputTemp, float const& primarySideMassFlow, float const& primarySidePressureDiff, Climate* pClim, unsigned int day, unsigned int hour) override;
+    virtual void updateDesiredMassFlow(float const& cp, float const& primarySideReturnTemp, Climate* pClim, unsigned int day, unsigned int hour) override;
+};
 
 class TemperatureSetpoint {
 public:
@@ -1046,7 +1108,52 @@ public:
     virtual float computeTargetPressureDiff(float const& massFlow) override;
 };
 
+// Added by Max
+class EfficiencyPump{
+public:
+    static EfficiencyPump* createNewEfficiencyPump(TiXmlHandle hdl);
+    EfficiencyPump() { }
+    virtual ~EfficiencyPump() { }
+    virtual float computeEfficiency(float const& massFlow) = 0;
+};
 
+class ConstantEfficiencyPump: public EfficiencyPump {
+private:
+    float efficiencyPump; // must be in between 0 and 1.
+public:
+    ConstantEfficiencyPump(TiXmlHandle hdl);
+    virtual ~ConstantEfficiencyPump() override { }
+    virtual float computeEfficiency(float const& massFlow) override { return efficiencyPump; }
+};
+
+class AffineEfficiencyPump : public EfficiencyPump {
+protected:
+    // The setpoint function of the pressure difference is a function of mass flow, affine by parts.
+    vector<float> massFlows; // [kg/s]
+    vector<float> efficiencyPumps; // [Pa]
+public:
+    AffineEfficiencyPump(TiXmlHandle hdl);
+    virtual ~AffineEfficiencyPump() override { }
+    virtual float computeEfficiency(float const& massFlow) override;
+};
+
+//Added by Max
+class MassFlowSetpoint {
+public:
+    static MassFlowSetpoint* createNewMassFlowSetpoint(TiXmlHandle hdl);
+    MassFlowSetpoint() { }
+    virtual ~MassFlowSetpoint() { }
+    virtual double computeTargetMassFlow() = 0;
+};
+
+class ConstantMassFlowSetPoint: public MassFlowSetpoint {
+private:
+    double massFlow; // must be positive.
+public:
+    ConstantMassFlowSetPoint(TiXmlHandle hdl);
+    virtual ~ConstantMassFlowSetPoint() override { }
+    virtual double computeTargetMassFlow() override { return massFlow; }
+};
 
 
 class Storage {
@@ -1114,6 +1221,10 @@ protected:
     // Stored information about simulation.
     vector<float> pumpPowerRecord, electricConsumptionRecord, fuelConsumptionRecord, machinePowerRecord;
 
+    //Added by Max
+    unsigned int linkedNodeId;
+    float thermalPowerNeeded;
+
     void deleteDynAllocated();
 
     // Pump Power
@@ -1151,7 +1262,6 @@ public:
     ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr);
     virtual ~ThermalStation() { ThermalStation::deleteDynAllocated(); }
 
-
     EnergyConversionSystem* getEcs() { return ecs; }
     float getThermalPowerProvided() { return thermalPowerProvided; }
     float getOutputTemperature() { return outputTemperature; }
@@ -1161,8 +1271,21 @@ public:
     virtual void computePressureDiff(float const& massFlow, float const& rho, float& deltaP, float& dDeltaP_dm);
     float computeTargetPressureDiff(float const& massFlow) { return pressureSetpoint->computeTargetPressureDiff(massFlow); }
     virtual void updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate);
+    //Added by Max
+    virtual void updateStage(float const& totalThermalPowerNeeded, float const& totalThermalPowerMax, float prevCurrentStage, bool prevSlaveShutDown, float rho, float cp, float sourceTemp, Climate* pClimate, unsigned int day, unsigned int hour){throw string("CitySim is trying to update the stage from a non slave ThermalStation.");}
+    unsigned int getLinkedNodeId(){return linkedNodeId;}
+    virtual void updateDesiredMassFlow(float cp, Climate* pClimate, unsigned int day, unsigned int hour){};
+    virtual vector<float> getRampingStages(){throw string("CitySim is trying to get a rampingStages from a non slave ThermalStation.");return {-1.f};}
+    virtual float getCurrentStage(){throw string("CitySim is trying to get a current stage from a non slave ThermalStation."); return 0.f;}
+    virtual void setCurrentStage(float stage){throw string("CitySim is trying to set a current stage to a non slave ThermalStation.");}
+    virtual bool getMaster(){return true;} // Added by Max (by convention, the thermalStation is a master. Test in MCR that forces to have thermalStation master or slave if they are several).
+    float getThermalPowerNeeded(){return thermalPowerNeeded;}
+    virtual unsigned int getTimeClock(){throw string("Error in the code: A timeClock is trying to be accessed in a ThermalStation of different type than 'slave'.");}
+    virtual void setTimeClock(unsigned int count){throw string("Error in the code: A timeClock is trying to be fixed in a ThermalStation of different type than 'slave'.");}
+    virtual unsigned int getLatency(){throw string("Error in the code: A Latency is trying to be accessed in a ThermalStation of different type than 'slave'.");}
+    float getTotalPumpPower() {return std::accumulate(pumpPowerRecord.begin(),pumpPowerRecord.end(),0.0);}
 
-    virtual void relativeErrorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& sumErrP, float& sumDesiredP);
+    virtual void errorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& absErr,float& sumErrP, float& sumDesiredP);
 
     virtual void recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour, float const& massFlow, float const& cp) { setMachinePower_FuelConsumption_ElectricConsumption(pClim, day, hour); recordPumpPower(); } // setMachinePower_FuelConsumption_ElectricConsumption setPumpPowers  confirmStorage
     virtual void eraseRecords(unsigned int keepValue) { eraseMachinePower(keepValue); eraseFuelConsumption(keepValue); eraseElectricConsumption(keepValue); erasePumpPower(keepValue); }
@@ -1176,9 +1299,46 @@ public:
     virtual void writeTHResultsText(fstream& textFile, unsigned int i);
 };
 
+// Added by Max
+class ThermalStationMaster: public ThermalStation{ // One thermal station to rule them all.
+public:
+    ThermalStationMaster(TiXmlHandle hdl, Network* net, ostream* pLogStr):ThermalStation(hdl,net,pLogStr){}
+    virtual ~ThermalStationMaster() { ThermalStationMaster::deleteDynAllocated(); }
+    bool getMaster(){return true;}
+};
 
+//Added by Max
+class ThermalStationSlave: public ThermalStation{
+private:
+    float desiredMassFlow; // It is useful for the slave.
 
+    Valve* valve;
+    PIDControllerValve pid;
+    float Targetkv;
+    bool ImposedValve;
 
+    vector<float> rampingStages; // [%]
+    float currentStage;
+
+    unsigned int latency; // [hour]
+    unsigned int timeClock; //hour
+
+public:
+    ThermalStationSlave(TiXmlHandle hdl, Network* net, ostream* pLogStr);
+    virtual ~ThermalStationSlave() { ThermalStationSlave::deleteDynAllocated(); }
+    void computePressureDiff(float const& massFlow, float const& rho, float& deltaP, float& dDeltaP_dm);
+    void setDesiredMassFlow(float rho, float cp, double sourceTemp, Climate* pClimate, unsigned int day, unsigned int hour);
+    void updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate);
+    bool getMaster(){return false;}
+    vector<float> getRampingStages(){return rampingStages;}
+    float getCurrentStage(){return currentStage;}
+    void setCurrentStage(float stage){currentStage=stage;}
+    void errorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& absErr, float& sumErrP, float& sumDesiredP);
+    unsigned int getLatency(){return latency;}
+    unsigned int getTimeClock(){return timeClock;}
+    void setTimeClock(unsigned int count){timeClock=count;}
+    void updateStage(float const& totalThermalPowerNeeded, float const& totalThermalPowerMax, float prevCurrentStage, bool prevSlaveShutDown, float rho, float cp, float sourceTemp, Climate* pClimate, unsigned int day, unsigned int hour);
+};
 
 class SeasonalStorageHeatingThermalStation : public ThermalStation { // Thermal station that only heats, and that has thermal storage. Goes with prosumer thermal stations.
 private:
@@ -1187,6 +1347,10 @@ private:
     bool storageModeOn;
     float tempDiffAroundStorage; // Temperature leaving storage - temperature going to storage [K].
     float flowToStore;
+
+    PIDControllerValve pid;
+    float Targetkv;
+    bool ImposedValve;
 
     void deleteDynAllocated() { if (storage!=nullptr) { delete storage; } if (valve!=nullptr) { delete valve; } }
 
@@ -1204,7 +1368,7 @@ public:
 
     void confirmStorage(float const& massFlow, float const& cp) { storage->confirmStoredHeat(tempDiffAroundStorage, abs(massFlow), cp); }
 
-    virtual void relativeErrorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& sumErrP, float& sumDesiredP) override;
+    virtual void errorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& absErr, float& sumErrP, float& sumDesiredP) override;
 
     virtual void writeTHHeaderText(fstream& textFile, string prefix) override;
     virtual void writeTHResultsText(fstream& textFile, unsigned int i) override;
@@ -1216,6 +1380,36 @@ public:
 };
 
 
+class MCR{
+protected:
+    vector<ThermalStation*> thermalstations;
+
+public:
+    static MCR* createNewMCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations);
+    MCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations);
+    virtual ~MCR() {}
+    virtual void MasterControlSlave(float rho, float cp, Climate* pClimate, unsigned int day, unsigned int hour, vector<float> prevCurrentStage){};
+    virtual void MasterControlSlave2(float rho, float cp, Climate* pClimate, unsigned int day, unsigned int hour, size_t index){};
+    void getSourceTemp(double& sourceTemp, Climate* pClimate, EnergyConversionSystem* ecs, unsigned int day, unsigned int hour);
+    vector<ThermalStation*> getThermalStations(){return thermalstations;}
+    virtual void updateThermalStationSlaveClock(vector<float> PrevCurrentStages){};
+
+};
+
+class SingleMCR: public MCR{
+public:
+    SingleMCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations);
+};
+
+class SimpleMCR:public MCR{
+public:
+    SimpleMCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations);
+    virtual void MasterControlSlave(float rho, float cp, Climate* pClimate, unsigned int day, unsigned int hour, vector<float> prevCurrentStage);
+    virtual void MasterControlSlave2(float rho, float cp, Climate* pClimate, unsigned int day, unsigned int hour, size_t index);
+    void updateStageSlave(float const& desiredStage, size_t index, float prevCurrentStage);
+    void updateThermalStationSlaveClock(vector<float> PrevCurrentStages);
+
+};
 
 
 
@@ -1256,6 +1450,7 @@ class Pipe {
         float getThermalLoss() { return thermalLoss; }
         float getDownstreamTemp() { return downstreamTemp; }
         float getInsulationThick() { return insulationThick; }
+        float getBuriedDepth() {return buriedDepth;} // Added by Max
 
         /**
          * @brief pipeWall Computes the thermal resistance of insulation materials [K*m/W]
@@ -1301,6 +1496,7 @@ class PipePair {
         float innerRadius; // [m]
         float interPipeDistance; // [m]
         array<NodePair*,2> connectedNodes;
+        array<string,2> singulars; //Added by Max
 
         float interPipeThermalResistance; // Resistance of both pipe insulations and soil [K*m/W]
 
@@ -1325,6 +1521,7 @@ public:
         PipePair(TiXmlHandle hdl, Network* net);
         ~PipePair();
 
+        unsigned int getPipePairsIdx(); // Added by Max (give the index of the pipepair in the vector pipepairs)
         unsigned int getId() { return id; }
         Pipe* getSupplyPipe() { return supplyPipe; }
         Pipe* getReturnPipe() { return returnPipe; }
@@ -1336,6 +1533,7 @@ public:
         NodePair* getOtherNode(NodePair* np);
         bool getAlreadyTraversed() { return alreadyTraversed; }
         void setAlreadyTraversed(bool b) { alreadyTraversed = b; }
+        array<string,2> getSingularities() {return singulars;} // Added by Max
 
         void recordTimeStep() { recordThermalLosses();  recordMassFlows();  recordPressureDiffs(); }
         void eraseRecords(unsigned int keepValue) { eraseThermalLosses(keepValue); eraseMassFlows(keepValue); erasePressureDiffs(keepValue); }
@@ -1359,6 +1557,7 @@ class NodePair {
         // Stay constant, define the node.
         unsigned int id; // As written in the xml.
         vector<PipePair*> connectedPipes; // PipePairs that are connected to this NodePair.
+        vector<PipePair*> connectedPipesOut; //PipePairs that are connected to this NodePair and that are outgoing. Added by Max
         float z;
 
         // Evolve at each time step.
@@ -1377,7 +1576,7 @@ class NodePair {
     protected:
         bool areAllUpstreamsComputed(bool isSupply);
         void computeAndSetTemperature(float initSumTM, float initSumM, bool isSupply);
-        void propagateDownstream(float soilTemp, float cp, bool isSupply);
+        void propagateDownstream(Climate* pClim, float cp, bool isSupply, unsigned int hour, unsigned int day); // Added by Max
 
 
     public:
@@ -1387,6 +1586,7 @@ class NodePair {
         unsigned int getId() { return id; }
         vector<PipePair*> getPipes() { return connectedPipes; }
         size_t getNbPipes() { return connectedPipes.size(); }
+        vector<PipePair*> getPipesOut(){return connectedPipesOut;}// Added by Max
         float getSupplyTemperature() { return supplyTemperature; }
         float getReturnTemperature() { return returnTemperature; }
         float getTemperature(bool isSupply) { if(isSupply) { return supplyTemperature; } else { return returnTemperature; } }
@@ -1396,8 +1596,16 @@ class NodePair {
         float getZ() { return z; }
 
         void addConnectedPipe(PipePair *pipe);
+        void addConnectedPipeOut(PipePair* pipe); // Added by Max for the singularities.
 
-        virtual void recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour, float const& cp) { recordTemperatures(); }
+        float changeRadiusPressureLoss(float m, float innerRadiusIn, float innerRadiusOut);
+        void TPressureLoss(vector<float> m, vector<float>& deltaP, bool supply);
+        void TPressureLossSplit(vector<float> m, bool supply, vector<float>& deltaP, vector<float>& innerRadiusIn, vector<float>& innerRadiusOut); // Added by Max
+        void TPressureLossJunction(vector<float> m, bool supply, vector<float>& deltaP, vector<float>& innerRadius, vector<float>& innerRadiusOut); // Added by Max
+        virtual void computePressureDiffAndDerivative(vector<float> m, float const& rho, vector<float>& deltaP);
+        virtual int nbEdges() { return connectedPipesOut.size(); }
+
+        virtual void recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour, float const& cp) { recordTemperatures();}
         virtual void eraseRecords(unsigned int keepValue) { eraseTemperatures(keepValue); }
         virtual void eraseRecords_back() { eraseTemperatures_back(); }
         virtual string getPrefix(unsigned int decId) { return "DEC" + to_string(decId) + ":NodePair" + to_string(getId()); }
@@ -1405,7 +1613,7 @@ class NodePair {
         virtual void writeTHResultsText(fstream& textFile, unsigned int i);
 
 
-        virtual bool propagateNetwork(float soilTemp, float cp, bool isSupply);
+        virtual bool propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour);// Added by Max
 
         virtual void checkNbPipes();
 };
@@ -1469,7 +1677,7 @@ class SubstationNodePair : public NodePairConnectingSupplyReturn {
         void setSubstation(Substation* sub);
         bool substationNotSet() { return substation==nullptr; }
 
-        int nbEdges() { return substation->nbEdges(); }
+        int nbEdges() override { return substation->nbEdges(); }
         bool hasRegEle() { return substation->hasRegEle(); }
 
         float getDesignMassFlow() { return substation->computeDesignMassFlow(); }
@@ -1477,12 +1685,12 @@ class SubstationNodePair : public NodePairConnectingSupplyReturn {
 
         void updateControlVariable(float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate, float const& massFlowSupplyToReturn) { substation->updateControlVariable(massFlow, pressureDiff, rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate, massFlowSupplyToReturn); }
 
-        void relativeErrorMassFlow(float& relErr, float& sumErr) { substation->relativeErrorMassFlow(massFlow, relErr, sumErr); }
+        void errorMassFlow(float& relErr, float& absErr,float& sumErr) { substation->errorMassFlow(massFlow, relErr, absErr, sumErr); }
         void computePressureDiffAndDerivative(vector<float>::const_iterator m, float const& rho, vector<float>::iterator deltaP, vector<float>::iterator dDeltaP_dm);
-        void hydraulicConverged(vector<float>::const_iterator m, vector<float>::const_iterator deltaP);
+        void hydraulicConverged(vector<float>::const_iterator m, vector<float>::const_iterator deltaP); //override;
         void computeThermal(float const& cp, float const& rho, Climate* pClim, unsigned int day, unsigned int hour, bool supplyToReturn);
 
-        virtual bool propagateNetwork(float soilTemp, float cp, bool isSupply) override;
+        virtual bool propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned hour) override; // Added by Max
 
         virtual void checkNbPipes() override;
 
@@ -1513,22 +1721,58 @@ class ThermalStationNodePair : public NodePairConnectingSupplyReturn {
         bool thermalStationNotSet() { return thermalStation==nullptr; }
 
         void updateControlVariable(float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate) { thermalStation->updateControlVariable(massFlow, pressureDiff, rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate); }
-        void relativeErrorPressureDiff(float& relErr, float& sumErrP, float& sumDesiredP) { thermalStation->relativeErrorPressureDiff(massFlow, pressureDiff, relErr, sumErrP, sumDesiredP); }
+        void updateDesiredMassFlow(float const& cp, Climate* pClimate, unsigned int day, unsigned hour) { thermalStation->updateDesiredMassFlow(cp, pClimate, day ,hour); } // Added by Max
+        void errorPressureDiff(float& relErr, float& absErr, float& sumErrP, float& sumDesiredP) { thermalStation->errorPressureDiff(massFlow, pressureDiff, relErr, absErr, sumErrP, sumDesiredP); }
         void computeThermal(float rho, float cp, Climate* pClim, unsigned int day, unsigned int hour, bool supplyToReturn);
 
-        virtual bool propagateNetwork(float soilTemp, float cp, bool isSupply) override;
+        virtual bool propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) override; //Added by Max
 
         virtual void checkNbPipes() override;
 
         virtual void recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour, float const& cp) override { NodePairConnectingSupplyReturn::recordTimeStep(pClim, day, hour, cp); thermalStation->recordTimeStep(pClim, day, hour, massFlow, cp);  }
         virtual void eraseRecords(unsigned int keepValue) override { NodePairConnectingSupplyReturn::eraseRecords(keepValue); thermalStation->eraseRecords(keepValue); }
         virtual void eraseRecords_back() override { NodePairConnectingSupplyReturn::eraseRecords_back(); thermalStation->eraseRecords_back(); }
-        virtual string getPrefix(unsigned int decId) { return "DEC" + to_string(decId) + ":ThermalStationNodePair" + to_string(getId()); }
+        virtual string getPrefix(unsigned int decId) override { return "DEC" + to_string(decId) + ":ThermalStationNodePair" + to_string(getId()); }
         virtual void writeTHHeaderText(fstream& textFile, unsigned int decId) override;
         virtual void writeTHResultsText(fstream& textFile, unsigned int i) override;
 };
 
+// Added by Max
+class ValveNodePair: public NodePairConnectingSupplyReturn{
+    private:
+        Valve* valve;
+        float kvMax;
+        float outputTemperature;
 
+        PIDControllerValve pid; // To control the valve opening, to get the desired mass flow.
+        // Done in order to have the case where the valve is controlled manually
+        float Targetkv; // Added by Max
+        bool ImposedValve; // Added by Max
+    public:
+        ValveNodePair(TiXmlHandle hdl, float initTemp);
+        virtual ~ValveNodePair() override { }
+
+        int nbEdges() override{ return valve->nbEdges(); }
+
+        virtual float maxKv();
+        void updateControlVariable(float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate);
+        virtual float computePressureDiffControlElement(float pressureDiffSubstationNodePair) { return pressureDiffSubstationNodePair; } // All pressure loss is in the control element (valve).
+        virtual void computePressureDiffAndDerivative(vector<float>::const_iterator m, float const& rho, vector<float>::iterator deltaP, vector<float>::iterator dDeltaP_dm);
+        void hydraulicConverged(vector<float>::const_iterator m, vector<float>::const_iterator deltaP); //override;
+        void computeThermal(float const& cp, float const& rho, Climate* pClim, unsigned int day, unsigned int hour, bool supplyToReturn);
+        float getOutputTemp(){return outputTemperature;}
+
+        virtual bool propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) override; // Added by Max
+
+        virtual void checkNbPipes() override;
+
+        virtual void recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour, float const& cp) override { NodePair::recordTimeStep(pClim, day, hour, cp); }
+        virtual void eraseRecords(unsigned int keepValue) override { NodePair::eraseRecords(keepValue); }
+        virtual void eraseRecords_back() override { NodePair::eraseRecords_back(); }
+        virtual string getPrefix(unsigned int decId) override { return "DEC" + to_string(decId) + ":ValveNodePair" + to_string(getId()); }
+        virtual void writeTHHeaderText(fstream& textFile, unsigned int decId) override;
+        virtual void writeTHResultsText(fstream& textFile, unsigned int i) override;
+};
 
 class Network {
 private:
@@ -1537,6 +1781,7 @@ private:
     vector<NodePair*> separateNodePairs;
     vector<SubstationNodePair*> substationNodePairs;
     vector<ThermalStationNodePair*> thermalStationNodePairs;
+    vector<ValveNodePair*> valveNodePairs;
 
     vector<PipePair*> pipePairs;
 
@@ -1546,7 +1791,6 @@ private:
 
     vector<float> loopMassFlows; // Mass flow through the loops. Values stored after convergence, to be used as initial condition in the next iteration [kg/s]
     vector<vector<float>> loopMatrix; // nb of rows=nb of loops, nb of columns=nb of edges. If [i,j]==1, then edge j is in loop i. If [i,j]==-1, then edge j is in loop i, but in the opposite direction. If [i,j]==0, then edge j is not in loop i.
-//    vector<float> regEleDeltaP; // Pressure difference through the regulating element. Values stored after convergence, to be used as initial condition in the next iteration [Pa]
     vector<vector<float>> regulatedPathMatrix; // nb of rows=nb of regulated paths, nb of columns=nb of edges. If [i,j]==1, then edge j is in regulated path i. If [i,j]==-1, then edge j is in regulated path i, but in the opposite direction. If [i,j]==0, then edge j is not in regulated path i.
     vector<vector<float>> jacobianRegulatedPathColumns; // nb of rows=nb of loops+nb of regulated paths, nb of columns=nb of regulated paths.
 
@@ -1590,27 +1834,26 @@ public:
     NodePair* pointerOfNodeWithId(unsigned int nodeId);
     SubstationNodePair *pointerOfSubstationNodeWithId(unsigned int nodeId);
     ThermalStationNodePair* pointerOfThermalStationNodeWithId(unsigned int nodeId);
+    ValveNodePair* pointerOfValveNodeId(unsigned int nodeId);
+
+    vector<ThermalStationNodePair*> getThermalStationNodePairs(){return thermalStationNodePairs;} //Added by Max
 
     void checkThermalStationsFound();
     void substationsConstructionFinished();
 
     void initializeMassFlows();
 
-    void propagateNetwork(float cp, float soilTemp, bool isSupply);
+    void propagateNetwork(float cp, Climate* pClim, bool isSupply, unsigned int day, unsigned hour); //Added by Max
 
     ostream& print(ostream& stream);
 
-//    size_t computeEdgeIdx(PipePair* pp, bool isSupply);
-//    size_t computeEdgeIdx(ThermalStationNodePair* np);
-//    size_t computeEdgeIdx(SubstationNodePair* np);
-    void computeEdgeIdx(map<PipePair*,size_t>& edgeIdxPipe, map<NodePairConnectingSupplyReturn*,size_t>& edgeIdxNode, size_t& nbEdges);
-//    size_t computeNbEdges() { return 2*pipePairs.size() + thermalStationNodePairs.size() + substationNodePairs.size(); }
+    void computeEdgeIdx(map<PipePair*,size_t>& edgeIdxPipe, map<NodePairConnectingSupplyReturn*,size_t>& edgeIdxNode, size_t& nbEdges); // Changed by Max
     size_t nbLoops() { return loopMatrix.size(); }
     size_t nbEdges() { return loopMatrix[0].size(); }
     size_t nbRegPaths() { return regulatedPathMatrix.size(); }
-    void findLoops(vector<vector<float>>& matB, map<PipePair*,size_t> const& edgeIdxPipe, map<NodePairConnectingSupplyReturn*,size_t> const& edgeIdxNode, size_t const& nbEdges);
-    void findRegulatedPaths(vector<vector<float>>& matR, map<NodePairConnectingSupplyReturn*,size_t> const& edgeIdxNode, size_t const& nbEdges);
-    void computeJacobianRegulatedPathColumns(vector<vector<float>>& matJRPC, vector<vector<float>> const& matB, vector<vector<float>> const& matR, map<NodePairConnectingSupplyReturn*,size_t> const& edgeIdxNode, size_t const& nbEdges);
+    void findLoops(vector<vector<float>>& matB, map<PipePair*,size_t> const& edgeIdxPipe, map<NodePairConnectingSupplyReturn*,size_t> const& edgeIdxNode, size_t const& nbEdges); // Changed by Max
+    void findRegulatedPaths(vector<vector<float>>& matR, map<NodePairConnectingSupplyReturn*,size_t> const& edgeIdxNode, size_t const& nbEdges); // Added by Max
+    void computeJacobianRegulatedPathColumns(vector<vector<float>>& matJRPC, vector<vector<float>> const& matB, vector<vector<float>> const& matR, map<NodePairConnectingSupplyReturn*,size_t> const& edgeIdxNode, size_t const& nbEdges); // Changed by Max
 
     void matTransposedVecMult(vector<vector<float>> const& matTransposed, vector<float> const& vec, vector<float>& result);
     /**
@@ -1635,7 +1878,7 @@ public:
     float computeDarcyFrictionFactor(float const& massFlow, float const& radius, float const& temp);
     void computePressureDiff(vector<float> const& massFlows, float const& rho, vector<float>& deltaP, vector<float>& dDeltaP_dm);
 
-    void convergeToEquilibrium(float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour);
+    void convergeToEquilibrium(MCR* mcr, float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour);
     void computeDerivative(float& deriv, vector<float>& prev, float const& curr, size_t const& idx);
 
     void updateDesiredMassFlow(float const& cp, Climate* pClim, unsigned int day, unsigned int hour);
@@ -1659,11 +1902,13 @@ private:
     unsigned int id;
 
     double cp, rho;
-    static vector<string> muPossibilities; string mu; // Dynamic viscocity of water [Pa*s]
+    static vector<string> muPossibilities; string mu = "0.0004"; // Dynamic viscocity of water [Pa*s]
     vector<ThermalStation*> thermalStations;
     Network* pipelineNetwork;
 
     vector<float> totalThermalLossRecord; // Useful ? It can be computed just by summing up all the losses in the output file.
+
+    MCR* mcr;
 
 public:
     ostream logStream;
@@ -1683,6 +1928,9 @@ public:
     int nbFloatsRecorded() { return 1+pipelineNetwork->nbFloatsRecorded(); }
 
     float getTotalThermalLoss(unsigned int step) {return totalThermalLossRecord.at(step); }
+    float getYearlyTotalThermalLoss();
+    size_t getnThermalStations() {return thermalStations.size();}
+    ThermalStation* getThermalStation(unsigned int index) {return thermalStations[index];}
 
     void recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour);
     void eraseRecords(unsigned int keepValue);

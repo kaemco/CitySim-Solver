@@ -17,7 +17,6 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
     // gets the buildings ID (used?)
     id = to<unsigned int>(hdl.ToElement()->Attribute("id"));
     if (hdl.ToElement()->Attribute("key")) key = hdl.ToElement()->Attribute("key");
-    if (hdl.ToElement()->Attribute("Name")) name = hdl.ToElement()->Attribute("Name");
     logStream << "Building: " << id << "\twith key: " << key << endl << flush;
 
     // gets the fmu file to simulate this building
@@ -102,6 +101,14 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
         if(heatSource.FirstChildElement("Substation").ToElement() ){
             if ( heatSourceFound ) { throw errorMsg; } heatSourceFound = true;
             heatingUnit = Substation::createNewSubstation(heatSource.FirstChildElement("Substation"),  this, beginDay, endDay,  &(this->logStream));
+        }
+        if(heatSource.FirstChildElement("SubstationHP").ToElement() ){
+            if ( heatSourceFound ) { throw errorMsg; } heatSourceFound = true;
+            heatingUnit = new SubstationHeatPump(heatSource.FirstChildElement("SubstationHP"),  this, beginDay, endDay,  &(this->logStream));
+        }
+        if(heatSource.FirstChildElement("SubstationHP2stages").ToElement() ){
+            if ( heatSourceFound ) { throw errorMsg; } heatSourceFound = true;
+            heatingUnit = new SubstationHeatPump2stages(heatSource.FirstChildElement("SubstationHP2stages"),  this, beginDay, endDay,  &(this->logStream));
         }
         //end of contents added by Dapeng, later changed by Cognet
         if ( not heatSourceFound ) { throw string("Error in the XML file: a Building has a HeatSource containing no units, there must be exactly one."); } // Cognet: Added this.
@@ -1048,6 +1055,8 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
 
     update();
 
+    computeHasSolarThermal();
+
     // end of the building constructor
     return;
 }
@@ -1071,6 +1080,8 @@ Building::Building(vector<Wall*> walls, vector<Roof*> roofs, vector<Floor*> floo
     zones.push_back(new Zone4N(id,this,true,Vi,walls,roofs,surfaces,floors,nullptr));
 
     update();
+
+    computeHasSolarThermal();
 
     return;
 }
@@ -1131,7 +1142,7 @@ void Building::update() {
 }
 
 void Building::writeXML(ofstream& file, string tab){
-    file << tab << "<Building Name=\"" << name << "\" id=\"" << id << "\" key=\"" << key << "\" Vi=\"" << getVolume();
+    file << tab << "<Building id=\"" << id << "\" key=\"" << key << "\" Vi=\"" << getVolume();
 
     streamsize ss = file.precision();
     file.precision(6); // use max 6 significant numbers for floats...
@@ -1160,7 +1171,11 @@ void Building::writeXML(ofstream& file, string tab){
 
 void Building::writeGML(ofstream& file, string tab) {
 
-    file << tab << "<bldg:Building gml:id=\"Bldg-" << id << "\">" << endl;
+    file << tab << "<bldg:Building gml:id=\"";
+    if (key.empty())
+        file << "Bldg-" << id << "\">" << endl;
+    else
+        file << key << "\">" << endl;
 
     string subtab=tab+"\t";
 
@@ -1244,21 +1259,33 @@ void Building::writeGML(ofstream& file, string tab) {
         // writes the different surface elements
         for (size_t j=0; j < zones[i]->getnWalls(); ++j) {
             file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon gml:id=\"b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                 << subtab << "\t<gml:Polygon ";
+            if (zones[i]->getWall(j)->getKey().empty())
+                file << "gml:id=\"b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+            else
+                file << "gml:id=\"" << zones[i]->getWall(j)->getKey() << "\">" << endl;
             zones[i]->getWall(j)->writeGML(file,subtab+"\t");
             file << subtab << "\t</gml:Polygon>\n"
                  << subtab << "</gml:surfaceMember>" << endl;
         }
         for (size_t j=0; j < zones[i]->getnRoofs(); ++j) {
             file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon gml:id=\"b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+                 << subtab << "\t<gml:Polygon ";
+            if (zones[i]->getRoof(j)->getKey().empty())
+                file << "gml:id=\"b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+            else
+                file << "gml:id=\"" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
             zones[i]->getRoof(j)->writeGML(file,subtab+"\t");
             file << subtab << "\t</gml:Polygon>\n"
                  << subtab << "</gml:surfaceMember>" << endl;
         }
         for (size_t j=0; j < zones[i]->getnFloors(); ++j) {
             file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon gml:id=\"b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+                 << subtab << "\t<gml:Polygon ";
+            if (zones[i]->getFloor(j)->getKey().empty())
+                file << "gml:id=\"b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+            else
+                file << "gml:id=\"" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
             zones[i]->getFloor(j)->writeGML(file,subtab+"\t");
             file << subtab << "\t</gml:Polygon>\n"
                  << subtab << "</gml:surfaceMember>" << endl;
@@ -1279,8 +1306,12 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t<bldg:WallSurface gml:id=\"Wall_" << zones[i]->getWall(j)->getId() << "\">\n"
                  << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">\n"
-                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
+            if (zones[i]->getWall(j)->getKey().empty())
+                file << "b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+            else
+                file << zones[i]->getWall(j)->getKey() << "\">" << endl;
+            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
 // removed in version 1.0 (to be checked)
@@ -1316,8 +1347,12 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t<bldg:RoofSurface gml:id=\"Roof_" << zones[i]->getRoof(j)->getId() << "\">\n"
                  << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">\n"
-                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
+            if (zones[i]->getRoof(j)->getKey().empty())
+                file << "b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+            else
+                file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
 //                 << subtab << "\t\t<energy:globalSolarIrradiance>\n"
@@ -1352,8 +1387,12 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t<bldg:GroundSurface gml:id=\"Floor_" << zones[i]->getFloor(j)->getId() << "\">\n"
                  << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">\n"
-                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
+            if (zones[i]->getFloor(j)->getKey().empty())
+                file << "b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+            else
+                file << zones[i]->getFloor(j)->getKey() << "\">" << endl;
+            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
                  << subtab << "\t</bldg:GroundSurface>\n"
@@ -1590,6 +1629,24 @@ double Building::getZoneT(unsigned int i, unsigned int j) { return zones[i]->get
 
 void Building::setZoneT(unsigned int i, unsigned int j, double value) { zones[i]->setT(j,value); }
 
+bool Building::getHasSolarThermal(){
+    return hasSolarThermal;
+}
+
+void Building::computeHasSolarThermal(){
+    for (unsigned int i=0; i<getnZones(); i++) {
+        for (unsigned int j=0; j<getZone(i)->getnRoofs(); ++j) {
+            hasSolarThermal = hasSolarThermal or getZone(i)->getRoof(j)->getHasSolarThermal();
+        }
+        for (unsigned int j=0; j<getZone(i)->getnWalls(); ++j) {
+            hasSolarThermal = hasSolarThermal or getZone(i)->getWall(j)->getHasSolarThermal();
+        }
+        for (unsigned int j=0; j<getZone(i)->getnSurfaces(); ++j) {
+            hasSolarThermal = hasSolarThermal or getZone(i)->getSurface(j)->getHasSolarThermal();
+        }
+    }
+}
+
 void Building::deterministicShadingAction(/*unsigned int day*/) {
 
     // the shading state depends solely on the irradiance on the facade and roof, but also on the day of year
@@ -1670,12 +1727,12 @@ Tree::Tree(TiXmlHandle hdl, ostream* pLogStream):logStream(std::cout.rdbuf()) {
         }
         else {
             // create the subleaves
-            subLeaves.push_back(new Surface(leaves.back()));
+            subLeaves.push_back(new Surface(*leaves.back()));
             subLeaves.back()->reverseOrientation();
             for (unsigned int index = 1; index < layers; ++index) {
-                subLeaves.push_back(new Surface(leaves.back()));
+                subLeaves.push_back(new Surface(*leaves.back()));
                 subLeaves.back()->translate(GENPoint::Cartesian(0.f,0.f,-static_cast<float>(index)*layersDistance));
-                subLeaves.push_back(new Surface(subLeaves.back()));
+                subLeaves.push_back(new Surface(*subLeaves.back()));
                 subLeaves.back()->reverseOrientation();
             }
         }

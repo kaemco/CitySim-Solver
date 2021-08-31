@@ -35,7 +35,7 @@ PhotoVoltaic::PhotoVoltaic(TiXmlHandle hdl, ostream* pLogStr):logStream(std::cou
 
     if (hdl.ToElement()->Attribute("name")){ hdl.ToElement()->QueryStringAttribute("name",&name);}
 
-    if (hdl.ToElement()->Attribute("IAM")) iam = to<float>(hdl.ToElement()->Attribute("IAM"));
+    //if (hdl.ToElement()->Attribute("IAM")) iam = to<float>(hdl.ToElement()->Attribute("IAM"));
 
 }
 
@@ -48,6 +48,28 @@ void PhotoVoltaic::writeXML(ofstream& file, float ratio, string tab){
 double PhotoVoltaic::getMaxPowerEfficiency(double gt, double tout) {
     //cout << "getMaxPowerEfficiency: etampref=" << etampref <<" muvoc="<<muvoc <<" /vmp="<<vmp<<" tout="<<tout << " gt="<< gt <<" tcnoct="<<tcnoct <<" toutsoc="<<toutsoc <<" /gtsoc=" <<gtsoc << " tref=" << tref << endl;
     return etampref*(1.0 + (muvoc/vmp)*(tout + gt*(tcnoct-toutsoc)/gtsoc - tref))/(1.0 + etampref*gt*(tcnoct-toutsoc)/gtsoc*(1.0/0.9)*(muvoc/vmp));
+}
+
+PhotoVoltaic::~PhotoVoltaic() {
+
+#ifdef DEBUG
+    fstream output ("iam.txt", ios::out | ios::trunc);
+    for (size_t i=0;i<iam.size();++i)
+        output << iam.at(i).first << "\t" << iam.at(i).second << endl;
+    output.close();
+#endif // DEBUG
+
+}
+
+double PhotoVoltaic::getIAM(float elevation) {
+    // the reference function
+    double iam_value_ref = -1.0410*pow(elevation,6) + 4.0590*pow(elevation,5) - 6.3050*pow(elevation,4) + 4.5308*pow(elevation,3) - 1.4386*pow(elevation,2) + 1.5515e-01*elevation + 9.5204e-01;
+    double iam_value_mod = -9.7256E-02*pow(elevation,6) + 2.5487E-01*pow(elevation,5) - 4.0788E-01*pow(elevation,4) + 3.8687E-01*pow(elevation,3) - 1.6502E-01*pow(elevation,2) + 2.2950E-02*elevation + 9.2368E-01;
+    double iam_value = iam_value_ref;
+#ifdef DEBUG
+    iam.push_back(pair<float,double>(elevation,iam_value));
+#endif // DEBUG
+    return iam_value;
 }
 
 SolarThermal::SolarThermal(TiXmlHandle hdl, ostream* pLogStr):logStream(std::cout.rdbuf()) {
@@ -1212,7 +1234,14 @@ HeatPump::HeatPump(TiXmlHandle hdl, unsigned int beginD, unsigned int endD, ostr
         logStream << "Air source." << endl << flush;
         ground = false;
     }
-    else { throw string("Error in the XML file: a HeatPump has a Tsource attribute with neither 'ground' nor 'air'."); } // Cognet: Added this.
+    else if (string(hdl.ToElement()->Attribute("Tsource"))==string("water")){
+        logStream << "Water Source." << endl << flush;
+        ground = false;
+    }else if (string(hdl.ToElement()->Attribute("Tsource"))==string("network")){ //Added by Max: For the substationHeatPump
+        logStream << "Network Source." << endl << flush;
+        ground = false;
+}
+    else { throw string("Error in the XML file: a HeatPump has a Tsource attribute with neither 'ground' nor 'air' nor 'network'."); } // Cognet: Added this.
 }
 
 void HeatPump::writeXML(ofstream& file, string tab){
@@ -1278,6 +1307,12 @@ double HeatPump::getWorkNeeded(double thermalPower, double sourceTemp, double ou
 
 }
 
+double HeatPump::getWorkNeededEvap(double PowerEvap, double sourceTemp, double outputTemp) {
+
+    // the work is always positive
+    return std::abs(PowerEvap/(etaTech*epsilonC(sourceTemp, outputTemp)-1));
+
+}
 //double HeatPump::getThermalPower(double thermalPowerNeeded, double sourceTemp) { // Cognet: Deleted this.
 double HeatPump::getThermalPower(double sourceTemp) { // Cognet: Added this. thermalPowerNeeded is now a class attribute set beforehand.
 
@@ -1347,12 +1382,12 @@ double CoGenerationHeatPump::getFuelConsumption(double time, double thermalPower
 
 
 
-
 Pump::Pump(TiXmlHandle hdl) {
 
     string name = "efficiencyPump";
-    if ( hdl.ToElement()->QueryFloatAttribute(name.c_str(), &efficiencyPump) ) { throw string("Error in the XML file: a Pump doesn't have attribute: '"+name+"'."); }
-    if ( efficiencyPump<=0 )    { throw string("Error in the XML file: a Pump has "+name+"<=0."); }
+    if (hdl.FirstChildElement("EfficiencyPump").ToElement()) {// Changed by Max
+        efficiencyPump = EfficiencyPump::createNewEfficiencyPump(hdl.FirstChildElement("EfficiencyPump")); // Dynamical allocation.
+    }else{throw string("Error in the XML file: a Pump does not have a child element 'EfficiencyPump'.");}
 
     name = "n0";
     if ( hdl.ToElement()->QueryFloatAttribute(name.c_str(), &n0) ) { throw string("Error in the XML file: a Pump doesn't have attribute: '"+name+"'."); }
@@ -1373,13 +1408,24 @@ Pump::Pump(TiXmlHandle hdl) {
 }
 
 void Pump::computeElectricAndThermalPower(float const& pressureDiff, float const& massFlow, float const& rho, float& electricPow, float& thermalPow) {
+    float effPump = efficiencyPump->computeEfficiency(massFlow);
     if (massFlow>=0.f and pressureDiff<=0.f) { // Normal conditions, mass flow in correct direction and pump increases the pressure and temperature.
         // Hydraulic power needed is pressureDiff*massFlow/rho
-        electricPow = -pressureDiff*massFlow/(rho*efficiencyPump); // Electric power supplied. (minus sign due to conventiions)
-        thermalPow = electricPow*(1.f-efficiencyPump); // Since pumpPower = hydraulicPower+thermalPower = hydraulicPower/efficiency
+        electricPow = -pressureDiff*massFlow/(rho*effPump); //Added by Max
+        thermalPow = electricPow*(1.f-effPump); // Since pumpPower = hydraulicPower+thermalPower = hydraulicPower/efficiency (Added by Max)
     } else { // Pump is resisting the flow (similar to a valve), dissipating heat.
         electricPow = 0.f; // For simplifications, this no electricity, only heat dissipation (even if it could technically generate electricity, like a turbine).
         thermalPow = pressureDiff*massFlow/rho; // Should always be positive.
+    }
+}
+
+//Added by Max
+float Pump::cpdT(float const& pressureDiff, float const& rho, float const& massFlow){
+    // We suppose that the mass flow should be always positive
+    if(pressureDiff<=0.f){
+        return -pressureDiff*(1-efficiencyPump->computeEfficiency(massFlow))/rho/efficiencyPump->computeEfficiency(massFlow); // For now we suppose an arbitrary massflow because we don't know it as we trying to compute it. (Solution to say that the slave has necessary a constant efficiency)
+    }else{
+        return pressureDiff*(1-efficiencyPump->computeEfficiency(massFlow))/rho/efficiencyPump->computeEfficiency(massFlow);
     }
 }
 
@@ -1391,8 +1437,8 @@ void Pump::computePressureDiff(float const& massFlow, float& deltaP, float& dDel
     } else {
 //        deltaP = -a0*x*x;
 //        dDeltaP_dm = 0.f;
-        deltaP = -a0*x*x + a2*massFlow*massFlow*1000000.f; // TODO: improve this. This is to ensure that the friction increases if flow goes backwards through the pump.
-        dDeltaP_dm = 2.f*a2*massFlow*1000000.f;
+        deltaP = -a0*x*x + a2*massFlow*massFlow*100000.f; // TODO: improve this. This is to ensure that the friction increases if flow goes backwards through the pump.
+        dDeltaP_dm = 2.f*a2*massFlow*100000.f;
     }
 }
 
@@ -1429,7 +1475,6 @@ void Pump::setNToMax(float& sumDeltaRpm, float& sumRpm, float const& learningRat
 
 
 
-
 float Valve::deltaP0_invRho0_36002 = 1296000000.f ; // deltaP0=1e5, invRho0=1/1e3, 3600^2=12960000, multiply them.
 
 void Valve::computePressureDiffAndDerivative(float const& m, float const& rho, float& deltaP, float& dDeltaP_dm) {
@@ -1441,19 +1486,25 @@ float Valve::computeIdealKv(float const& rho, float const& massFlow, float const
     return massFlow*sqrt(abs(deltaP0_invRho0_36002/(rho*pressureDiff)));
 }
 
-void Valve::updateKv(float const& rho, float& sumDeltaKv, float& sumKv, float const& learningRate, float const& targetMassFlow, float const& targetPressureDiff) {
+void Valve::updateKv(float const& rho, float& sumDeltaKv, float& sumKv, float const& learningRate, float const& targetMassFlow, float const& targetPressureDiff, PIDControllerValve& pid, float& Targetkv, bool& ImposedValve) {
     float kvMin = computeKvMin();
     float kvPrev = kv;
-
+    float ratio(0);
 //    if (massFlow<=0.f or pressureDiff<=0.f) { // If the pressure drops the wrong way, or if the supply temperatures don't match : close the valve.
 //        kv = kvMin;
 //    }
 //    else {
-    kv = computeIdealKv(rho, targetMassFlow, targetPressureDiff);
-    if (kv<kvMin) { kv = kvMin; }
-    else if (kv>kvMax) { kv = kvMax; }
+    if (ImposedValve) {
+        ratio = pid.computeControlVariable(Targetkv,kvPrev/kvMax);
+        kv = ratio*kvMax;
+    }else{
+       kv = computeIdealKv(rho, targetMassFlow, targetPressureDiff/*-50000*/);
+       if (kv<kvMin) { kv = kvMin; }
+       else if (kv>kvMax) { kv = kvMax; }
 
-    kv = kvPrev*(1.f-learningRate)+kv*learningRate;
+       kv = kvPrev*(1.f-learningRate)+kv*learningRate;
+    }
+
 //    }
     sumDeltaKv += abs(kv-kvPrev);
     sumKv += kv;
@@ -1465,11 +1516,6 @@ void Valve::setKvToMin(float& sumDeltaKv, float& sumKv, float const& learningRat
     sumDeltaKv += abs(kv-kvPrev);
     sumKv += kv;
 }
-
-
-
-
-
 
 
 float PIDController::computeControlVariable(float const& desiredSetpoint, float const& processVariable, float const& kp, float const& ki, float const& kd) {
@@ -1609,7 +1655,7 @@ Substation* Substation::createNewSubstation(TiXmlHandle hdl,  Building* pBui, un
     return newSubstation;
 }
 
-Substation::Substation(TiXmlHandle hdl,  Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr) : EnergyConversionSystem(beginD, endD, pLogStr), pBuilding(pBui), valve(nullptr) { // pid(200, 100, 0.f, 0.5f)
+Substation::Substation(TiXmlHandle hdl,  Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr) : EnergyConversionSystem(beginD, endD, pLogStr), pBuilding(pBui), valve(nullptr), Targetkv(0.f), ImposedValve(true), ImposedMassFlow(false) { // pid(200, 100, 0.f, 0.5f)
 
     if(hdl.ToElement() ){
         logStream <<"Substation" << endl << flush;
@@ -1629,6 +1675,17 @@ Substation::Substation(TiXmlHandle hdl,  Building* pBui, unsigned int beginD, un
         // Epsilon of the heat exchanger, linked to its efficiency.
         if ( hdl.ToElement()->QueryFloatAttribute("designEpsilon", &designEpsilon) ) { throw string("Error in the XML file: a Substation doesn't have attribute: 'designEpsilon'."); }
         if( designEpsilon<=0. or designEpsilon>1. ) { throw string("Error in the XML file: a Substation has designEpsilon<=0. or designEpsilon>1."); }
+
+        // The fixed valve opening of the heat exchanger.
+        if ( hdl.ToElement()->QueryFloatAttribute("Targetkv", &Targetkv) ) {
+            Targetkv=0.001f; ImposedValve = false; cout << "A Substation doesn't have attribute: 'Targetkv'.";
+        }
+        if( Targetkv<=0. or Targetkv>1. ) { throw string("Error in the XML file: a Substation has Targetkv<=0. or Targetkv>1."); }
+
+        if (hdl.FirstChildElement("MassFlowSetpoint").ToElement()) {// Changed by Max
+            massFlowSetpoint = MassFlowSetpoint::createNewMassFlowSetpoint(hdl.FirstChildElement("MassFlowSetpoint")); // Dynamical allocation.
+            ImposedMassFlow = true;
+        }
 
         // Find and set pDEC and pNode that this Substation is linked to.
         size_t i=0;
@@ -1685,20 +1742,25 @@ double Substation::getElectricConsumption(double time, double thermalPower, doub
 
 
 double Substation::mc(double thermalPowerNeeded, double designThermalPower, double m_c_n) {
-    double ratio = thermalPowerNeeded / designThermalPower;
-    if (ratio >= 0.75)
+    if(ImposedMassFlow){
+        return massFlowSetpoint->computeTargetMassFlow();
+    }else{
+        double ratio = thermalPowerNeeded / designThermalPower;
+
+    /*if (ratio >= 0.75)
         return m_c_n;
     else if ( 0.5 <= ratio )
         return 0.75 * m_c_n;
     else if ( 0.25 <= ratio )
         return 0.5 * m_c_n;
     else
-        return 0.25 * m_c_n;
+        return 0.25 * m_c_n;*/
 
-// Fully proportional, but many changes in flows meaning longer simulation times.
-//    if (ratio>1.0) { ratio = 1.0; }
-//    else if (ratio<0.01) { ratio = 0.01; }
-//    return ratio*m_c_n;
+         // Fully proportional, but many changes in flows meaning longer simulation times.
+         if (ratio>1.0) { ratio = 1.0; }
+         else if (ratio<0.0000001) { ratio = 0.0000001; } // The minimimum ratio can be increased in order to run the simulations faster.
+         return ratio*m_c_n;
+    }
 }
 
 void Substation::computeHeatExchanged(float const& primarySideCp, float const& primarySideRho, float const& primarySideInputTemp, float const& primarySideMassFlow, float const& primarySidePressureDiff, Climate* pClim, unsigned int day, unsigned int hour) {
@@ -1741,12 +1803,12 @@ void Substation::computeHeatExchanged(float const& primarySideCp, float const& p
             if ( abs(thermalPowerExchanged)>abs(thermalPowerNeeded) ) { thermalPowerExchanged = thermalPowerNeeded; } // Don't exceed the thermal power demanded by consumer.
         }
 
-        primarySideOutputTemp = computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp);
+        setPrimarySideOutputTemp(computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp));
 
     }
     else if (primarySideMassFlow<0.f) {
         thermalPowerExchanged = 0.f;
-        primarySideOutputTemp = computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp);
+        setPrimarySideOutputTemp(computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp));
     }
     else { // primarySideMassFlow==0.f
         thermalPowerExchanged = 0.f;
@@ -1757,26 +1819,27 @@ float Substation::maxKv(float const& rho) {
     return 3600.f*computeDesignMassFlow()*sqrt(100000.f/10000.f)/rho; // Kv in m^3/h, massFlow in kg/s. TODO improve this (this means there is at most designMassFlow for deltaP=0.1bar)
 }
 
-void Substation::updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate, float const& massFlowSupplyToReturn) {
+void Substation::updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate, float const& massFlowSupplyToReturn) { //Changed by Max
     float currentPressureDiffControlElement = computePressureDiffControlElement(deltaP);
     float targetMassFLow, targetPressureDiff;
     if (massFlow>0.f) {
         targetMassFLow = desiredMassFlow;
-        targetPressureDiff = currentPressureDiffControlElement;
+        targetPressureDiff = currentPressureDiffControlElement; // Substract the pressure difference imputed to the heat exchanger.
         if(targetPressureDiff<=0.f) { targetPressureDiff = 1.0f; }
     }
     else {
         targetMassFLow = -desiredMassFlow*0.001f;
         targetPressureDiff = abs(deltaP)+1.f;
     } // If flow is going in the wrong direction, close the valve.
-    valve->updateKv(rho, sumDeltaKv, sumKv, learningRate, targetMassFLow, targetPressureDiff);
+    valve->updateKv(rho, sumDeltaKv, sumKv, learningRate, targetMassFLow, targetPressureDiff, pid, Targetkv, ImposedValve);
 
     sumDeltaRpm += 0.f; sumRpm += 0.f;
 }
 
 
-void Substation::relativeErrorMassFlow(float const& massFlow, float& relErr, float& sumErr) {
+void Substation::errorMassFlow(float const& massFlow, float& relErr, float& absErr, float& sumErr) {
     relErr = relativeErrorMassFlow(massFlow);
+    absErr = massFlow-desiredMassFlow;
     sumErr += abs(massFlow-desiredMassFlow);
 }
 
@@ -1791,6 +1854,7 @@ void Substation::computePressureDiffAndDerivative(vector<float>::const_iterator 
     valve->computePressureDiffAndDerivative(m_, rho, deltaP_, dDeltaP_dm_);
     (*deltaP) = deltaP_;
     (*dDeltaP_dm) = dDeltaP_dm_;
+
 }
 
 float Substation::computeOutputTemp(float const& inputTemp, float const& thermalPowerExchanged, float const& massFlow, float const& pressureDiff, float const& rho, float const& cp) {
@@ -1805,9 +1869,11 @@ float Substation::computeOutputTemp(float const& inputTemp, float const& thermal
 }
 
 
-
-
-
+void Substation::updateDesiredMassFlow(float const& cp, float const& primarySideReturnTemp, Climate* pClim, unsigned int day, unsigned int hour) {
+    if(ImposedValve) {// Added by Max
+        desiredMassFlow= sqrt(pNode->getPressureDiff()/1296000000.f*990.f*valve->getkv()*valve->getkv()); // substations that have imposed valves.
+    }
+}
 
 
 RegulatingElement::RegulatingElement(TiXmlHandle hdl) {
@@ -1934,7 +2000,7 @@ void ProsumerSubstation::updateControlVariable(float const& massFlow, float cons
                 targetPressureDiff = - pressureDiffThroughPumpAtTargetFlow - deltaP*targetMassFlow*targetMassFlow/(massFlow*massFlow);
                 if(targetPressureDiff<=0.f) { targetPressureDiff = 1.0f; }
             }
-            pumpFlowControlValve->updateKv(rho, sumDeltaKv, sumKv, learningRate, targetMassFlow, targetPressureDiff);
+            pumpFlowControlValve->updateKv(rho, sumDeltaKv, sumKv, learningRate, targetMassFlow, targetPressureDiff, pid, Targetkv, ImposedValve);
 
 //        } else { // Update only the pump.
 
@@ -1952,7 +2018,8 @@ void ProsumerSubstation::updateControlVariable(float const& massFlow, float cons
                 float pressureDiffThroughValveAtTargetFlow, dpressureDiffdmThroughValveAtTargetFlow;
                 pumpFlowControlValve->computePressureDiffAndDerivative(targetMassFlow, rho, pressureDiffThroughValveAtTargetFlow, dpressureDiffdmThroughValveAtTargetFlow);
 
-                targetPressureDiff = setpointPressureDiff - pressureDiffThroughValveAtTargetFlow;
+                float pressureDiffThroughElements(pressureDiffThroughValveAtTargetFlow);
+                targetPressureDiff = setpointPressureDiff - pressureDiffThroughElements;
                 if (targetPressureDiff>0) { targetPressureDiff = -1.f; }
 
                 pump->updateRpms(sumDeltaRpm, sumRpm, learningRate, targetMassFlow, targetPressureDiff);
@@ -1989,14 +2056,14 @@ void ProsumerSubstation::computeHeatExchanged(float const& primarySideCp, float 
 
                 if (solarThermalPowerNeeded<0.f) { // The fluid's temperature will exceed the target temperature.
                     thermalPowerExchanged = 0.f;
-                    primarySideOutputTemp = primarySideInputTemp;
+                    setPrimarySideOutputTemp(primarySideInputTemp);
                 } else {
 
                     float solarThermalPowerAvailable = computeSolarThermalPower(targetSupplyTemp, primarySideInputTemp, pClim, day, hour);
 
                     if (solarThermalPowerNeeded<=solarThermalPowerAvailable) { // Sufficient solar thermal to heat to the target temperature.
                         thermalPowerExchanged = -solarThermalPowerNeeded; // Only use the necessary solar thermal power, to not exceed the target temperature. (Minus sign due to conventions)
-                        primarySideOutputTemp = targetSupplyTemp;
+                        setPrimarySideOutputTemp(targetSupplyTemp);
 
                     } else { // Not enough solar thermal to heat to the target temperature.
 
@@ -2013,14 +2080,14 @@ void ProsumerSubstation::computeHeatExchanged(float const& primarySideCp, float 
                         } while (abs(outputTemp-newOutputTemp)>0.05f and outputTempHigh-outputTempLow>0.05f);
 
                         thermalPowerExchanged = -solarThermalPowerAvailable; // Use all solar thermal available. (Minus sign due to conventions)
-                        primarySideOutputTemp= newOutputTemp;
+                        setPrimarySideOutputTemp(newOutputTemp);
                     }
                     // TODO : Impose a maximal designThermalPower ?
                 }
             }
             else { // Flow is from supply to return, which is the wrong direction, cannot feed in.
                 thermalPowerExchanged = 0.f;
-                primarySideOutputTemp = primarySideInputTemp;
+                setPrimarySideOutputTemp(primarySideInputTemp);
             }
         }
         else {
@@ -2052,7 +2119,8 @@ void ProsumerSubstation::updateDesiredMassFlow(float const& cp, float const& pri
 
             float targetSupplyTemp = temperatureSetpoint->computeTargetTemperature(pClim, day, hour);
             float targetFeedInPower = computeSolarThermalPower(targetSupplyTemp, primarySideReturnTemp, pClim, day, hour);
-            float tempIncrease = targetSupplyTemp - primarySideReturnTemp; // If temperature increase is too small, or negative : the desired mass flow will be too negative, or impossible.
+            float tempIncreaseValve = pumpFlowControlValve->computeTemperatureIncrease(-pressureSetpoint->computeTargetPressureDiff(desiredMassFlow),cp,990.f); // Compute the increase of Temperature with the previous desiredMassFlow. minus sign before the pressure as it is negtive by convention. Added by Max.
+            float tempIncrease = targetSupplyTemp - primarySideReturnTemp + tempIncreaseValve; // If temperature increase is too small, or negative : the desired mass flow will be too negative, or impossible.
 
             if (0.f<targetFeedInPower and 0.05f<tempIncrease) {
                 // If desiredMassFlow is too negative, put a cap? eg minus the design mass flow? Or simply let the pump reach it's maximum capacity?
@@ -2082,18 +2150,287 @@ void ProsumerSubstation::setProsumerSolarThermal() {
     } // Else it is consumer mode and the exchanged heat is consumed not injected solar thermal.
 }
 
-void ProsumerSubstation::relativeErrorMassFlow(float const& massFlow, float& relErr, float& sumErr) {
+void ProsumerSubstation::errorMassFlow(float const& massFlow, float& relErr, float& absErr, float& sumErr) {
     if (producerModeOn and (desiredMassFlow==minDesiredPumpFlow()) and (massFlow<0.f) and pump->nIsAlmostMax() and pumpFlowControlValve->kvIsAlmostMin()) { // The pump is already at minimum power, we cannot go lower. (to avoid getting stuck). // before debug
         relErr = 0.f;
+        absErr = 0.f;
         sumErr += 0.f;
     } else {
-        Substation::relativeErrorMassFlow(massFlow, relErr, sumErr);
+        Substation::errorMassFlow(massFlow, relErr, absErr, sumErr);
+    }
+}
+
+SubstationHeatPump::SubstationHeatPump(TiXmlHandle hdl, Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr)
+    :ProsumerSubstation(hdl, pBui, beginD, endD, pLogStr), heatPump(nullptr){
+    if (hdl.FirstChildElement("HeatPump").ToElement()) {
+        if(string(hdl.FirstChildElement("HeatPump").ToElement()->Attribute("Tsource")) != string("network")){throw string("Error in the XML file: A FirstChildElement Tsource of a SubstationHP is not 'network'.");}
+        heatPump = new HeatPump(hdl.FirstChildElement("HeatPump"), beginD, endD, pLogStr);
+    } else {
+        throw string("Error in the XML file: a SubstationHP doesn't contain any HeatPump child element.");
+    }
+}
+
+void SubstationHeatPump::setThermalPowerNeeded(double tPN){
+    ProsumerSubstation::setThermalPowerNeeded(tPN);
+    //cout << "SubstationHeatPump::setThermalPowerNeeded" << endl;
+}
+
+float SubstationHeatPump::computeDesignMassFlow() {
+    return (designThermalPower-heatPump->getWorkNeeded(designThermalPower,pNode->getSupplyTemperature(),heatPump->getTargetTemp()))/(designTempDifference*pDEC->getCp());
+}
+
+double SubstationHeatPump::getThermalPower(double sourceTemp){ // We need the thermal power of the condenser. Don't use source temp. It's for ground HP.
+    //return HeatPump::getThermalPower(sourceTemp);
+    if (getProducerMode()) {
+        //cout << " A SubstationHeatPump is in Producer Mode on day "+ to_string(day) +" hour "+to_string(hour);
+        return 0.f; // thermalPowerExchanged variable contains the heat fed into the network, not consumed by substation.
+    } else { // Consumer or passive mode.
+        float sgnNeeds;
+        if( thermalPowerNeeded>0. ) {
+            sgnNeeds = 1.;
+        }
+        else if ( thermalPowerNeeded<0. ) {
+            sgnNeeds = -1.;
+        }
+        else {
+            sgnNeeds = 0.;
+        }
+
+        double thermalPower;
+        if ( heatPump->getWorkNeeded(thermalPowerNeeded, pNode->getSupplyTemperature(), heatPump->getTargetTemp()) <= heatPump->getHeatPumpElectricPower()){
+            thermalPower = thermalPowerNeeded;
+        }else{
+            thermalPower = heatPump->getHeatProduced(heatPump->getHeatPumpElectricPower(), pNode->getSupplyTemperature(), heatPump->getTargetTemp());
+        }
+        if ( thermalPower*thermalPowerNeeded<0. ) { thermalPower = 0.f; } // If the thermal power computed has opposite sign to the needs, set to zero (corresponds to closing the valve on secondary network).
+        //if ( abs(thermalPower)>abs(designThermalPower+getWorkNeededEvap(designThermalPower,pNode->getSupplyTemperature(),targetTemp)) ) { thermalPower = sgnNeeds*(designThermalPower+getWorkNeededEvap(designThermalPower, pNode->getSupplyTemperature(), targetTemp)); } // Don't exceed design thermal power. We have to add the electricity consumed as the design thermal power is at the evaporator
+        if ( abs(thermalPower)>abs(designThermalPower) ) { thermalPower = sgnNeeds*(designThermalPower); } // Don't exceed design thermal power. We have to substract the electricity consumed as the design thermal power is at the condenser
+        if ( abs(thermalPower)>abs(thermalPowerNeeded) ) { thermalPower = thermalPowerNeeded; } // Don't exceed the thermal power demanded by consumer. We have to substract the electricity consumed as the power exchange is at the evaporator.
+        return thermalPower;
+    }
+}
+
+double SubstationHeatPump::getElectricConsumption(double time, double thermalPower, double sourceTemp){ // don't use source temp. It's for ground HP.
+    if(not getProducerMode()){
+        return heatPump->getElectricConsumption(time, thermalPower, pNode->getSupplyTemperature());
+    }else{
+        return ProsumerSubstation::getElectricConsumption(time, thermalPower, sourceTemp);
+    }
+}
+
+void SubstationHeatPump::updateDesiredMassFlow(float const& cp, float const& primarySideReturnTemp, Climate* pClim, unsigned int day, unsigned int hour){
+    double ElectricityConsumed;
+    if ( heatPump->getWorkNeeded(thermalPowerNeeded, pNode->getSupplyTemperature(), heatPump->getTargetTemp()) <= heatPump->getHeatPumpElectricPower() ) ElectricityConsumed = heatPump->getWorkNeeded(thermalPowerNeeded, pNode->getSupplyTemperature(), heatPump->getTargetTemp());
+    else ElectricityConsumed = heatPump->getHeatPumpElectricPower();
+    double ThermalPowerExtracted;
+
+    if(thermalPowerNeeded>0.0){
+        setProducerMode(false);
+        if ( thermalPowerNeeded <= designThermalPower ) ThermalPowerExtracted=thermalPowerNeeded - ElectricityConsumed; // Thermal power taken from the DHN
+        else ThermalPowerExtracted = designThermalPower-heatPump->getWorkNeeded(designThermalPower, pNode->getSupplyTemperature(), heatPump->getTargetTemp());
+
+        desiredMassFlow = ThermalPowerExtracted/designTempDifference/pDEC->getCp()+0.0001; // avoid division by zero
+
+    }else if(pBuilding->getHasSolarThermal()){ // Since a SubstationHeatPump can be implemented without any solar thermal panels on its roofs. By convention, the solar thermal left when there are solar power is 1 and not 0 !
+        ProsumerSubstation::updateDesiredMassFlow(cp, primarySideReturnTemp, pClim, day, hour);
+
+    }else{
+        desiredMassFlow = 0.0001; // avoid division by zero
+    }
+}
+
+double SubstationHeatPump::logMeanTemperatureDifference(float Tin, float Tout){
+    return (Tin-Tout)/log10((Tin+273.15)/(Tout+273.15));
+}
+
+void SubstationHeatPump::computeHeatExchanged(float const& primarySideCp, float const& primarySideRho, float const& primarySideInputTemp, float const& primarySideMassFlow, float const& primarySidePressureDiff, Climate* pClim, unsigned int day, unsigned int hour){
+    if (not getProducerMode()) {
+        float sgnNeeds;
+        if( thermalPowerNeeded>0. ) {
+            sgnNeeds = 1.;
+        }
+        else if ( thermalPowerNeeded<0. ) {
+            sgnNeeds = -1.;
+        }
+        else {
+            sgnNeeds = 0.;
+        }
+
+        // Thermal power taken from the DHN
+        double ElectricityConsumed;
+        if ( heatPump->getWorkNeeded(thermalPowerNeeded, primarySideInputTemp, heatPump->getTargetTemp()) <= heatPump->getHeatPumpElectricPower() ){
+            ElectricityConsumed = heatPump->getWorkNeeded(thermalPowerNeeded, primarySideInputTemp, heatPump->getTargetTemp());
+            thermalPowerExchanged = thermalPowerNeeded-ElectricityConsumed;
+        }else{
+            ElectricityConsumed = heatPump->getHeatPumpElectricPower();
+            thermalPowerExchanged = heatPump->getHeatProduced(heatPump->getHeatPumpElectricPower(), primarySideInputTemp, heatPump->getTargetTemp())-ElectricityConsumed;
+        }
+
+        if ( thermalPowerExchanged*thermalPowerNeeded<0. ) { thermalPowerExchanged = 0.f; } // If the thermal power computed has opposite sign to the needs, set to zero (corresponds to closing the valve on secondary network).
+        //if ( abs(thermalPowerExchanged)>abs(designThermalPower) ) { thermalPowerExchanged = sgnNeeds*(designThermalPower); } // Don't exceed design thermal power.
+        if ( abs(thermalPowerExchanged)>abs(designThermalPower-heatPump->getWorkNeeded(designThermalPower, primarySideInputTemp, heatPump->getTargetTemp())) ) {
+            thermalPowerExchanged = sgnNeeds*(designThermalPower-heatPump->getWorkNeeded(designThermalPower, primarySideInputTemp, heatPump->getTargetTemp()));
+        } // Don't exceed design thermal power.
+        if ( abs(thermalPowerExchanged)>abs(thermalPowerNeeded-heatPump->getWorkNeeded(thermalPowerNeeded, primarySideInputTemp, heatPump->getTargetTemp())) ) { thermalPowerExchanged = thermalPowerNeeded-heatPump->getWorkNeeded(thermalPowerNeeded, primarySideInputTemp, heatPump->getTargetTemp()); } // Don't exceed the thermal power demanded by consumer. We have to substract the electricity consumed as the power exchange is at the evaporator.
+
+       setPrimarySideOutputTemp(computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp));
+
+    }else{
+        ProsumerSubstation::computeHeatExchanged(primarySideCp, primarySideRho, primarySideInputTemp, primarySideMassFlow, primarySidePressureDiff, pClim, day, hour);
     }
 }
 
 
+//Added by Max
+SubstationHeatPump2stages::SubstationHeatPump2stages(TiXmlHandle hdl, Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr)
+    :SubstationHeatPump(hdl,pBui,beginD,endD,pLogStr){
+    if(hdl.ToElement()->QueryDoubleAttribute("Ttarget2", &targetTemp2) ) { throw string("Error in the XML file: a SubstationHeatPump2stages doesn't have attribute: 'Ttarget2'."); }
+    if(hdl.ToElement()->QueryDoubleAttribute("Pmax2", &heatPumpElectricPower2) ) { throw string("Error in the XML file: a SubstationHeatPump2stages doesn't have attribute: 'Pmax2'."); }
+    if(hdl.ToElement()->QueryDoubleAttribute("eta_tech2", &etaTech2)) { throw string("Error in the XML file: a SubstationHeatPump2stages doesn't have attribute: 'etaTech2'."); }
+}
+
+double SubstationHeatPump2stages::getThermalPower(double sourceTemp){ // Thermal power of the condensers. Don't use sourceTemp. It's for ground HP.
+    if (getProducerMode()) {
+        return 0.f; // thermalPowerExchanged variable contains the heat fed into the network, not consumed by substation.
+    } else {
+        float sgnNeeds;
+        if( thermalPowerNeeded>0. ) {
+            sgnNeeds = 1.;
+        }
+        else if ( thermalPowerNeeded<0. ) {
+            sgnNeeds = -1.;
+        }
+        else {
+            sgnNeeds = 0.;
+        }
+
+        double WorkNeeded_DHW =  getWorkNeeded(thermalPowerNeeded, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[0];
+        double WorkNeeded_HS = getWorkNeeded(thermalPowerNeeded, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[1]; // Approximation on the primary side input temperature
+        double thermalPower;
+
+        if (WorkNeeded_DHW <= getHeatPump()->getHeatPumpElectricPower() and WorkNeeded_HS <= heatPumpElectricPower2){
+            thermalPower = getHeatProduced(WorkNeeded_DHW, WorkNeeded_HS, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp());
+        }else if (WorkNeeded_DHW <= getHeatPump()->getHeatPumpElectricPower()) {
+            thermalPower = getHeatProduced(WorkNeeded_DHW, heatPumpElectricPower2, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp());
+        }else if (WorkNeeded_HS <= heatPumpElectricPower2) {
+            thermalPower = getHeatProduced(getHeatPump()->getHeatPumpElectricPower(), WorkNeeded_HS, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp());
+        }else{
+            thermalPower = getHeatProduced(getHeatPump()->getHeatPumpElectricPower(), heatPumpElectricPower2, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp());
+        }
 
 
+        if ( thermalPower*thermalPowerNeeded<0. ) { thermalPower = 0.f; } // If the thermal power computed has opposite sign to the needs, set to zero (corresponds to closing the valve on secondary network).
+        if ( abs(thermalPower)>abs(designThermalPower) ) { thermalPower = sgnNeeds*(designThermalPower); } // Don't exceed design thermal power.
+        if ( abs(thermalPower)>abs(thermalPowerNeeded) ) { thermalPower = thermalPowerNeeded; } // Don't exceed the thermal power demanded by consumer. We have to substract the electricity consumed as the power exchange is at the evaporator.
+        return thermalPower;
+    }
+}
+
+double SubstationHeatPump2stages::getElectricConsumption(double time, double thermalPower, double sourceTemp) { // don't use source temp. It's for ground HP. (Problem with the thermalPower when there is some imposedHeatDemand)
+    if(not getProducerMode()){
+        if ( getWorkNeeded(thermalPower, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[0] <= getHeatPump()->getHeatPumpElectricPower() and getWorkNeeded(thermalPower, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[1]<= heatPumpElectricPower2) return time*(getWorkNeeded(thermalPower, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[1]+getWorkNeeded(thermalPower, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[0]);
+        else if (getWorkNeeded(thermalPower, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[0] <= getHeatPump()->getHeatPumpElectricPower()) {
+            return time*(heatPumpElectricPower2+getWorkNeeded(thermalPower, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[0]);
+        }else if (getWorkNeeded(thermalPower, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[1] <= getHeatPump()->getHeatPumpElectricPower()) {
+            return time*(getHeatPump()->getHeatPumpElectricPower() + getWorkNeeded(thermalPower, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[1]);
+        }else{
+            return time*(getHeatPump()->getHeatPumpElectricPower() + heatPumpElectricPower2);
+        }
+    }else{
+        return ProsumerSubstation::getElectricConsumption(time, thermalPower, sourceTemp);
+    }
+
+}
+
+double SubstationHeatPump2stages::getHeatProduced(double workDHW, double workHS, double sourceTemp, double outputTemp){
+    // as epsilonC follows the sign of the heat/cold demand, so does the heat/cold produced
+    double middleTemp(targetTemp2+2);
+
+    double HeatToDHW = workDHW*etaTech2*epsilonC(middleTemp+designTempDifference, outputTemp);
+    double HeatToHS = workHS*getHeatPump()->getEtaTech()*epsilonC(sourceTemp,middleTemp+designTempDifference); // This heat is not necessarily for the HS. It is also for the supply of DHW.
+    return HeatToDHW+HeatToHS;
+}
+
+
+vector<double> SubstationHeatPump2stages::getWorkNeeded(double thermalPower, double sourceTemp, double outputTemp){
+    double WorkDHW(0.f);
+    double WorkHSforDHW(0.f);
+    double WorkHS(0.f);
+    double middleTemp(targetTemp2+2);
+
+    if(thermalPower > thermalPowerNeededDHW){ // gives priority to the DHW.
+        WorkDHW = std::abs(thermalPowerNeededDHW/(etaTech2*epsilonC(middleTemp+designTempDifference , getHeatPump()->getTargetTemp())));
+        WorkHSforDHW = std::abs((thermalPowerNeededDHW-WorkDHW)/(getHeatPump()->getEtaTech()*epsilonC(sourceTemp,middleTemp+designTempDifference)));
+        if(thermalPower>thermalPowerNeededDHW+thermalPowerNeededHS){ // There is enough thermalPower to supply all needs.
+            WorkHS = std::abs(thermalPowerNeededHS/(getHeatPump()->getEtaTech()*epsilonC(sourceTemp, middleTemp+designTempDifference)));
+        }else{ // There is enough thermalPower in order to supply the DHW_needs but not the HS_needs
+            WorkHS = std::abs((thermalPower-thermalPowerNeededDHW)/(getHeatPump()->getEtaTech()*epsilonC(sourceTemp,middleTemp+designTempDifference)));
+        }
+    }else{ // There is not enough thermalPower in order to supply the DHW_needs
+        WorkDHW = std::abs(thermalPower/(etaTech2*epsilonC(middleTemp+designTempDifference, getHeatPump()->getTargetTemp())));
+        WorkHSforDHW = std::abs((thermalPower-WorkDHW)/(getHeatPump()->getEtaTech()*epsilonC(sourceTemp,middleTemp+designTempDifference)));
+    }
+    return  {WorkDHW,WorkHS+WorkHSforDHW};
+}
+
+void SubstationHeatPump2stages::computeHeatExchanged(float const& primarySideCp, float const& primarySideRho, float const& primarySideInputTemp, float const& primarySideMassFlow, float const& primarySidePressureDiff, Climate* pClim, unsigned int day, unsigned int hour){
+    if (primarySideMassFlow>0.f) {
+        float sgnNeeds;
+        if( thermalPowerNeeded>0. ) {
+            sgnNeeds = 1.;
+        }
+        else if ( thermalPowerNeeded<0. ) {
+            sgnNeeds = -1.;
+        }
+        else {
+            sgnNeeds = 0.;
+        }
+
+        double WorkNeeded_DHW =  getWorkNeeded(thermalPowerNeeded, primarySideInputTemp, getHeatPump()->getTargetTemp())[0];
+        double WorkNeeded_HS = getWorkNeeded(thermalPowerNeeded ,primarySideInputTemp, getHeatPump()->getTargetTemp())[1];
+        double thermalPower;
+
+        if (WorkNeeded_DHW <= getHeatPump()->getHeatPumpElectricPower() and WorkNeeded_HS <= heatPumpElectricPower2){
+            thermalPower = getHeatProduced(WorkNeeded_DHW,WorkNeeded_HS, primarySideInputTemp, getHeatPump()->getTargetTemp());
+            thermalPowerExchanged = thermalPower - WorkNeeded_DHW - WorkNeeded_HS;
+        }else if (WorkNeeded_DHW <= getHeatPump()->getHeatPumpElectricPower()) {
+            thermalPower = getHeatProduced(WorkNeeded_DHW,heatPumpElectricPower2,primarySideInputTemp, getHeatPump()->getTargetTemp());
+            thermalPowerExchanged = thermalPower - WorkNeeded_DHW - heatPumpElectricPower2;
+        }else if (WorkNeeded_HS <= heatPumpElectricPower2) {
+            thermalPower = getHeatProduced(getHeatPump()->getHeatPumpElectricPower(), WorkNeeded_HS,primarySideInputTemp, getHeatPump()->getTargetTemp());
+            thermalPowerExchanged = thermalPower - WorkNeeded_HS - getHeatPump()->getHeatPumpElectricPower();
+        }else{
+            thermalPower = getHeatProduced(getHeatPump()->getHeatPumpElectricPower(), heatPumpElectricPower2,primarySideInputTemp, getHeatPump()->getTargetTemp());
+            thermalPowerExchanged = thermalPower - getHeatPump()->getHeatPumpElectricPower() - heatPumpElectricPower2;
+        }
+
+        double WorkNeeded_DHW_design = getWorkNeeded(designThermalPower, primarySideInputTemp, getHeatPump()->getTargetTemp())[0];
+        double WorkNeeded_HS_design = getWorkNeeded(designThermalPower, primarySideInputTemp, getHeatPump()->getTargetTemp())[1];
+
+        if ( thermalPowerExchanged*thermalPowerNeeded<0. ) { thermalPowerExchanged = 0.f; } // If the thermal power computed has opposite sign to the needs, set to zero (corresponds to closing the valve on secondary network).
+        //if ( abs(thermalPowerExchanged)>abs(designThermalPower) ) { thermalPowerExchanged = sgnNeeds*designThermalPower; } // Don't exceed design thermal power
+        if ( abs(thermalPowerExchanged)>abs(designThermalPower-WorkNeeded_DHW_design-WorkNeeded_HS_design) ) { thermalPowerExchanged = sgnNeeds*(designThermalPower-WorkNeeded_DHW_design-WorkNeeded_HS_design); } // Don't exceed design thermal power. Substract electricity as thermalPowerDesign is at the condenser.
+        if ( abs(thermalPowerExchanged)>abs(thermalPowerNeeded-WorkNeeded_DHW-WorkNeeded_HS) ) { thermalPowerExchanged = thermalPowerNeeded-WorkNeeded_DHW-WorkNeeded_HS; } // Don't exceed the thermal power demanded by consumer.
+
+        setPrimarySideOutputTemp(computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp));
+    }
+    else if (primarySideMassFlow<0.f) {
+        ProsumerSubstation::computeHeatExchanged(primarySideCp, primarySideRho, primarySideInputTemp, primarySideMassFlow, primarySidePressureDiff, pClim, day, hour);
+    }
+    else { // primarySideMassFlow==0.f
+        thermalPowerExchanged = 0.f;
+    }
+}
+
+void SubstationHeatPump2stages::updateDesiredMassFlow(float const& cp, float const& primarySideReturnTemp, Climate* pClim, unsigned int day, unsigned int hour){
+    if(getProducerMode()){
+        ProsumerSubstation::updateDesiredMassFlow(cp, primarySideReturnTemp, pClim, day, hour);
+    }else{
+        double ElectricityConsumed = getWorkNeeded(thermalPowerNeeded, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[0]+getWorkNeeded(thermalPowerNeeded, pNode->getSupplyTemperature(), getHeatPump()->getTargetTemp())[1];
+        double ThermalPowerExtracted =thermalPowerNeeded - ElectricityConsumed; // Thermal power taken from the DHN
+        desiredMassFlow = ThermalPowerExtracted/designTempDifference/pDEC->getCp()+0.00001; // Desired MassFlow
+    }
+}
 
 
 TemperatureSetpoint* TemperatureSetpoint::createNewTemperatureSetpoint(TiXmlHandle hdl) {
@@ -2313,9 +2650,100 @@ float AffinePressureSetpoint::computeTargetPressureDiff(float const& massFlow) {
 }
 
 
+EfficiencyPump* EfficiencyPump::createNewEfficiencyPump(TiXmlHandle hdl) {
+    EfficiencyPump* newEfficiencyPump;
+
+    string type;
+    if ( hdl.ToElement()->QueryStringAttribute("type", &type) )   { throw string("Error in the XML file: a EfficiencyPump doesn't have attribute: 'type'."); }
+
+    if (type=="constant") {
+        newEfficiencyPump = new ConstantEfficiencyPump(hdl);
+    } else if (type=="affine") {
+        newEfficiencyPump = new AffineEfficiencyPump(hdl);
+    } else {
+        throw string("Error in the XML file: a Pump has attribute type="+type+", which isn't valid.");
+    }
+
+    return newEfficiencyPump;
+}
 
 
+ConstantEfficiencyPump::ConstantEfficiencyPump(TiXmlHandle hdl) : EfficiencyPump() {
+    if ( hdl.ToElement()->QueryFloatAttribute("efficiencyPump", &efficiencyPump) ) { throw string("Error in the XML file: a Pump of type doesn't have attribute: 'efficiencyPump'."); }
+    if (efficiencyPump<=0 or efficiencyPump>1) { throw string("Error in the XML file: a Pump of type constant has efficiencyPump<=0 or efficiencyPump>1, it must between 0 and 1."); }
+}
 
+
+AffineEfficiencyPump::AffineEfficiencyPump(TiXmlHandle hdl) : EfficiencyPump() {
+    bool keepGoing = true;
+    unsigned int i = 1;
+    while (keepGoing) {
+        string name = "massFlow"+to_string(i);
+        float value;
+        if ( hdl.ToElement()->QueryFloatAttribute(name.c_str(), &value) ) {
+            keepGoing = false;
+        } else {
+            massFlows.push_back(value);
+            name = "efficiencyPump"+to_string(i);
+            if ( hdl.ToElement()->QueryFloatAttribute(name.c_str(), &value) ) {
+                throw string("Error in the XML file: an efficiencyPump of type affine has attribute 'massFlow"+to_string(i)+"' but not '"+name+"'.");
+            } else {
+                efficiencyPumps.push_back(value);
+            }
+        }
+        i++;
+    }
+    if (i<=2) {
+        throw string("Error in the XML file: a Pump of type affine must have at least 2 points, so attributes: 'massFlow1', 'efficiencyPump1', 'massFlow2' and 'efficiencyPump2'.");
+    }
+    for (size_t i=1; i<massFlows.size(); i++) {
+        if (massFlows[i]<=massFlows[i-1]) {
+            throw string("Error in the XML file: a Pump of type affine has 'massFlow"+to_string(i)+"'<='massFlow"+to_string(i-1)+". But massFlows should be strictly increasing.");
+        }
+    }
+
+    for (auto const& m : massFlows) {
+        if (m<=0.f) { throw string("Error in the XML file: a Pump of type affine has a massFlow<=0, by convention they must be positive."); }
+    }
+
+    for (auto& effPump : efficiencyPumps) {
+        if (effPump<=0.f or effPump>1) { throw string("Error in the XML file: a Pump of type affine has a efficiencyPump<=0 or efficiencyPump>1, by convention they must be in between 0 and 1."); }
+    }
+}
+
+MassFlowSetpoint* MassFlowSetpoint::createNewMassFlowSetpoint(TiXmlHandle hdl) {
+    MassFlowSetpoint* newMassFlowSetpoint;
+
+    string type;
+    if ( hdl.ToElement()->QueryStringAttribute("type", &type) )   { throw string("Error in the XML file: a ImposedMassFlow doesn't have attribute: 'type'."); }
+
+    if (type=="constant") {
+        newMassFlowSetpoint = new ConstantMassFlowSetPoint(hdl);
+    }else{
+        throw string("Error in the XML file: an ImposedMassFlow has attribute type="+type+", which isn't valid.");
+    }
+
+    return newMassFlowSetpoint;
+}
+
+ConstantMassFlowSetPoint::ConstantMassFlowSetPoint(TiXmlHandle hdl) : MassFlowSetpoint() {
+    if ( hdl.ToElement()->QueryDoubleAttribute("ImposedMassFlow", &massFlow) ) { cout<<"Warning: no imposed have been given to the substation.";}
+    if (massFlow<0) { throw string("Error in the XML file: the ImposedMassFlow should be positive by convention."); }
+}
+
+float AffineEfficiencyPump::computeEfficiency(float const& massFlow) {
+    float effPump;
+    if (massFlow<=massFlows[0]) { // Flat.
+        effPump = efficiencyPumps[0];
+    } else if (massFlow>massFlows[massFlows.size()-1]) { // Flat.
+        effPump = efficiencyPumps[massFlows.size()-1];
+    } else { // Affine by parts.
+        size_t i = 0;
+        while (massFlow>massFlows[i+1]) { i++; }
+        effPump = efficiencyPumps[i]+(massFlow-massFlows[i])*(efficiencyPumps[i+1]-efficiencyPumps[i])/(massFlows[i+1]-massFlows[i]);
+    }
+    return effPump;
+}
 
 Storage* Storage::createNewStorage(TiXmlHandle hdl) {
     Storage* newStorage;
@@ -2399,7 +2827,14 @@ ThermalStation* ThermalStation::createNewThermalStation(TiXmlHandle hdl, Network
         newThermalStation = new ThermalStation(hdl, net, pLogStr);
     } else if (type=="seasonalStorageHeating") {
         newThermalStation = new SeasonalStorageHeatingThermalStation(hdl, net, pLogStr);
-    } else {
+    }
+    //Added by Max
+    else if(type=="master"){
+        newThermalStation = new ThermalStationMaster(hdl,net,pLogStr);
+    }else if(type=="slave"){
+        newThermalStation = new ThermalStationSlave(hdl,net, pLogStr);
+    }//
+    else {
         throw string("Error in the XML file: a ThermalStation has attribute type="+type+", which isn't valid.");
     }
 
@@ -2416,7 +2851,6 @@ ThermalStation::ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr) 
         if ( hdl.ToElement()->Attribute("endDay") == NULL )   endDay   = 365;
         else endDay   = to<unsigned int>(hdl.ToElement()->Attribute("endDay"));
 
-        unsigned int linkedNodeId;
         string name = "linkedNodeId";
         if ( hdl.ToElement()->QueryUnsignedAttribute(name.c_str(), &linkedNodeId) ) { throw string("Error in the XML file: a ThermalStation doesn't have attribute: '"+name+"'."); }
         node = net->pointerOfThermalStationNodeWithId(linkedNodeId);
@@ -2478,7 +2912,6 @@ ThermalStation::ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr) 
 
 void ThermalStation::computeThermal(float pressureDiff, float massFlow, float rho, float cp,  float inputTemp, Climate* pClimate, unsigned int day, unsigned int hour) {
 
-    float thermalPowerNeeded;
 
     float thermalPowerPump;
     pump->computeElectricAndThermalPower(pressureDiff, massFlow, rho, pumpPower, thermalPowerPump);
@@ -2507,17 +2940,23 @@ void ThermalStation::computePressureDiff(float const& massFlow, float const& rho
 
 void ThermalStation::updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate) {
     float targetMassFlow;
-    if (massFlow>=0.f) { targetMassFlow = massFlow; }
-    else { targetMassFlow = abs(massFlow)*0.001f; } // If negative mass flow, try to get it positive? TODO improve? How to chose target mass flow?
+    if (massFlow>=0.f) {
+        targetMassFlow = massFlow;
+    }
+    else {
+        targetMassFlow = abs(massFlow)*0.001f;
+    } // If negative mass flow, try to get it positive? TODO improve? How to chose target mass flow?
+
     pump->updateRpms(sumDeltaRpm, sumRpm, learningRate, targetMassFlow, computeTargetPressureDiff(targetMassFlow));
 
     sumDeltaKv += 0.f; sumKv += 0.f;
 }
 
 
-void ThermalStation::relativeErrorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& sumErrP, float& sumDesiredP) {
+void ThermalStation::errorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& absErr, float& sumErrP, float& sumDesiredP) {
     float goal = -computeTargetPressureDiff(massFlow); // Minus signs to have positive pressures.
     relErr = (-pressureDiff-goal)/goal;
+    absErr = (-pressureDiff-goal);
     sumErrP += abs(-pressureDiff-goal);
     sumDesiredP += goal;
 }
@@ -2565,12 +3004,151 @@ void ThermalStation::writeTHResultsText(fstream& textFile, unsigned int i) {
     textFile << fixed << setprecision(0) << getElectricConsumption(i)<<"\t";
 }
 
+ThermalStationSlave::ThermalStationSlave(TiXmlHandle hdl, Network* net, ostream* pLogStr): ThermalStation(hdl,net,pLogStr), desiredMassFlow(0.f),  valve(nullptr), Targetkv(0.f), ImposedValve(true), currentStage(0.f), timeClock(0){
+    try{
+        //if ( hdl.FirstChildElement("Slave").ToElement()){throw string("Error in the XML file: a ThermalStation of type slave does not have a child element 'Slave'.");}
+        string name = "kvMax";
+        float kvMax;
+        if ( hdl.FirstChildElement("Slave").ToElement()->QueryFloatAttribute(name.c_str(), &kvMax) ) { throw string("Error in the XML file: a ThermalStation of type slave doesn't have attribute: '"+name+"'."); }
+        if ( kvMax<=0.f ) { throw string("Error in the XML file: a ThermalStation of type slave has kvMax<=0.f, which isn't physically possible."); }
+        valve = new Valve(kvMax);
+        bool keepGoing = true;
+        unsigned int i = 1;
+        while (keepGoing) {
+            string name = "stage"+to_string(i);
+            float value;
+            if ( hdl.FirstChildElement("Slave").ToElement()->QueryFloatAttribute(name.c_str(), &value) ) {
+                keepGoing = false;
+            } else {
+                rampingStages.push_back(value);
+            }
+            i++;
+        }
+        if(rampingStages.size()==0){throw string("Error in the XML file: a ThermalStation of type 'slave' has no attribute stage.");}
+        sort(rampingStages.begin(),rampingStages.end());
+        if(rampingStages[0]<0 or rampingStages.back()>1){throw string("Error in the XML: All the rampingStages should be in between 0 and 1 by convention.");}
+        if(rampingStages[0]!=0){
+            rampingStages.insert(rampingStages.begin(),0.0);
+            cout << "By convention, the rampingStages always starts at zero"<< endl;
+        }
+        if(rampingStages.back()!=1){
+            rampingStages.push_back(1);
+            cout << "By convention, the rampingStages always finish at 1"<< endl;
+        }
+        if ( hdl.FirstChildElement("Slave").ToElement()->QueryFloatAttribute("Targetkv", &Targetkv) ) {
+            Targetkv=0.001f; ImposedValve = false; cout << "A  ThermalStation of type 'slave' doesn't have attribute: 'Targetkv'.";
+        }
+        if( Targetkv<=0. or Targetkv>1. ) { throw string("Error in the XML file: a ThermalStation of type 'slave' has Targetkv<=0. or Targetkv>1."); }
+        if ( hdl.FirstChildElement("Slave").ToElement()->QueryUnsignedAttribute("latency", &latency) ) {
+            throw string( "Error in the XML file: A ThermalStation of type 'slave' doesn't have attribute: 'latency'.");
+        }
+    }catch (...) {
+        ThermalStationSlave::deleteDynAllocated();
+        throw;
+    }
+}
 
+void ThermalStationSlave::updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate) {
+    float targetMassFlow;
+    float targetPressureDiff;
+    if (desiredMassFlow>0.f) {
+        targetMassFlow = desiredMassFlow;
+        targetPressureDiff = deltaP;
+        //targetPressureDiff = computeTargetPressureDiff(targetMassFlow);
+        if(targetPressureDiff>=0.f) { targetPressureDiff = -1.0f; }
+        //float PressureDiffMin = pump->updateRpmsPmin(sumDeltaRpm, sumRpm, learningRate, targetMassFlow);
+        //valve->updateKv(rho,sumDeltaKv,sumKv,learningRate,targetMassFlow,targetPressureDiff,pid,Targetkv,ImposedValve); // Need to find the correct pressureDiff !!!!!
+        // Case where only the pump is a control variable
+        //pump->updateRpms(sumDeltaRpm, sumRpm, learningRate, targetMassFlow, targetPressureDiff); // Previous solution
+        // Test From Prosumers
+        float targetPressureDiffValve;
+        float pressureDiffThroughPumpAtTargetFlow, dpressureDiffdmThroughPumpAtTargetFlow;
+        pump->computePressureDiff(targetMassFlow, pressureDiffThroughPumpAtTargetFlow, dpressureDiffdmThroughPumpAtTargetFlow);
+        targetPressureDiffValve = -targetPressureDiff + pressureDiffThroughPumpAtTargetFlow;
+        if(targetPressureDiffValve<=0.f) { targetPressureDiffValve = 1.0f; }
+        valve->updateKv(rho, sumDeltaKv, sumKv, learningRate, targetMassFlow, targetPressureDiffValve, pid, Targetkv, ImposedValve);
+        float pressureDiffThroughValveAtTargetFlow, dpressureDiffdmThroughValveAtTargetFlow;
+        valve->computePressureDiffAndDerivative(targetMassFlow, rho, pressureDiffThroughValveAtTargetFlow, dpressureDiffdmThroughValveAtTargetFlow);
+        float targetPressureDiffPump;
+        float pressureDiffThroughElements(pressureDiffThroughValveAtTargetFlow);
+        targetPressureDiffPump = targetPressureDiff - pressureDiffThroughElements;
+        if (targetPressureDiffPump>0) { targetPressureDiffPump = -1.f; }
+        pump->updateRpms(sumDeltaRpm, sumRpm, learningRate, targetMassFlow, targetPressureDiffPump);
+    }
+    else {
+        targetMassFlow = desiredMassFlow;
+        targetPressureDiff = abs(deltaP)+1;
+        //pump->updateRpms(sumDeltaRpm, sumRpm, learningRate, targetMassFlow, targetPressureDiff);
+        valve->updateKv(rho,sumDeltaKv,sumKv,learningRate,targetMassFlow,targetPressureDiff,pid,Targetkv,ImposedValve); // The massflow cannot go backward. Need to put a valve in order to stop the flow. With a pump, it is not possible to imposed a positive pressure difference.
+    } // If negative to control mass flow with a valve.
+    sumDeltaKv += 0.f; sumKv += 0.f;
+}
 
+void ThermalStationSlave::computePressureDiff(float const& massFlow, float const& rho, float& deltaP, float& dDeltaP_dm) {
+    if (desiredMassFlow>0.f) {
+        //valve->computePressureDiffAndDerivative(massFlow,rho,deltaP,dDeltaP_dm);
+        //pump->computePressureDiff(massFlow, deltaP, dDeltaP_dm);
+        // From Prosumer
+        float deltaP_pump, dDeltaP_dm_pump, deltaP_valve, dDeltaP_dm_valve;
+        pump->computePressureDiff(massFlow, deltaP_pump, dDeltaP_dm_pump);
+        valve->computePressureDiffAndDerivative(massFlow, rho, deltaP_valve, dDeltaP_dm_valve);
+        deltaP = deltaP_pump+deltaP_valve; // Convention of the pump and substation are opposite.
+        dDeltaP_dm = dDeltaP_dm_pump+dDeltaP_dm_valve; // Has double sign negation, so stays the same.
+    } else{
+        valve->computePressureDiffAndDerivative(massFlow,rho,deltaP,dDeltaP_dm);
+        //deltaP += 50000;
+    }
+}
+void ThermalStationSlave::setDesiredMassFlow(float rho, float cp, double sourceTemp, Climate* pClimate, unsigned int day, unsigned int hour){ // thermalPower is the thermal power used by the ecs
+    float targetTemp = temperatureSetpoint->computeTargetTemperature(pClimate, day, hour);
+    // Need to take into account the heating of the valve and the pump. For this, it would be better to get the current mass flow flowing through the pipes.
+    /*float thermalPow, electricPow, pressureDiffPump, dPressureDiffPump, pressureDiffValve, dPressureDiffValve;
+    pump->computePressureDiff(desiredMassFlow, pressureDiffPump, dPressureDiffPump);
+    pump->computeElectricAndThermalPower(pressureDiffPump, desiredMassFlow, rho, electricPow, thermalPow);
+    float pumpTempIncrease = thermalPow/desiredMassFlow/cp;
+    valve->computePressureDiffAndDerivative(desiredMassFlow, rho, pressureDiffValve, dPressureDiffValve);
+    float valveTempIncrease = valve->computeTemperatureIncrease(pressureDiffValve, cp, rho);*/
+    desiredMassFlow=currentStage*ecs->getThermalPowerMax(sourceTemp)/(cp*(targetTemp-node->getReturnTemperature()/*-valveTempIncrease-pumpTempIncrease));*/)-pump->cpdT(node->getPressureDiff(), rho, desiredMassFlow))-0.00001; // In order to compute the efficiency of the pump, we take the previous desiredmassflow. Maybe not the best idea.
+}
 
+void ThermalStationSlave::updateStage(float const& totalThermalPowerNeeded, float const& totalThermalPowerMax, float prevCurrentStage, bool prevSlaveShutDown, float rho, float cp, float sourceTemp, Climate* pClimate, unsigned int day, unsigned int hour){ // In reality, it could be defined in the class ThermalStationSlave.
+    float nextStage(currentStage);
+    // In the end, for RWB, adaptation of the previous code in order to jump only from one stage each hour with respect to the previous stage.
+    float underStage(0.f);
+    for(size_t i=1;i<rampingStages.size();++i){
+        if(rampingStages[i]==prevCurrentStage){
+            underStage = rampingStages[i-1];
+        }
+    }
+    float desiredStage = (totalThermalPowerNeeded-totalThermalPowerMax)/ecs->getThermalPowerMax(sourceTemp);
+    if(desiredStage>currentStage){
+        for(size_t i=0;i<rampingStages.size()-1;++i){
+            if(rampingStages[i]==prevCurrentStage){
+                nextStage = rampingStages[i+1];
+            }
+        }
+    }else if(desiredStage<underStage/*-0.05*/){ // 0.05 is here to have some inertia in downgrading. Indeed downgrading is not as essential as upgrading because will still fulfill the demand.
+        nextStage = underStage;
+    }
+    if(nextStage==0.f and timeClock>0 and prevSlaveShutDown>0.f){ // Nor should another plant be switched off at the expense of this one
+        nextStage = rampingStages[1];
+    }
+    currentStage = nextStage;
+    setDesiredMassFlow(rho, cp, sourceTemp, pClimate, day, hour);
+    if(currentStage == rampingStages.back()){
+        //cout << "The slave thermalstation is already fully used. It can not be ramped up." << endl;
+    }
+}
 
+void ThermalStationSlave::errorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& absErr, float& sumErrP, float& sumDesiredP) {
+    float goal = -desiredMassFlow; // +0.01 in order to avoid division by zero.
+    relErr = (-massFlow-goal)/goal;
+    absErr = (-massFlow-goal);
+    sumErrP += abs(-massFlow-goal);
+    sumDesiredP += goal;
+}
 
-SeasonalStorageHeatingThermalStation::SeasonalStorageHeatingThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr) : ThermalStation(hdl, net, pLogStr), storage(nullptr), valve(nullptr), storageModeOn(false), tempDiffAroundStorage(1.f), flowToStore(0.001f) {
+SeasonalStorageHeatingThermalStation::SeasonalStorageHeatingThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr) : ThermalStation(hdl, net, pLogStr), storage(nullptr), valve(nullptr), storageModeOn(false), tempDiffAroundStorage(1.f), flowToStore(0.001f), Targetkv(0.f), ImposedValve(true) {
     try {
         string name = "kvMax";
         float kvMax;
@@ -2582,6 +3160,12 @@ SeasonalStorageHeatingThermalStation::SeasonalStorageHeatingThermalStation(TiXml
         } else {
             throw string("Error in the XML file: a SeasonalStorageThermalStation doesn't contain any Storage child element.");
         }
+
+        // The fixed valve opening.
+        if ( hdl.ToElement()->QueryFloatAttribute("Targetkv", &Targetkv) ) {
+            Targetkv=0.001f; ImposedValve = false; cout << "A Seasonal Storage Heating ThermalStation doesn't have attribute: 'Targetkv'.";
+        }
+        if( Targetkv<=0. or Targetkv>1. ) { throw string("Error in the XML file: a Seasonal Storage Heating ThermalStation has Targetkv<=0. or Targetkv>1."); }
 
         valve = new Valve(kvMax);
 
@@ -2610,11 +3194,11 @@ void SeasonalStorageHeatingThermalStation::updateControlVariable(float const& ma
             if(targetPressureDiff<=0.f) { targetPressureDiff = 1.0f; }
         }
         else { // Wrong direction (return to supply).
-            targetMassFLow = flowToStore*0.001f; // Want a small flow, close valve.
+            targetMassFLow = flowToStore*0.01f; // Want a small flow, close valve. Modified by Max. The 0.001 value was too agressive when considering high mass flows.
             targetPressureDiff = abs(deltaP)+1.f;
         } // If flow is going in the wrong direction, close the valve.
 
-        valve->updateKv(rho, sumDeltaKv, sumKv, learningRate, targetMassFLow, targetPressureDiff);
+        valve->updateKv(rho, sumDeltaKv, sumKv, learningRate, targetMassFLow, targetPressureDiff, pid, Targetkv, ImposedValve);
 //        valve->keepKvConst(sumDeltaKv, sumKv); // Keep valve always at const value.
 //        valve->setKvToMax(sumDeltaKv, sumKv); // Keep valve always at max.
 
@@ -2697,15 +3281,16 @@ void SeasonalStorageHeatingThermalStation::updateOperationMode(float const& sumS
 }
 
 
-void SeasonalStorageHeatingThermalStation::relativeErrorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& sumErrP, float& sumDesiredP) {
+void SeasonalStorageHeatingThermalStation::errorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& absErr, float& sumErrP, float& sumDesiredP) {
     if (storageModeOn) {
         // The goal is set to the current pressure, so is always achieved.
         float goal = -flowToStore; // Minus signs to have positive mass flow.
         relErr = (-massFlow-goal)/goal;
+        absErr = (-massFlow-goal);
         sumErrP += abs(-pressureDiff-goal);
         sumDesiredP += goal;
     } else {
-        ThermalStation::relativeErrorPressureDiff(massFlow, pressureDiff, relErr, sumErrP, sumDesiredP);
+        ThermalStation::errorPressureDiff(massFlow, pressureDiff, relErr, absErr, sumErrP, sumDesiredP);
     }
 }
 
@@ -2719,13 +3304,243 @@ void SeasonalStorageHeatingThermalStation::writeTHResultsText(fstream& textFile,
     storage->writeTHResultsText(textFile, i);
 }
 
+MCR* MCR::createNewMCR(TiXmlHandle hdl,vector<ThermalStation*> thermalStations){
+    MCR* newMCR;
+
+    string rule;
+    // We could use thermalStationNodePairs in order to do a sanity check. Keep the idea.
+    if(hdl.ToElement()->QueryStringAttribute("rule",&rule)){throw string("Error in the XML file: The MCR has no attribute 'rule'.");}
+    if(thermalStations.size()==2){
+        if(rule=="Simple"){
+            newMCR = new SimpleMCR(hdl,thermalStations);
+        }else{ throw string("Error in XML: The rule implemented for 2 thermalstations does not exist in CitySim.");}
+     }else if(thermalStations.size()>2){
+            throw string("No MCR has been implemented for cases with more than 2 thermalstations yet.");
+     }else if(rule=="Single"){
+        newMCR = new SingleMCR(hdl,thermalStations);
+    }else{
+        throw string("Error in XML: a MCR has attribute rule="+rule+", which isn't valid..");
+    }
+
+    return newMCR;
+}
+
+MCR::MCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations){
+
+    // We look first to the ThermalStationMaster
+    string name("master");
+    unsigned int linkedNodeIdMaster;
+    if(hdl.ToElement()->QueryUnsignedAttribute(name.c_str(), &linkedNodeIdMaster)){throw string("Error in the XML file: A MCR does not have an attribute master with the id of the thermalStation.");}
+    for(size_t i=0;i<thermalStations.size();++i){
+        if(linkedNodeIdMaster==thermalStations[i]->getLinkedNodeId()) {thermalstations.push_back(thermalStations[i]);}
+    }
+    if(thermalstations.size()>1){ throw string("Error in the XML file: There is two ThermalStations of type 'master'.");}
+
+    // Then we take care of all the slaves
+    bool keepGoing = true;
+    unsigned int i = 1;
+    while (keepGoing) {
+        name = "slave"+to_string(i);
+        unsigned int linkedNodeId;
+        if(hdl.ToElement()->QueryUnsignedAttribute(name.c_str(), &linkedNodeId)) {
+            keepGoing = false;
+        } else {
+            for(size_t j=0;j<thermalStations.size();++j){
+                if(thermalStations[j]->getLinkedNodeId()==linkedNodeId){
+                    thermalstations.push_back(thermalStations[j]);
+                }
+            }
+        }
+        i++;
+    }
+
+}
+
+void MCR::getSourceTemp(double& sourceTemp, Climate* pClimate, EnergyConversionSystem* ecs, unsigned int day, unsigned int hour){
+    sourceTemp = pClimate->getToutCelsius(day,hour); // air temperature
+    float z0=0.f,z1=0.f,alpha=0.f;
+    if (ecs->getGround(z0,z1,alpha)) {
+        sourceTemp = pClimate->getTgroundCelsius(day,hour,z0,alpha,z1);
+    }
+}
+
+/*void MCR::setDesiredMassFlowsAtZero(){
+    for(size_t i=1;i<thermalstations.size();++i){
+        thermalstations[i]->setDesiredMassFlowAtZero();
+    }
+}*/
+
+SingleMCR::SingleMCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations):MCR(hdl,thermalStations){
+    if(thermalstations[0]->getMaster()==false){throw string("Error in the XML file: There is only one ThermalStation, therefore by convention it is Master. The attribute type is 'Master'.");}
+}
+
+SimpleMCR::SimpleMCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations):MCR(hdl,thermalStations){}
+
+void SimpleMCR::MasterControlSlave(float rho, float cp, Climate* pClimate, unsigned int day, unsigned int hour, vector<float> prevCurrentStage){
+    for(size_t index(1); index < thermalstations.size(); ++index){
+        double heatPumpSrcTempMaster;
+        getSourceTemp(heatPumpSrcTempMaster, pClimate, thermalstations[0]->getEcs(), day, hour);
+        double heatPumpSrcTempSlave;
+
+        double totalThermalPowerMax(thermalstations[0]->getEcs()->getThermalPowerMax(heatPumpSrcTempMaster));
+        for(size_t i=1;i<index;++i){
+            getSourceTemp(heatPumpSrcTempSlave, pClimate, thermalstations[i]->getEcs(), day, hour);
+            totalThermalPowerMax += thermalstations[i]->getEcs()->getThermalPowerMax(heatPumpSrcTempSlave);
+        }
 
 
+        float totalThermalPowerNeeded(0.f);
+        for(size_t i=0;i<thermalstations.size();++i){
+            totalThermalPowerNeeded+=thermalstations[i]->getThermalPowerNeeded();
+        }
+
+        // Better to use what is fixed thermalPowerNeeded, thermalPowerMax for Master and Slave. Unfortunately totalThermalPowerNeeded may vary between the different convergence. Therefore,
+        // we have to increment the stages of the ThermalStationSlaves one by one in order to not destabilise the system.
+        bool prevSlaveShutDown(thermalstations[index-1]->getThermalPowerProvided()>0.f);
+
+        getSourceTemp(heatPumpSrcTempSlave, pClimate, thermalstations[index]->getEcs(), day, hour);
+        thermalstations[index]->updateStage(totalThermalPowerNeeded, totalThermalPowerMax, prevCurrentStage[index], prevSlaveShutDown, rho, cp, heatPumpSrcTempSlave, pClimate, day, hour);
+    }
+}
+
+/*void SimpleMCR::MasterControlSlave(float rho, float cp, Climate* pClimate, unsigned int day, unsigned int hour, size_t index, float prevCurrentStage){
+    double heatPumpSrcTempMaster;
+    getSourceTemp(heatPumpSrcTempMaster, pClimate, thermalstations[index-1]->getEcs(), day, hour);
+    double heatPumpSrcTempSlave;
+    getSourceTemp(heatPumpSrcTempSlave, pClimate, thermalstations[index]->getEcs(), day, hour);
+
+    double totThermalPowerMax(0.0);
+    for(size_t i=0;i<index;++i){
+        totThermalPowerMax += thermalstations[i]->getEcs()->getThermalPowerMax(heatPumpSrcTempMaster);
+    }
 
 
+    float totalThermalPowerNeeded(0.f);
+    for(size_t i=0;i<thermalstations.size();++i){
+        totalThermalPowerNeeded+=thermalstations[i]->getThermalPowerNeeded();
+    }
+
+    // Better to use what is fixed thermalPowerNeeded, thermalPowerMax for Master and Slave. Unfortunately totalThermalPowerNeeded may vary between the different convergence. Therefore,
+    // we have to increment the stages of the ThermalStationSlaves one by one in order to not destabilise the system.
+    float desiredStage = (totalThermalPowerNeeded-totThermalPowerMax)/thermalstations[index]->getEcs()->getThermalPowerMax(heatPumpSrcTempSlave);
+
+    // Need to compute directly the correct stage as the learning rate for updating the valve and pump is decreasing very fast.
+    updateStageSlave(desiredStage, index, prevCurrentStage);
 
 
+    thermalstations[index]->setDesiredMassFlow(rho, cp, heatPumpSrcTempSlave,pClimate, day, hour);
+}*/
 
+//void SimpleMCR::updateStageSlave(float const& desiredStage, size_t index, float prevCurrentStage){ // In reality, it could be defined in the class ThermalStationSlave.
+//    float nextStage(thermalstations[index]->getCurrentStage());
+    // Increasing directly to the stage in which we are interested in.
+    /*for(size_t i=0;i<thermalstations[1]->getRampingStages().size()-1;++i){
+        if(desiredStage<thermalstations[1]->getRampingStages()[i+1] and desiredStage>=thermalstations[1]->getRampingStages()[i]){
+            nextStage = thermalstations[1]->getRampingStages()[i+1];
+            cout << "The slave thermalstation is going from "+to_string(thermalstations[1]->getCurrentStage())+"% to "+to_string(nextStage)+"% of usage."<<endl;
+        }
+    }
+
+    if(desiredStage<0.f){
+        nextStage = 0.f;
+    }
+
+    if(desiredStage>=1.f){
+        nextStage = 1.f;
+    }*/
+
+
+    // We prefer to increase the stage by one stage
+    /*float underStage(0.f);
+    for(size_t i=1;i<thermalstations[index]->getRampingStages().size();++i){
+        if(thermalstations[index]->getRampingStages()[i]==thermalstations[index]->getCurrentStage()){
+            underStage = thermalstations[index]->getRampingStages()[i-1];
+        }
+    }
+
+    if(desiredStage>thermalstations[index]->getCurrentStage()){
+        for(size_t i=0;i<thermalstations[index]->getRampingStages().size()-1;++i){
+            if(thermalstations[index]->getRampingStages()[i]==thermalstations[index]->getCurrentStage()){
+                nextStage = thermalstations[index]->getRampingStages()[i+1];
+            }
+        }
+    }else if(desiredStage<underStage-0.05){ // 0.05 is here to have some inertia in downgrading. Indeed downgrading is not as essential as upgrading because will still fulfill the demand.
+        nextStage = underStage;
+    }*/
+
+    // In the end, for RWB, adaptation of the previous code in order to jump only from one stage each hour with respect to the previous stage.
+
+/*    float underStage(0.f);
+    for(size_t i=1;i<thermalstations[index]->getRampingStages().size();++i){
+        if(thermalstations[index]->getRampingStages()[i]==prevCurrentStage){
+            underStage = thermalstations[index]->getRampingStages()[i-1];
+        }
+    }
+
+    if(desiredStage>thermalstations[index]->getCurrentStage()){
+        for(size_t i=0;i<thermalstations[index]->getRampingStages().size()-1;++i){
+            if(thermalstations[index]->getRampingStages()[i]==prevCurrentStage){
+                nextStage = thermalstations[index]->getRampingStages()[i+1];
+            }
+        }
+    }else if(desiredStage<underStage-0.05){ // 0.05 is here to have some inertia in downgrading. Indeed downgrading is not as essential as upgrading because will still fulfill the demand.
+        nextStage = underStage;
+    }
+
+    if(nextStage==0.f and thermalstations[index]->getTimeClock()>0 and thermalstations[index-1]->getThermalPowerProvided()>0.f){ // Nor should another plant be switched off at the expense of this one
+        nextStage = thermalstations[index]->getRampingStages()[1];
+    }
+
+    thermalstations[index]->setCurrentStage(nextStage);
+
+    if(thermalstations[index]->getCurrentStage()==thermalstations[index]->getRampingStages().back()){
+        //cout << "The slave thermalstation is already fully used. It can not be ramped up." << endl;
+    }
+}*/
+
+void SimpleMCR::MasterControlSlave2(float rho, float cp, Climate* pClimate, unsigned int day, unsigned int hour, size_t index){
+    double heatPumpSrcTempMaster;
+    getSourceTemp(heatPumpSrcTempMaster, pClimate, thermalstations[index-1]->getEcs(), day, hour);
+    double heatPumpSrcTempSlave;
+    getSourceTemp(heatPumpSrcTempSlave, pClimate, thermalstations[index]->getEcs(), day, hour);
+
+    double thermalPowerMaxMaster = thermalstations[index-1]->getEcs()->getThermalPowerMax(heatPumpSrcTempMaster);
+    double thermalPowerMaster = thermalstations[index-1]->getEcs()->getThermalPower(heatPumpSrcTempMaster);
+
+    float nextStage(thermalstations[index]->getCurrentStage());
+
+    if(thermalPowerMaster/thermalPowerMaxMaster==1){
+        for(size_t i=0;i<thermalstations[index]->getRampingStages().size()-1;++i){
+            if(thermalstations[index]->getRampingStages()[i]==thermalstations[index]->getCurrentStage()){
+                nextStage = thermalstations[index]->getRampingStages()[i+1];
+            }
+        }
+    }
+
+    float underStage(0.f);
+    for(size_t i=1;i<thermalstations[index]->getRampingStages().size();++i){
+        if(thermalstations[index]->getRampingStages()[i]==thermalstations[index]->getCurrentStage()){
+            underStage = thermalstations[index]->getRampingStages()[i-1];
+        }
+    }
+    if((thermalstations[index]->getCurrentStage()-underStage)*thermalstations[index]->getEcs()->getThermalPowerMax(heatPumpSrcTempSlave)<thermalPowerMaxMaster-thermalPowerMaster){
+        nextStage=underStage;
+    }
+
+    thermalstations[index]->setCurrentStage(nextStage);
+
+    //thermalstations[index]->setDesiredMassFlow(rho, cp, heatPumpSrcTempSlave, pClimate, day, hour);
+}
+
+void SimpleMCR::updateThermalStationSlaveClock(vector<float> PrevCurrentStages){
+    for(size_t i(1); i<thermalstations.size();++i){ // Starts at one since the '0' index is the master ThermalStation
+        if(PrevCurrentStages[i]==0.f and thermalstations[i]->getCurrentStage()!=0.f){ // PrevCurrentStages need to be decrement by one as there are no currentStages in master ThermalStation
+            thermalstations[i]->setTimeClock(thermalstations[i]->getLatency());
+        }else if(thermalstations[i]->getTimeClock() > 0){ // The decrement starts on the next hour.
+            thermalstations[i]->setTimeClock(thermalstations[i]->getTimeClock()-1);
+        }
+    }
+}
 
 vector<string> DistrictEnergyCenter::muPossibilities = { "0.0004", "Vogel-Fulcher-Tammann" }; // 0.0004 is a constant value in Pa*s, Vogel-Fulcher-Tammann in an empirical formula.
 
@@ -2739,7 +3554,7 @@ DistrictEnergyCenter::DistrictEnergyCenter(TiXmlHandle hdl, District* pDistrict,
         if ( hdl.ToElement()->QueryUnsignedAttribute("id", &id) )   { throw string("Error in the XML file: a DistrictEnergyCenter doesn't have attribute: 'id'."); }
         if ( hdl.ToElement()->QueryDoubleAttribute("Cp", &cp) )     { throw string("Error in the XML file: a DistrictEnergyCenter doesn't have attribute: 'Cp' [J/(kg K)]."); }
         if ( hdl.ToElement()->QueryDoubleAttribute("rho", &rho) )   { throw string("Error in the XML file: a DistrictEnergyCenter doesn't have attribute: 'rho' [kg/m^3]."); }
-        if ( hdl.ToElement()->QueryStringAttribute("mu", &mu) )   { throw string("Error in the XML file: a DistrictEnergyCenter doesn't have attribute: 'mu'."); }
+        if ( hdl.ToElement()->QueryStringAttribute("mu", &mu) )   { /*throw string(*/ cout << "A DistrictEnergyCenter has the default attribute mu = " << mu << "."/*)*/;}
 
         if ( cp<=0 )  { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has Cp<=0."); }
         if ( rho<=0 ) { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has rho<=0."); }
@@ -2761,6 +3576,8 @@ DistrictEnergyCenter::DistrictEnergyCenter(TiXmlHandle hdl, District* pDistrict,
                     xmlEl = xmlEl->NextSiblingElement(name); // Go to next thermal station.
                 }
             }
+            if(hdl.FirstChildElement("MCR").ToElement()){mcr = MCR::createNewMCR(hdl.FirstChildElement("MCR"),thermalStations);}
+            else{throw string("Error in the XML file: a DistrictEnergyCenter doesn't have any 'MCR' child element.");}
         } catch (...) {
             deleteDynAllocated();
             throw;
@@ -2787,8 +3604,21 @@ DistrictEnergyCenter::~DistrictEnergyCenter() {
 double DistrictEnergyCenter::getMu(double temp) {
     float mu_ = 0.0004; // JK - added default value to 0.0004
     if (mu==muPossibilities[0]){ mu_ = 0.0004; }
-    else if (mu==muPossibilities[1]) { mu_ = 0.00002939*exp( 507.88/(temp-(149.3-273.15)) ); } // Check for temperature range where this formula is valid?
+    else if (mu==muPossibilities[1]) {
+        if(temp<0.f) {temp = 0.f;} //Added by Max
+        else if(temp>100.f) {temp = 100.f;}
+
+        mu_ = 0.00002939*exp( 507.88/(temp-(149.3-273.15)) );
+    }
     return mu_;
+}
+
+float DistrictEnergyCenter::getYearlyTotalThermalLoss(){
+    float yearlyTotalThermalLoss(0.f);
+    for(size_t i(0); i < totalThermalLossRecord.size();++i){
+        yearlyTotalThermalLoss += totalThermalLossRecord[i];
+    }
+        return yearlyTotalThermalLoss;
 }
 
 void DistrictEnergyCenter::recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour) {
@@ -2807,7 +3637,7 @@ void DistrictEnergyCenter::eraseRecords_back() {
 }
 
 void DistrictEnergyCenter::convergeToEquilibrium(Climate *pClim, unsigned int day, unsigned int hour) {
-    pipelineNetwork->convergeToEquilibrium(rho, cp, pClim, day, hour);
+    pipelineNetwork->convergeToEquilibrium(mcr, rho, cp, pClim, day, hour);
     recordTimeStep(pClim, day, hour);
 }
 
@@ -2828,11 +3658,6 @@ bool DistrictEnergyCenter::addSubstationIfContainNode(Substation* pSub, unsigned
 }
 
 
-
-
-
-
-
 void Network::deleteNodesAndPipes() {
     while(!pipePairs.empty()) {
         delete pipePairs.back();
@@ -2849,6 +3674,10 @@ void Network::deleteNodesAndPipes() {
     while(!substationNodePairs.empty()) {
         delete substationNodePairs.back();
         substationNodePairs.pop_back();
+    }
+    while(!valveNodePairs.empty()) {
+        delete valveNodePairs.back();
+        valveNodePairs.pop_back();
     }
 }
 
@@ -2893,6 +3722,13 @@ Network::Network(TiXmlHandle hdl, DistrictEnergyCenter *pDEC, ostream *pLogStr) 
                 }
             }
 
+            name = "ValveNodePair";
+            xmlEl = hdl.ToElement()->FirstChildElement(name);
+             while( xmlEl ) {
+                valveNodePairs.push_back( new ValveNodePair( xmlEl, pDEC->getInitTemp() ) );
+                xmlEl = xmlEl->NextSiblingElement(name); // Go to next network node.
+            }
+
             name = "PipePair";
             xmlEl = hdl.ToElement()->FirstChildElement(name);
             if ( not xmlEl ) { throw string("Error in the XML file: a Network doesn't have any '"+name+"' child elements."); }
@@ -2906,6 +3742,7 @@ Network::Network(TiXmlHandle hdl, DistrictEnergyCenter *pDEC, ostream *pLogStr) 
             for (auto node : separateNodePairs){ node->checkNbPipes(); }
             for (auto node : substationNodePairs){ node->checkNbPipes(); }
             for (auto node : thermalStationNodePairs){ node->checkNbPipes(); }
+            for (auto node : valveNodePairs){ node->checkNbPipes(); }
 
         } catch(...) { // To delete the unique ids created.
             deleteNodesAndPipes();
@@ -2939,6 +3776,10 @@ void Network::writeTHHeaderText(fstream& textFile) {
         node->writeTHHeaderText(textFile, decId);
     }
 
+    for (auto node : valveNodePairs) {
+        node->writeTHHeaderText(textFile, decId);
+    }
+
     for (auto pair : pipePairs) {
         unsigned int pairId = pair->getId();
         textFile << "DEC" << decId <<":PipePair" << pairId << ":SupplyMassFlow(kg/s)" <<"\t"
@@ -2964,6 +3805,10 @@ void Network::writeTHResultsText(fstream& textFile, unsigned int i) {
         node->writeTHResultsText(textFile, i);
     }
 
+    for (auto node : valveNodePairs) {
+        node->writeTHResultsText(textFile, i);
+    }
+
     for (auto pair : pipePairs) {
         textFile << fixed << setprecision(5) << pair->getSupplyPipe()->getMassFlowRecord(i) <<"\t";
         textFile << fixed << setprecision(5) << pair->getReturnPipe()->getMassFlowRecord(i) <<"\t";
@@ -2976,31 +3821,40 @@ void Network::writeTHResultsText(fstream& textFile, unsigned int i) {
 }
 
 int Network::nbFloatsRecorded() { // TODO: Improve this similarly to writeTHHeaderText, so that the code adapts better to future changes.
-    return thermalStationNodePairs.size()*8+substationNodePairs.size()*4+separateNodePairs.size()*2+pipePairs.size()*6;
+    return thermalStationNodePairs.size()*8+substationNodePairs.size()*4+separateNodePairs.size()*2+pipePairs.size()*6+valveNodePairs.size()*4;
 }
 
 void Network::initializeMassFlows() {
     for (size_t i=0; i<substationNodePairs.size(); i++) {
         SubstationNodePair* ssnp = substationNodePairs[i];
         float massFlow = ssnp->getDesignMassFlow();
-        loopMassFlows[ loopMassFlows.size()-substationNodePairs.size()+i ] = massFlow; // In the loop passing through the substation, put the design mass flow.
+        loopMassFlows[ loopMassFlows.size()-valveNodePairs.size()-substationNodePairs.size()+i ] = massFlow; // In the loop passing through the substation, put the design mass flow.
 
         massFlow /= thermalStationNodePairs.size(); // Distribute equally the flow between all thermal stations.
         for (size_t j=1; j<thermalStationNodePairs.size(); j++) {
-            loopMassFlows[ loopMassFlows.size()-substationNodePairs.size()-thermalStationNodePairs.size()+j ] -= massFlow; // In the loops from the zeroth thermal station to other thermal stations, add this flow so that all thermal stations contribute equally to produce this flow.
+            loopMassFlows[ loopMassFlows.size()-valveNodePairs.size()-substationNodePairs.size()-thermalStationNodePairs.size()+j ] -= massFlow; // In the loops from the zeroth thermal station to other thermal stations, add this flow so that all thermal stations contribute equally to produce this flow.
         }
+    }
+    for (size_t i=0;i<valveNodePairs.size();i++){ // initialize the mass flows at the valves
+        float massFlow(0.f);
+        for (size_t j=0 ; j<loopMassFlows.size() ; j++) {
+            massFlow += loopMatrix[j][loopMassFlows.size()-i] * loopMassFlows[j];
+        }
+        loopMassFlows[ loopMassFlows.size()-i ] = massFlow;
     }
 }
 
-void Network::propagateNetwork(float cp, float soilTemp, bool isSupply) {
+void Network::propagateNetwork(float cp, Climate* pClim, bool isSupply, unsigned int day, unsigned int hour) { // Modified by Max
     // To keep information of which components have already been traversed.
     for (auto pipe : pipePairs) { pipe->setAlreadyTraversed(false); }
     for (auto tsnp : thermalStationNodePairs) { tsnp->setAlreadyTraversed(false); }
     for (auto ssnp : substationNodePairs) { ssnp->setAlreadyTraversed(false); }
+    for (auto vsnp : valveNodePairs) { vsnp->setAlreadyTraversed(false); }
 
     // Propagates from high pressures to low pressures.
-    for (auto tsnp : thermalStationNodePairs) { tsnp->propagateNetwork(soilTemp, cp, isSupply); }
-    for (auto ssnp : substationNodePairs) { ssnp->propagateNetwork(soilTemp, cp, isSupply); }
+    for (auto tsnp : thermalStationNodePairs) { tsnp->propagateNetwork(pClim, cp, isSupply, day, hour); }
+    for (auto ssnp : substationNodePairs) { ssnp->propagateNetwork(pClim, cp, isSupply, day, hour); }
+    for (auto vsnp : valveNodePairs) { vsnp->propagateNetwork(pClim, cp, isSupply, day, hour); }
 }
 
 void Network::recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour, float const& cp) {
@@ -3008,6 +3862,7 @@ void Network::recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour
     for(auto node : separateNodePairs) { node->recordTimeStep(pClim, day, hour, cp); } // recordTemperatures
     for(auto node : thermalStationNodePairs) { node->recordTimeStep(pClim, day, hour, cp); } // recordTemperatures  recordMassFlow  recordPressureDiff  setMachinePower_FuelConsumption_ElectricConsumption setPumpPowers  confirmStorage
     for(auto node : substationNodePairs) { node->recordTimeStep(pClim, day, hour, cp); } // recordTemperatures  recordMassFlow  recordPressureDiff  setProsumerSolarThermal
+    for(auto node : valveNodePairs) { node->recordTimeStep(pClim, day, hour, cp); } // recordTemperatures  recordMassFlow  recordPressureDiff  setProsumerSolarThermal
 }
 
 void Network::eraseRecords(unsigned int keepValue) {
@@ -3015,6 +3870,7 @@ void Network::eraseRecords(unsigned int keepValue) {
     for(auto node : separateNodePairs) { node->eraseRecords(keepValue); }
     for(auto node : thermalStationNodePairs) { node->eraseRecords(keepValue); }
     for(auto node : substationNodePairs) { node->eraseRecords(keepValue); }
+    for(auto node : valveNodePairs) { node->eraseRecords(keepValue); }
 }
 
 void Network::eraseRecords_back() {
@@ -3022,6 +3878,7 @@ void Network::eraseRecords_back() {
     for(auto node : separateNodePairs) { node->eraseRecords_back(); }
     for(auto node : thermalStationNodePairs) { node->eraseRecords_back(); }
     for(auto node : substationNodePairs) { node->eraseRecords_back(); }
+    for(auto node : valveNodePairs) { node->eraseRecords_back(); }
 }
 
 float Network::computeTotalThermalLoss() {
@@ -3070,6 +3927,11 @@ NodePair* Network::pointerOfNodeWithId(unsigned int nodeId) {
         }
     }
     for(auto node : substationNodePairs) {
+        if (nodeId==node->getId()) {
+            return node;
+        }
+    }
+    for(auto node : valveNodePairs) {
         if (nodeId==node->getId()) {
             return node;
         }
@@ -3139,6 +4001,10 @@ void Network::computeEdgeIdx(map<PipePair*,size_t>& edgeIdxPipe, map<NodePairCon
         edgeIdxNode[ssnp] = nbEdges; // Idx corresponds to the first edge.
         nbEdges += ssnp->nbEdges(); // Skip over the idxs of other edges.
     }
+    for(auto const& vsnp : valveNodePairs) {
+        edgeIdxNode[vsnp] = nbEdges;
+        ++nbEdges;
+    }
 }
 
 
@@ -3152,6 +4018,7 @@ void Network::findLoops(vector<vector<float>>& matB, map<PipePair*,size_t> const
     for (auto nodePair : separateNodePairs) {       nodePairVisited[nodePair] = false;  previousPipe[nodePair] = nullptr; }
     for (auto nodePair : thermalStationNodePairs) { nodePairVisited[nodePair] = false;  previousPipe[nodePair] = nullptr; }
     for (auto nodePair : substationNodePairs) {     nodePairVisited[nodePair] = false;  previousPipe[nodePair] = nullptr; }
+    for (auto nodePair : valveNodePairs) {     nodePairVisited[nodePair] = false;  previousPipe[nodePair] = nullptr; }
     map<PipePair*,bool> pipePairVisited;
     for (auto pipePair : pipePairs) { pipePairVisited[pipePair] = false; }
 
@@ -3334,6 +4201,43 @@ void Network::findLoops(vector<vector<float>>& matB, map<PipePair*,size_t> const
         matB.push_back(rowToAdd);
     }
 
+    // Add loops that happen at every substation and the other thermal stations. (Added by Max)
+    for (auto valvenode : valveNodePairs) {
+        vector<float> rowToAdd(nbEdges, 0.f);
+
+        float direction = 1.f; // Add the substation edge (direction is from supply to return).
+//        size_t idx = computeEdgeIdx(subsnode);
+//        rowToAdd[idx] = direction;
+        size_t idx = edgeIdxNode.at(valvenode);
+        for(size_t i=0; int(i)<valvenode->nbEdges(); i++) { rowToAdd[idx+i] = direction; } // A valve is supposed to contain only one edge.
+
+//        idx = computeEdgeIdx(startNode);
+        // idx = edgeIdxNode.at(startNode);
+        // rowToAdd[idx] = direction; // Add the thermal station edge (direction is from return to supply).
+
+
+        NodePair* node = valvenode;
+        PipePair* pipe = previousPipe[node];
+        while (pipe!=nullptr) {
+
+            if (pipe->getHeadNode()==node) { direction = 1.f; } // Direction for the supply.
+            else { direction = -1.f; }
+//            idx = computeEdgeIdx(pipe, true);
+//            rowToAdd[idx] = direction;
+//            idx = computeEdgeIdx(pipe, false);
+//            rowToAdd[idx] = -1.f*direction; // Return has opposite direction.
+            idx = edgeIdxPipe.at(pipe);
+            rowToAdd[idx] = direction; // Supply.
+            rowToAdd[idx+1] = -direction; // Return has opposite direction.
+
+            node = pipe->getOtherNode(node); // Get previous node.
+            pipe = previousPipe[node]; // Get previous pipe.
+        }
+
+        matB.push_back(rowToAdd);
+    }
+
+
 //    logStream << "matB" << endl;
 //    for (auto const& row : matB) {
 //        for (auto const& el : row) {
@@ -3494,24 +4398,36 @@ void Network::computePressureDiff(vector<float> const& massFlows, float const& r
         deltaP[idx] = 0.5f*massFlow*dDeltaP_dm[idx] + altitudePressureLoss;
     }
 
+    int iB = pipePairs.size()*2;
+
+    for (size_t i=0 ; i<separateNodePairs.size() ; i++) {
+        separateNodePairs[i]->computePressureDiffAndDerivative(massFlows, rho, deltaP); //still  under investigation.
+    }
     for (size_t i=0 ; i<thermalStationNodePairs.size() ; i++) {
-        size_t idx = pipePairs.size()*2+i;
+        size_t idx = i+iB;
         thermalStationNodePairs[i]->getThermalStation()->computePressureDiff(massFlows[idx], rho, deltaP[idx], dDeltaP_dm[idx]);
     }
 
-    int iBeg = pipePairs.size()*2+thermalStationNodePairs.size();
+    int iBeg = thermalStationNodePairs.size()+iB;
     for (size_t i=0 ; i<substationNodePairs.size() ; i++) {
         substationNodePairs[i]->computePressureDiffAndDerivative(massFlows.begin()+iBeg, rho, deltaP.begin()+iBeg, dDeltaP_dm.begin()+iBeg);
         iBeg += substationNodePairs[i]->nbEdges();
     }
+
+    int iBegin =iBeg+substationNodePairs.size();
+    for (size_t i=0 ; i<valveNodePairs.size() ; i++) {
+        valveNodePairs[i]->computePressureDiffAndDerivative(massFlows.begin()+iBegin, rho, deltaP.begin()+iBegin, dDeltaP_dm.begin()+iBegin);
+        iBegin += valveNodePairs[i]->nbEdges();
+    }
+
 }
 
 void Network::convergeThermal(float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour) {
 
-    float soilTemp = pClim->getTgroundCelsius(day, hour, 0.f); // TODO : Improve this, with a better formula, as this may be wrong in some climate files.
+//    float soilTemp = pClim->getTgroundCelsius(day, hour, 0.f); // TODO : Improve this, with a better formula, as this may be wrong in some climate files. Modified by Max: put it in the function propagateNetwork
 //    float soilTemp = 8.f; // debug
 
-    size_t nNodes = separateNodePairs.size()+thermalStationNodePairs.size()+substationNodePairs.size();
+    size_t nNodes = separateNodePairs.size()+thermalStationNodePairs.size()+substationNodePairs.size()+valveNodePairs.size();
     vector<float> nodeSupplyTemperature_prev (nNodes);
     vector<float> nodeReturnTemperature_prev (nNodes);
     size_t nLoops = 0;
@@ -3531,17 +4447,23 @@ void Network::convergeThermal(float rho, float cp, Climate *pClim, unsigned int 
             nodeSupplyTemperature_prev[separateNodePairs.size()+thermalStationNodePairs.size()+i] = substationNodePairs[i]->getSupplyTemperature();
             nodeReturnTemperature_prev[separateNodePairs.size()+thermalStationNodePairs.size()+i] = substationNodePairs[i]->getReturnTemperature();
         }
+        for (size_t i=0 ; i<valveNodePairs.size() ; i++) {
+            nodeSupplyTemperature_prev[separateNodePairs.size()+thermalStationNodePairs.size()+substationNodePairs.size()+i] = valveNodePairs[i]->getSupplyTemperature();
+            nodeReturnTemperature_prev[separateNodePairs.size()+thermalStationNodePairs.size()+substationNodePairs.size()+i] = valveNodePairs[i]->getReturnTemperature();
+        }
 
         // From supply to return.
         for(auto ssnp : substationNodePairs) { ssnp->computeThermal(cp, rho, pClim, day, hour, true); }
         for(auto tsnp : thermalStationNodePairs) { tsnp->computeThermal(rho, cp, pClim, day, hour, true); }
+        for(auto vsnp : valveNodePairs) { vsnp->computeThermal(rho, cp, pClim, day, hour, true); }
         // Through return.
-        propagateNetwork(cp, soilTemp, false);
+        propagateNetwork(cp, pClim, false, day, hour);
         // From return to supply.
         for(auto ssnp : substationNodePairs) { ssnp->computeThermal(cp, rho, pClim, day, hour, false); }
         for(auto tsnp : thermalStationNodePairs) { tsnp->computeThermal(rho, cp, pClim, day, hour, false); }
+        for(auto vsnp : valveNodePairs) { vsnp->computeThermal(rho, cp, pClim, day, hour, false); }
         // Through supply.
-        propagateNetwork(cp, soilTemp, true);
+        propagateNetwork(cp, pClim, true, day, hour);
 
         nLoops++;
         // Check for convergence (if values didn't move too much since previous step)
@@ -3557,6 +4479,10 @@ void Network::convergeThermal(float rho, float cp, Climate *pClim, unsigned int 
         for ( size_t i=0 ; hasConverged and (i<substationNodePairs.size()) ; i++ ) {
             hasConverged = hasConverged and ( abs(nodeSupplyTemperature_prev[separateNodePairs.size()+thermalStationNodePairs.size()+i] - substationNodePairs[i]->getSupplyTemperature())<0.2f );
             hasConverged = hasConverged and ( abs(nodeReturnTemperature_prev[separateNodePairs.size()+thermalStationNodePairs.size()+i] - substationNodePairs[i]->getReturnTemperature())<0.2f );
+        }
+        for ( size_t i=0 ; hasConverged and (i<valveNodePairs.size()) ; i++ ) {
+            hasConverged = hasConverged and ( abs(nodeSupplyTemperature_prev[separateNodePairs.size()+thermalStationNodePairs.size()+substationNodePairs.size()+i] - valveNodePairs[i]->getSupplyTemperature())<0.2f );
+            hasConverged = hasConverged and ( abs(nodeReturnTemperature_prev[separateNodePairs.size()+thermalStationNodePairs.size()+substationNodePairs.size()+i] - valveNodePairs[i]->getReturnTemperature())<0.2f );
         }
 
     } while ( nLoops<70 and (not hasConverged) );
@@ -3697,18 +4623,23 @@ void Network::convergeHydraulic(float rho) {
     for (size_t i=0 ; i<pipePairs.size() ; i++) {
         pipePairs[i]->hydraulicConverged(edgeMassFlows[2*i], deltaP[2*i], edgeMassFlows[2*i+1], deltaP[2*i+1], rho);
     }
+    int iBeg = pipePairs.size()*2;
     for (size_t i=0 ; i<thermalStationNodePairs.size() ; i++) {
-        thermalStationNodePairs[i]->setMassFlow(edgeMassFlows[pipePairs.size()*2+i]);
-        thermalStationNodePairs[i]->setPressureDiff(deltaP[pipePairs.size()*2+i]);
+        thermalStationNodePairs[i]->setMassFlow(edgeMassFlows[iBeg+i]);
+        thermalStationNodePairs[i]->setPressureDiff(deltaP[iBeg+i]);
     }
-    int iBeg = pipePairs.size()*2+thermalStationNodePairs.size();
+    int iBegin = iBeg+thermalStationNodePairs.size();
     for (size_t i=0 ; i<substationNodePairs.size() ; i++) {
-        substationNodePairs[i]->hydraulicConverged(edgeMassFlows.begin()+iBeg, deltaP.begin()+iBeg);
-        iBeg += substationNodePairs[i]->nbEdges();
+        substationNodePairs[i]->hydraulicConverged(edgeMassFlows.begin()+iBegin, deltaP.begin()+iBegin);
+        iBegin += substationNodePairs[i]->nbEdges();
+    }
+    for (size_t i=0 ; i<valveNodePairs.size() ; i++) {
+        valveNodePairs[i]->hydraulicConverged(edgeMassFlows.begin()+iBegin, deltaP.begin()+iBegin);
+        iBegin += valveNodePairs[i]->nbEdges();
     }
 }
 
-void Network::convergeToEquilibrium(float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour) {
+void Network::convergeToEquilibrium(MCR* mcr, float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour) {
 
     float sumErrM, sumDesiredM = 0.f/*, relErrM = 1.f, derivRelErrM = -1.f*/, sumDeltaKv, sumKv/*, relFluctuationKv = 1.f, derivRelErrP = -1.f*/;
     vector<float> prevRelErrM (0), prevRelErrP (0);
@@ -3722,6 +4653,12 @@ void Network::convergeToEquilibrium(float rho, float cp, Climate *pClim, unsigne
     bool hasConverged;
 
     vector<float> relErr (substationNodePairs.size()+thermalStationNodePairs.size()); // debug
+    vector<float> absErr (substationNodePairs.size()+thermalStationNodePairs.size()); // debug Added by Max. Useful in order to shorten the time of simulation when we have very small mass flows.
+
+    vector<float> prevCurrentStages{0.f};
+    for(size_t i(1); i<mcr->getThermalStations().size();++i){ // Starts at one since the '0' index is the master ThermalStation
+        prevCurrentStages.push_back(mcr->getThermalStations()[i]->getCurrentStage());
+    }
 
     do {
         float learningRate = pow(1.f+nLoops, -0.75); // Similar to a step-size or learning rate in gradient descent. This fulfills the Robbins-Monroe condition. //        float learningRate = pow(1.f+nLoops, -0.75); // Similar to a step-size or learning rate in gradient descent. This fulfills the Robbins-Monroe condition.
@@ -3733,24 +4670,35 @@ void Network::convergeToEquilibrium(float rho, float cp, Climate *pClim, unsigne
 
         float massFlowSupplyToReturn = computeMassFlowSupplyToReturn(); // debug
         for (auto& ssnp : substationNodePairs) { ssnp->updateControlVariable(rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate, massFlowSupplyToReturn); } // Substations update the control variable (Mostly valve position. Can be pump rotation if prosumer feeding in heat).
-        for (auto& tsnp : thermalStationNodePairs) { tsnp->updateControlVariable(rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate); } // Thermal stations update the control variable (Mostly pump rotational speed. Can be valve position if in storage mode).
+        for (auto& tsnp : thermalStationNodePairs) {
+            tsnp->updateControlVariable(rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate);
+        } // Thermal stations update the control variable (Mostly pump rotational speed. Can be valve position if in storage mode).
+        for (auto& vsnp : valveNodePairs) { vsnp->updateControlVariable(rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate); } // Valves position update. (Max)
         convergeHydraulic(rho);
         convergeThermal(rho, cp, pClim, day, hour);
 
-
+        mcr->MasterControlSlave(rho, cp, pClim, day, hour, prevCurrentStages); // Need to choose between two possibilities.
         updateDesiredMassFlow(cp, pClim, day, hour);
         updateOperationMode();
-        for (size_t i=0; i<substationNodePairs.size(); i++) { substationNodePairs[i]->relativeErrorMassFlow(relErr[i], sumErrM); }
-        for (size_t i=0; i<thermalStationNodePairs.size(); i++) { thermalStationNodePairs[i]->relativeErrorPressureDiff(relErr[substationNodePairs.size()+i], sumErrP, sumDesiredP); }
+        for (size_t i=0; i<substationNodePairs.size(); i++) { substationNodePairs[i]->errorMassFlow(relErr[i], absErr[i], sumErrM);}
+        for (size_t i=0; i<thermalStationNodePairs.size(); i++) { thermalStationNodePairs[i]->errorPressureDiff(relErr[substationNodePairs.size()+i], absErr[substationNodePairs.size()+i], sumErrP, sumDesiredP);}
+
+        if(nLoops==149){
+            cout<<"The system did not converge on the day "+to_string(day)+", hour"+to_string(hour)+"."<<endl;
+        }
 
         nLoops++;
         // Check for convergence (if substation massflows, and thermal station pressures, are within two percent of the setpoint values)
         hasConverged = true;
         for (size_t i=0; hasConverged and (i<relErr.size()); i++) {
-            hasConverged = hasConverged and ( abs(relErr[i])<0.02f );
+            hasConverged = hasConverged and ( abs(relErr[i])<0.02f or abs(absErr[i])<0.002f); // Added by Max
         }
 
     } while ( nLoops<150 and (not hasConverged) );
+
+    // The TimeClock of the slave thermalStations need to be updated.
+    mcr->updateThermalStationSlaveClock(prevCurrentStages);
+
 }
 
 void Network::computeDerivative(float& deriv, vector<float>& prev, float const& curr, size_t const& idx) {
@@ -3876,6 +4824,9 @@ NodePair::NodePair(TiXmlHandle hdl, float initTemp) :
             throw string("Error in the XML file: multiple NodePairs have the same id="+to_string(id)+".");
         }
         ids.push_back(id);
+        /*name = "singularities";
+        if ( hdl.ToElement()->QueryStringAttribute(name.c_str(), &sing) )   { cout << "Warning: "+name+" is using its default value."; } not useful anymore.*/
+
     }
     else {
         // throw error ?
@@ -3889,6 +4840,10 @@ NodePair::~NodePair() {
 
 void NodePair::addConnectedPipe(PipePair *pipe) {
     connectedPipes.push_back(pipe);
+}
+
+void NodePair::addConnectedPipeOut(PipePair *pipe) {
+    connectedPipesOut.push_back(pipe);
 }
 
 bool NodePair::areAllUpstreamsComputed(bool isSupply) {
@@ -3919,10 +4874,16 @@ void NodePair::computeAndSetTemperature(float initSumTM, float initSumM, bool is
     } // Else do nothing, so keep the old temperature.
 }
 
-void NodePair::propagateDownstream(float soilTemp, float cp, bool isSupply) {
+void NodePair::propagateDownstream(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) {// Modified by Max
     // Compute heat losses in ouflowing pipes.
     for (auto pipe : connectedPipes) { // Loop on outflowing pipes (compute their thermal losses).
         if (not pipe->massFlowsToMe(this, isSupply)) { // Flow is outgoing.
+            // Added by Max. In order to be at the correct depth for each pipes.
+            float depth(0.f);
+            if(isSupply){
+                depth = pipe->getSupplyPipe()->getBuriedDepth();
+            }else{depth = pipe->getReturnPipe()->getBuriedDepth();}
+            float soilTemp = pClim->getTgroundCelsius(day,hour,depth);//
             pipe->computeThermalLoss(soilTemp, cp, isSupply);
             pipe->setAlreadyTraversed(true); // It is important that all these flags are set before doing pipe->getOtherNode(this)->propagateNetwork
         }
@@ -3931,7 +4892,7 @@ void NodePair::propagateDownstream(float soilTemp, float cp, bool isSupply) {
     // Propagate to the ouflowing nodes.
     for (auto pipe : connectedPipes) {
         if (not pipe->massFlowsToMe(this, isSupply)) { //Flow is outgoing.
-            pipe->getOtherNode(this)->propagateNetwork(soilTemp, cp, isSupply);
+            pipe->getOtherNode(this)->propagateNetwork(pClim, cp, isSupply, day, hour);
         }
     }
 }
@@ -3947,14 +4908,14 @@ void NodePair::writeTHResultsText(fstream& textFile, unsigned int i) {
     textFile << fixed << setprecision(1) << getReturnTemperatureRecord(i) <<"\t";
 }
 
-bool NodePair::propagateNetwork(float soilTemp, float cp, bool isSupply) {
+bool NodePair::propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) { // Modified by Max
     bool isTraversed;
     if (areAllUpstreamsComputed(isSupply)) {
         float initSumTM = 0.f;
         float initSumM = 0.f;
         computeAndSetTemperature(initSumTM, initSumM, isSupply);
 
-        propagateDownstream(soilTemp, cp, isSupply);
+        propagateDownstream(pClim, cp, isSupply, day, hour); // Modified by Max
         isTraversed = true;
     }
     else { isTraversed = false; }
@@ -3967,10 +4928,194 @@ void NodePair::checkNbPipes() {
     }
 }
 
+float NodePair::changeRadiusPressureLoss(float m_,float innerRadiusIn,float innerRadiusOut){
+    float kFactor(0.f);
+    float v(0.f);
+    float deltaP_(0.f);
+
+    if (innerRadiusIn<=innerRadiusOut){
+        kFactor = (1-(innerRadiusIn/innerRadiusOut)*(innerRadiusIn/innerRadiusOut))*(1-(innerRadiusIn/innerRadiusOut)*(innerRadiusIn/innerRadiusOut));
+    }else{
+        kFactor = 0.5*(1-(innerRadiusIn/innerRadiusOut)*(innerRadiusIn/innerRadiusOut));
+    }
+    v = m_/990/innerRadiusIn/innerRadiusIn/3.14;
+    deltaP_ = kFactor*990*abs(v)*v/2;
+    return deltaP_;
+}
+
+void NodePair::TPressureLossSplit(vector<float> m, bool supply, vector<float>& deltaP, vector<float>& innerRadiusIn, vector<float>& innerRadiusOut){
+    float v(0.f);
+    float kFactor(0.f);
+    float deltaP_(0.f);
+    float massFlowb(0.f);
+    float massFlowt(0.f);
+    float ratio;
+    unsigned int index2(0);
+    array<unsigned int,3> idx;
+    bool Double(true);
 
 
+    for(size_t i=0;i<connectedPipes.size();++i){
+
+        bool flowsToHead = m[connectedPipes[i]->getPipePairsIdx()*2+int(not supply)]>0;
+        bool nodeIsHead = connectedPipes[i]->getHeadNode()->getId()==id;
+        if(not ((flowsToHead and nodeIsHead) or (not flowsToHead and not nodeIsHead))){ // consider only the pipes that have outcoming flows
+
+            if(id == connectedPipes[i]->getTailNode()->getId()){index2=0;} // Finds out whether the pipe is connected with the tail or the head to the node.
+            else{index2=1;}
+
+            if(connectedPipes[i]->getSingularities()[index2]=="T"){ // Check if one of the ougoing pipe is the "T" pipe.
+                idx[0] = connectedPipes[i]->getPipePairsIdx()*2 + int(not supply); //b
+                massFlowb = m[idx[0]];
+                innerRadiusOut[0] = connectedPipes[i]->getInnerRadius();
+                Double = false; // If one of the two exiting pipes is the "T" pipe then the formula change
+            }else{
+                idx[1] = connectedPipes[i]->getPipePairsIdx()*2 + int(not supply); //r
+                innerRadiusOut[1] = connectedPipes[i]->getInnerRadius();
+            }
+
+        }else{
+            idx[2] = connectedPipes[i]->getPipePairsIdx()*2 + int(not supply); //t
+            massFlowt = m[idx[2]];
+            v = m[idx[2]]/990/innerRadiusIn[0]/innerRadiusIn[0]/3.14;
+        }
+    }
+
+    if(Double){ // Consider only the case where the "T" pipe is the incoming one.
+        kFactor = 2.3;
+        if(massFlowb==0.f && massFlowt==0.f){ // If there is no massFlow then the local pressure loss is 0.
+            kFactor = 0.f;
+        }
+        deltaP[idx[2]] += kFactor*990*abs(v)*v/2; // We associate the pressure loss to the incoming pipe
+    }else{
+        ratio = abs(massFlowb/massFlowt);
+        if(massFlowb==0.f && massFlowt==0.f){ // If there is no massFlow then the local pressure loss is 0.
+            ratio = 0;
+        }
+        kFactor = 0.74*ratio*ratio-0.42*ratio+0.94; //kb empirical law
+        deltaP_ = kFactor*990*abs(v)*v/2;
+        deltaP[idx[0]] += deltaP_; //Supply pipe
+        deltaP[idx[0]] += changeRadiusPressureLoss((m[idx[0]]+m[idx[2]])/2,innerRadiusIn[0],innerRadiusOut[0]);
+
+        kFactor = 0.78*ratio*ratio-0.41*ratio+0.012; //kr empirical law
+        deltaP_ = kFactor*990*abs(v)*v/2;
+        deltaP[idx[1]] += deltaP_;
+        deltaP[idx[1]] += changeRadiusPressureLoss((m[idx[1]]+m[idx[2]])/2,innerRadiusIn[0],innerRadiusOut[1]);
+    }
+}
+
+void NodePair::TPressureLossJunction(vector<float> m, bool supply, vector<float>& deltaP, vector<float>& innerRadiusIn, vector<float>& innerRadiusOut){
+    float v(0.f);
+    float kFactor(0.f);
+    float deltaP_(0.f);
+    float massFlowb(0.f);
+    float massFlowt(0.f);
+    float ratio;
+    unsigned int index2(0); // the index of the "T" pipe
+    array<unsigned int,3> idx; // the index for the loopMatrix
+    bool Double(true); // gives the information if the outgoing pipe is the "T" pipe
 
 
+    for(size_t i=0;i<connectedPipes.size();++i){
+
+        bool flowsToHead = m[connectedPipes[i]->getPipePairsIdx()*2+int(not supply)]>0;
+        bool nodeIsHead = connectedPipes[i]->getHeadNode()->getId()==id;
+        if( (flowsToHead and nodeIsHead) or (not flowsToHead and not nodeIsHead)){
+
+            if(id == connectedPipes[i]->getTailNode()->getId()){index2=0;}
+            else{index2=1;}
+
+            if(connectedPipes[i]->getSingularities()[index2]=="T"){
+                idx[0] = connectedPipes[i]->getPipePairsIdx()*2 + int(not supply); //b (If we are looking at the supply network we need even numbers and odd if its return)
+                massFlowb = m[idx[0]];
+                innerRadiusIn[0] = connectedPipes[i]->getInnerRadius();
+                Double = false;
+            }else{
+                idx[1] = connectedPipes[i]->getPipePairsIdx()*2 + int(not supply); //r
+                innerRadiusIn[1] = connectedPipes[i]->getInnerRadius();
+            }
+
+        }else{
+            idx[2] = connectedPipes[i]->getPipePairsIdx()*2 + int(not supply); // The idx[0] is used if no "T" pipe is found in the entering pipe.
+            massFlowt = m[idx[2]];
+            v = m[idx[2]]/990/innerRadiusOut[0]/innerRadiusOut[0]/3.14;
+        }
+    }
+
+    if(Double){
+        kFactor = 2.3;
+        if(massFlowb==0 && massFlowt==0){ // If there is no massFlow then the local pressure loss is 0.
+            kFactor = 0;
+        }
+        deltaP[idx[2]] += kFactor*990*abs(v)*v/2; // We associate the pressure loss to the outgoing pipe
+    }else{
+        ratio = abs(massFlowb/massFlowt);
+        if(massFlowb==0 && massFlowt==0){ // If there is no massFlow then the local pressure loss is 0.
+            ratio = 0;
+        }
+        kFactor = -1.6*ratio*ratio+3.6*ratio-1.1; //kb empirical law
+        deltaP_ = kFactor*990*abs(v)*v/2;
+        deltaP[idx[0]] += deltaP_;
+        deltaP[idx[0]] += changeRadiusPressureLoss((m[idx[0]]+m[idx[2]])/2,innerRadiusIn[0],innerRadiusOut[0]);
+
+        kFactor = -0.14*ratio*ratio+0.7*ratio+0.039; //kr empirical law
+        deltaP_ = kFactor*990*abs(v)*v/2;
+        deltaP[idx[1]] += deltaP_;
+        deltaP[idx[1]] += changeRadiusPressureLoss((m[idx[1]]+m[idx[2]])/2,innerRadiusIn[1],innerRadiusOut[0]);
+    }
+}
+
+void NodePair::TPressureLoss(vector<float> m, vector<float>& deltaP, bool supply){
+    vector<float> innerRadiusIns;
+    vector<float> innerRadiusOuts;
+
+    for(size_t i=0;i< connectedPipes.size();++i){
+        bool flowsToHead = m[connectedPipes[i]->getPipePairsIdx()*2+int(not supply)]>0;
+        bool nodeIsHead = connectedPipes[i]->getHeadNode()->getId()==id;
+        if(not ((flowsToHead and nodeIsHead) or (not flowsToHead and not nodeIsHead))){
+            innerRadiusOuts.push_back(connectedPipes[i]->getInnerRadius());
+        }else{
+            innerRadiusIns.push_back(connectedPipes[i]->getInnerRadius());
+        }
+    }
+    if(innerRadiusIns.size()==1){ // One pipe entering (supply)
+        TPressureLossSplit(m, supply, deltaP, innerRadiusIns,innerRadiusOuts); // Supply
+    }else{ // One pipe going out (supply)
+        TPressureLossJunction(m,supply,deltaP,innerRadiusIns,innerRadiusOuts); // Supply
+    }
+}
+
+void NodePair::computePressureDiffAndDerivative(vector<float> m, const float &rho, vector<float>& deltaP){ // Added by Max
+    unsigned int counter_check(0);
+    unsigned int index(10000);
+
+    if(connectedPipes.size()==2){
+        float innerRadiusIn(0.f);
+        float innerRadiusOut(0.f);
+        for(size_t i=0;i< connectedPipes.size();++i){
+            bool flowsToHead = m[connectedPipes[i]->getPipePairsIdx()*2]>0;
+            bool nodeIsHead = connectedPipes[i]->getHeadNode()->getId()==id;
+            if( (flowsToHead and nodeIsHead) or (not flowsToHead and not nodeIsHead) ){
+                innerRadiusOut = connectedPipes[i]->getInnerRadius();
+            }else{
+                innerRadiusIn = connectedPipes[i]->getInnerRadius();
+                index = connectedPipes[i]->getPipePairsIdx()*2;
+            }
+        }
+
+        deltaP[index] += changeRadiusPressureLoss(m[index],innerRadiusIn,innerRadiusOut);
+    }else if(connectedPipes.size()==3){
+        for(size_t i=0;i< connectedPipes.size();++i){
+            if((connectedPipes[i]->getSingularities()[0]=="T" and connectedPipes[i]->getTailNode()->getId()==id) or (connectedPipes[i]->getSingularities()[1]=="T" and connectedPipes[i]->getHeadNode()->getId()==id)){ // Check if there is a T in the node.  3pipe node does not necessarily have a T pipe.
+                TPressureLoss(m,deltaP,true);//Supply
+                TPressureLoss(m,deltaP,false);//Return
+                // We cannot deduce what is happening for the return network since the supply and return network might not be antisymmetric. In fact, for loop networks, it might happens to have dead branches where supply and return are on the same direction.
+                counter_check +=1;
+                if(counter_check>1){throw string("Error in XML file: There should be only one T singularity at the node "+to_string(id)+".");}
+            }
+        }
+    }
+}
 
 void NodePairConnectingSupplyReturn::writeTHHeaderText(fstream& textFile, unsigned int decId) {
     NodePair::writeTHHeaderText(textFile, decId);
@@ -4022,7 +5167,7 @@ void SubstationNodePair::computeThermal(float const& cp, float const& rho, Clima
 }
 
 
-bool SubstationNodePair::propagateNetwork(float soilTemp, float cp, bool isSupply) {
+bool SubstationNodePair::propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) {
     bool isTraversed = false;
     if (not alreadyTraversed) {
         if ( (isSupply and getMassFlow()<0.f) or ((not isSupply) and getMassFlow()>0.f) ) { // TODO: could make a unified version for NodePairConnectingSupplyReturn
@@ -4034,11 +5179,11 @@ bool SubstationNodePair::propagateNetwork(float soilTemp, float cp, bool isSuppl
                 alreadyTraversed = true;
                 isTraversed = true;
 
-                propagateDownstream(soilTemp, cp, isSupply);
+                propagateDownstream(pClim, cp, isSupply, day, hour);
             }
         }
         else {
-            isTraversed = NodePair::propagateNetwork(soilTemp, cp, isSupply);
+            isTraversed = NodePair::propagateNetwork(pClim, cp, isSupply, day, hour);
             alreadyTraversed = isTraversed;
         }
     }
@@ -4084,7 +5229,7 @@ void ThermalStationNodePair::computeThermal(float rho, float cp, Climate* pClim,
 }
 
 
-bool ThermalStationNodePair::propagateNetwork(float soilTemp, float cp, bool isSupply) {
+bool ThermalStationNodePair::propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) { // Modified by Max
     bool isTraversed = false;
     if (not alreadyTraversed) {
         if ( (isSupply and getMassFlow()>0.f) or ((not isSupply) and getMassFlow()<0.f) ) {
@@ -4096,11 +5241,11 @@ bool ThermalStationNodePair::propagateNetwork(float soilTemp, float cp, bool isS
                 alreadyTraversed = true;
                 isTraversed = true;
 
-                propagateDownstream(soilTemp, cp, isSupply);
+                propagateDownstream(pClim, cp, isSupply, day, hour);
             }
         }
         else {
-            isTraversed = NodePair::propagateNetwork(soilTemp, cp, isSupply);
+            isTraversed = NodePair::propagateNetwork(pClim, cp, isSupply, day, hour);
             alreadyTraversed = isTraversed;
         }
     }
@@ -4125,9 +5270,129 @@ void ThermalStationNodePair::writeTHResultsText(fstream& textFile, unsigned int 
 }
 
 
+ValveNodePair::ValveNodePair(TiXmlHandle hdl, float initTemp) : NodePairConnectingSupplyReturn(hdl, initTemp, 100000.f), valve(nullptr), Targetkv(0.f), ImposedValve(true) {
+    if(hdl.ToElement()){
+        // Get parameter.
+        string name = "KvMax";
+        if ( hdl.ToElement()->QueryFloatAttribute(name.c_str(), &kvMax) ) { throw string("Error in the XML file: a ValveNodePair doesn't have attribute: '"+name+"'."); }
+
+        // The fixed valve opening of the heat exchanger.
+        if ( hdl.ToElement()->QueryFloatAttribute("Targetkv", &Targetkv) ) {
+            Targetkv=0.001f; ImposedValve = false; cout << "A ValveNodePair doesn't have attribute: 'Targetkv'.";
+        }
+        if( Targetkv<=0. or Targetkv>1. ) { throw string("Error in the XML file: a ValveNodePair has Targetkv<=0. or Targetkv>1."); }
+
+        /*name = "DesiredMassFlow";
+        if ( hdl.ToElement()->QueryFloatAttribute(name.c_str(), &desiredMassFlow) ) { throw string("Error in the XML file: a DesiredMassFlow doesn't have attribute: '"+name+"'."); }*/
+    }
+    valve = new Valve(kvMax);
+}
+
+float ValveNodePair::maxKv(){
+    return kvMax;
+}
+
+void ValveNodePair::updateControlVariable(const float &rho, float &sumDeltaRpm, float &sumRpm, float &sumDeltaKv, float &sumKv, const float &learningRate){
+    float currentPressureDiffControlElement = computePressureDiffControlElement(pressureDiff);
+    float targetMassFLow, targetPressureDiff;
+    if (massFlow>0.f) {
+        targetMassFLow = massFlow;
+        targetPressureDiff = currentPressureDiffControlElement;
+        if(targetPressureDiff<=0.f) { targetPressureDiff = 1.0f; }
+    }
+    else {
+        targetMassFLow = -massFlow*0.001f;
+        targetPressureDiff = abs(pressureDiff)+1.f;
+    } // If flow is going in the wrong direction, close the valve.
+    valve->updateKv(rho, sumDeltaKv, sumKv, learningRate, targetMassFLow, targetPressureDiff,pid,Targetkv,ImposedValve);
+
+    sumDeltaRpm += 0.f; sumRpm += 0.f;
+}
+
+void ValveNodePair::computePressureDiffAndDerivative(vector<float>::const_iterator m, float const& rho, vector<float>::iterator deltaP, vector<float>::iterator dDeltaP_dm) {
+    float m_ = (*m);
+    float deltaP_, dDeltaP_dm_;
+    valve->computePressureDiffAndDerivative(m_, rho, deltaP_, dDeltaP_dm_);
+    (*deltaP) = deltaP_;
+    (*dDeltaP_dm) = dDeltaP_dm_;
+}
+
+void ValveNodePair::hydraulicConverged(vector<float>::const_iterator m, vector<float>::const_iterator deltaP) {
+    for (size_t i=1; int(i)<nbEdges(); i++) {
+        if ( abs((*m)-(*(m+i))) > 0.0001f*(*m) ) { throw string("Error in ValveNodePair::hydraulicConverged, not all massflows are equal."); }
+    }
+    massFlow = *m;
+    pressureDiff = 0.f;
+    for (int i=0; i<nbEdges(); i++) {
+        pressureDiff += *deltaP;
+        deltaP++;
+    }
+}
+
+void ValveNodePair::computeThermal(const float &cp, const float &rho, Climate *pClim, unsigned int day, unsigned int hour, bool supplyToReturn){
+    if (  (supplyToReturn and massFlow>0.f)  or  ((not supplyToReturn) and massFlow<0.f)  ) {
+        float inputTemp;
+        if (massFlow>=0.f) { inputTemp = getSupplyTemperature(); }
+        else { inputTemp = getReturnTemperature(); }
+
+        float sgnMassFLow;
+        if (massFlow>0.f) { sgnMassFLow = 1.f; }
+        else if (massFlow<0.f) { sgnMassFLow = -1.f; }
+        else { sgnMassFLow = 0.f; }
+
+        float deltaTempValve = sgnMassFLow * valve->computeTemperatureIncrease(pressureDiff, cp, rho); // Temperature increase du to valve. The pressure drop dissipates into thermal energy [K].
+        outputTemperature = inputTemp + deltaTempValve;
+    }
+}
+
+/*float ValveNodePair::computeOutputTemp(float const& inputTemp, float const& massFlow, float const& pressureDiff, float const& rho, float const& cp) {
+    float sgnMassFLow;
+    if (massFlow>0.f) { sgnMassFLow = 1.f; }
+    else if (massFlow<0.f) { sgnMassFLow = -1.f; }
+    else { sgnMassFLow = 0.f; }
+
+    float deltaTempValve = sgnMassFLow * valve->computeTemperatureIncrease(pressureDiff, cp, rho); // Temperature increase du to valve. The pressure drop dissipates into thermal energy [K].
+    return inputTemp + deltaTempValve;
+}*/
 
 
+bool ValveNodePair::propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) {
+    bool isTraversed = false;
+    if (not alreadyTraversed) {
+        if ( (isSupply and getMassFlow()>0.f) or ((not isSupply) and getMassFlow()<0.f) ) {
+            if (areAllUpstreamsComputed(isSupply)) {
+                float initSumTM = abs(getMassFlow()) * getOutputTemp();
+                float initSumM = abs(getMassFlow());
+                computeAndSetTemperature(initSumTM, initSumM, isSupply);
 
+                alreadyTraversed = true;
+                isTraversed = true;
+
+                propagateDownstream(pClim, cp, isSupply, day, hour);
+            }
+        }
+        else {
+            isTraversed = NodePair::propagateNetwork(pClim, cp, isSupply, day, hour);
+            alreadyTraversed = isTraversed;
+        }
+    }
+    return isTraversed;
+}
+
+void ValveNodePair::checkNbPipes() {
+    if (getNbPipes()<1) {
+        throw string("Error in the XML file: ValveNodePair of id="+to_string(getId())+" is connected to "+to_string(getNbPipes())+" PipePair, it must be connected to at least 1 PipePair.");
+    }
+}
+
+void ValveNodePair::writeTHHeaderText(fstream& textFile, unsigned int decId) {
+    string prefix = getPrefix(decId);
+    NodePair::writeTHHeaderText(textFile, decId);
+}
+
+void ValveNodePair::writeTHResultsText(fstream& textFile, unsigned int i) {
+    NodePair::writeTHResultsText(textFile, i);
+}
 
 
 vector<unsigned int> PipePair::ids = {};
@@ -4138,6 +5403,9 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
 
         unsigned int node1Id, node2Id;
 
+        singulars[0]="straight";
+        singulars[1]="straight";
+
         // Get parameters.
         if ( hdl.ToElement()->QueryUnsignedAttribute("id", &id) )                               { throw string("Error in the XML file: a PipePair doesn't have attribute: 'id'."); }
         if ( hdl.ToElement()->QueryUnsignedAttribute("node1", &node1Id) )             { throw string("Error in the XML file: a PipePair doesn't have attribute: 'node1'."); }
@@ -4145,6 +5413,8 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         if ( hdl.ToElement()->QueryFloatAttribute("length", &length) )                          { throw string("Error in the XML file: a PipePair doesn't have attribute: 'length' in meters."); }
         if ( hdl.ToElement()->QueryFloatAttribute("innerRadius", &innerRadius) )                { throw string("Error in the XML file: a PipePair doesn't have attribute: 'innerRadius' in meters."); }
         if ( hdl.ToElement()->QueryFloatAttribute("interPipeDistance", &interPipeDistance) )    { throw string("Error in the XML file: a PipePair doesn't have attribute: 'interPipeDistance' in meters."); }
+        if ( hdl.ToElement()->QueryStringAttribute("singular1", &singulars[0]) )    { cout<<"Warning in the XML file: a PipePair uses default values for singular1."; }
+        if ( hdl.ToElement()->QueryStringAttribute("singular2", &singulars[1]) )    { cout<<"Warning in the XML file: a PipePair uses default values for singular2."; }
 
         connectedNodes[0] = net->pointerOfNodeWithId(node1Id);
         if (connectedNodes[0]==nullptr) { throw string("Error in the XML file: in Network of PipePair id="+to_string(id)+" the node1="+to_string(node1Id)+" is referenced, but isn't present in the Network of DistrictEnergyCenter id="+to_string(net->getDEC()->getId())+"."); }
@@ -4158,6 +5428,7 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         }
         connectedNodes[0]->addConnectedPipe(this);
         connectedNodes[1]->addConnectedPipe(this);
+        connectedNodes[0]->addConnectedPipeOut(this); //Added by Max
 
         // Sanity check.
         if ( length<=0 )            { throw string("Error in the XML file: PipePair id="+to_string(id)+" has length<=0."); }
@@ -4189,6 +5460,14 @@ PipePair::~PipePair() {
     ids.erase( find( ids.begin(), ids.end(), id ) );
 }
 
+unsigned int PipePair::getPipePairsIdx(){ // Added by Max
+    for(size_t j=0;j<ids.size();++j){
+        if(ids[j]==id){
+            return j;
+        }
+    }
+    throw "Error the id given in the function getPipePairsIdx is not found in the vector PipePairs";
+}
 
 float PipePair::computeInterPipeSoilThermalResistance(Pipe* p1, Pipe* p2, float interPipeDistance, float innerRadius, float soilConductivity) {
     float OuterRad1 = innerRadius + p1->getInsulationThick();
@@ -4251,11 +5530,6 @@ void PipePair::hydraulicConverged(float const& supplyMassFlow, float const& supp
     supplyPipe->hydraulicConverged(supplyMassFlow, supplyDeltaP, rho, length, altitudePressureLoss);
     returnPipe->hydraulicConverged(returnMassFlow, returnDeltaP, rho, length, altitudePressureLoss);
 }
-
-
-
-
-
 
 
 
