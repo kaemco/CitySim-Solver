@@ -395,8 +395,8 @@ void District::writeXML(ofstream& file, string tab){
     file << subtab << "<ShadingSurface>" << endl;
     for (size_t i=0; i<surfaces.size(); ++i){
         file << subtab << "\t<Surface id=\"" << surfaces[i]->getId() << "\" ";
-        // write the name if it exists
-        if (!surfaces[i]->getName().empty()) file << "name=\"" << surfaces[i]->getName() << "\" ";
+        // write the key if it exists
+        if (!surfaces[i]->getKey().empty()) file << "key=\"" << surfaces[i]->getKey() << "\" ";
         streamsize ss = file.precision();
         file.precision(6); // for fixed format, two decimal p
         file << "ShortWaveReflectance=\"" << surfaces[i]->getShortWaveReflectance();

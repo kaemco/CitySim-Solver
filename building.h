@@ -26,7 +26,6 @@ private:
     // the ID of the building and its key to a database
     unsigned int id=0;
     string key="";
-    string name="";
 
     // indicates to simulate the building with EnergyPlus
     bool simulateEP = false;
@@ -84,6 +83,10 @@ private:
     double VdotUsed; // Domestic hot water consumption summed over zones [m^3/s].
     float Tamb; // "Ambiant teperature", where the water tanks are located.
     // Cognet: End of added code.
+    // Added by Max
+    float heatingDemandUnsatisfied = 0.f;
+    float coolingDemandUnsatisfied = 0.f;
+    bool hasSolarThermal = false;
 public:
 
     ostream logStream;
@@ -247,6 +250,8 @@ public:
     void eraseSolarThermalProduction() { solarThermalProduction.erase(solarThermalProduction.begin(),solarThermalProduction.end()); }
     void eraseSolarThermalProduction_back() { solarThermalProduction.pop_back(); }
     float getTotalSolarThermalProduction() { return accumulate(solarThermalProduction.begin(),solarThermalProduction.end(),0.f); }
+    bool getHasSolarThermal(); // Added by Max
+    void computeHasSolarThermal();//Added by Max
     // Fuel Consumption
     void setFuelConsumption(float joules) { fuelConsumption.push_back(joules); }
     void addFuelConsumption(float joules) { fuelConsumption.back() += joules; }
@@ -351,6 +356,11 @@ public:
     bool hasImposedHeatDemand(unsigned int day, unsigned int hour);
     // Cognet: End of added code.
 
+    //Added by Max
+    float getHeatingDemandUnsatisfied() {return heatingDemandUnsatisfied;}
+    void setHeatingDemandUnsatisfied(float MissingThermalPower) {heatingDemandUnsatisfied = MissingThermalPower;}
+    float getCoolingDemandUnsatisfied() {return coolingDemandUnsatisfied;}
+    void setCoolingDemandUnsatisfied(float MissingThermalPower) {coolingDemandUnsatisfied = MissingThermalPower;}
 };
 
 class Tree {
@@ -417,12 +427,12 @@ public:
             surface->setShortWaveReflectance(0.3f);
             if (surface->getAltitude() > 80.f && surface->getAltitude() <= 100.f) {
                 leaves.push_back(surface);
-                subLeaves.push_back(new Surface(surface));
+                subLeaves.push_back(new Surface(*surface));
                 subLeaves.back()->reverseOrientation();
                 for (unsigned int index = 1; index < layers; ++index) {
-                    subLeaves.push_back(new Surface(surface));
+                    subLeaves.push_back(new Surface(*surface));
                     subLeaves.back()->translate(GENPoint::Cartesian(0.f,0.f,-static_cast<float>(index)*layersDistance));
-                    subLeaves.push_back(new Surface(subLeaves.back()));
+                    subLeaves.push_back(new Surface(*subLeaves.back()));
                     subLeaves.back()->reverseOrientation();
                 }
             }

@@ -189,3 +189,9 @@ double randomUniform(double minValue,double maxValue)
 {
 	return minValue + UNI * (maxValue - minValue);
 }
+
+float cosAngleBetween(const GENPoint& a, const GENPoint& b) {
+
+    return GEN::dot_product(a,b)/(a.Radius()*b.Radius());
+
+}

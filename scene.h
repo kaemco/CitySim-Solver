@@ -189,6 +189,10 @@ private:
     jm_status_enu_t jmstatus;
     #endif
 
+#ifdef DEBUG
+    stringstream ss_IAM, ss_IAM_irradiance;
+#endif // DEBUG
+
 public:
 
     XmlScene():Scene(),pDistrict(new District(this)) {}

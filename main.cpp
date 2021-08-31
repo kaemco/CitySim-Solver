@@ -320,6 +320,31 @@ int main(int argc, char *argv[])
             return 0;
 
         }
+        else if ( firstParameter.size() > 1 && firstParameter == string("-Ih")
+                  && (secondParameter.size() > 4) && (secondParameter.substr(secondParameter.size()-4,4) == string(".xml")) ) {
+
+            // only irradiation calculation with the .xml file, the secondParameter contains the firstParameter
+            firstParameter = secondParameter;
+            cerr << "XML description file: " << firstParameter << endl;
+
+            // creates the XMLscene, which will populate under classes (pre-process)
+            XmlScene xmlscene(firstParameter);
+
+            // outputs the radFile (for visualisation)
+            xmlscene.exportRadFile();
+            xmlscene.exportRadFile(firstParameter.substr(0,firstParameter.size()-4) + "_triangulated.rad");
+            xmlscene.exportInpFile();
+
+            // initialise the far field
+            xmlscene.initialiseFarField();
+
+            // prepare the annual climate sky
+            cout << "Exporting hourly sky and ground." << endl;
+            xmlscene.exportHourlyRadiance();
+
+            return 0;
+
+        }
         else if ( firstParameter.size() > 4 && firstParameter.substr(firstParameter.size()-4,4) == string(".xml") &&
                   secondParameter == string("dxf") ) {
 

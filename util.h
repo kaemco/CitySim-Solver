@@ -9,6 +9,8 @@
 #include <cmath>
 #include <stdint.h> // for usage of uint32_t
 
+#include "GENPoint.h"
+
 using namespace std;
 
 // *** Utils, CitySim        *** //
@@ -156,5 +158,7 @@ void zigset(uint32_t jsrseed);
 double normallyDistributedSPRNG_Ziggurat();
 
 double randomUniform(double minValue,double maxValue);
+
+float cosAngleBetween(const GENPoint& a, const GENPoint& b); //!< computes the angle between two vectors (rad)
 
 #endif

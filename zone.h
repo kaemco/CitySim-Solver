@@ -101,6 +101,7 @@ protected:
     vector<double> heating,cooling; // energy for heating and cooling to get Tmin and Tmax (in Wh)
     vector<float> Qi; // internal gains (in Wh)
     vector<double> Qs; // sensible heat that needs to be given to the room (in Wh)
+    double Qs_heating = 0., Qs_cooling = 0.; // total sensible heating and cooling given to the room
 
     // from the explicit model due to stochastic calculation
     vector<float> windowState; // fully closed = 0.f and fully open 1.f
@@ -297,12 +298,18 @@ public:
     void setQs(double watthour) { Qs.push_back(watthour); }
     double getQs(unsigned int it) { return Qs.at(it); }
     double getQs() { return Qs.back(); }
-    void eraseQs(unsigned int keepValue) { Qs.erase(Qs.begin(),Qs.end()-min(keepValue,(unsigned int)Qs.size())); }
+    void eraseQs(bool eraseAllResults) {
+        if (!eraseAllResults) {
+            Qs_heating += accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_greater);
+            Qs_cooling += accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_less);
+        }
+        Qs.erase(Qs.begin(),Qs.end());
+    }
     void eraseQs_back() { Qs.pop_back(); }
     static double myBinaryOperation_greater(double a, double b) { return (b>0) ? a+b : a; }
     static double myBinaryOperation_less(double a, double b) { return (b<0) ? a+b : a; }
-    double getTotalHeatingSatisfied() { return accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_greater); }
-    double getTotalCoolingSatisfied() { return accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_less); }
+    double getTotalHeatingSatisfied() { return Qs_heating + accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_greater); }
+    double getTotalCoolingSatisfied() { return Qs_cooling + accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_less); }
 
     // Qi are the internal gains of the zone
     void setQi(float watthour) { Qi.push_back(watthour); }

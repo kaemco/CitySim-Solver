@@ -261,7 +261,7 @@ protected:
 
     // added an id for the surface
     uint64_t id; //!< Surface ID
-    string name="";
+    string key="";
 
     Composite* composite=nullptr; // a pointer to the Composite
 
@@ -395,23 +395,17 @@ public:
         // compute once for all the hemispherical g-value
         glazingGvalue_hemispherical = computeGlazingGvalueHemispherical();
     }
-    Surface(Surface const & s, string name="")
-        :vertices(s.vertices),id(s.id),name(name),shortWaveReflectance(s.shortWaveReflectance),glazingRatio(s.glazingRatio),glazingGvalue(s.glazingGvalue),
+    // copy constructor
+    Surface(const Surface& s)
+        :vertices(s.vertices),id(s.id),key(s.key),shortWaveReflectance(s.shortWaveReflectance),glazingRatio(s.glazingRatio),glazingGvalue(s.glazingGvalue),
           glazingUvalue(s.glazingUvalue),glazingOpenableRatio(s.glazingOpenableRatio),logStream(s.logStream.rdbuf()) {
         // compute once for all the hemispherical g-value
         glazingGvalue_hemispherical = computeGlazingGvalueHemispherical();
         computeNormalAndArea();
     }
-    // make a new object as a copy of a surface
-    Surface(Surface* s)
-        :vertices(s->vertices),id(s->id+1),shortWaveReflectance(s->shortWaveReflectance),glazingRatio(s->glazingRatio),glazingGvalue(s->glazingGvalue),
-          glazingUvalue(s->glazingUvalue),glazingOpenableRatio(s->glazingOpenableRatio),logStream(s->logStream.rdbuf()) {
-        // compute once for all the hemispherical g-value
-        glazingGvalue_hemispherical = computeGlazingGvalueHemispherical();
-        computeNormalAndArea();
-    }
+    Surface(const Surface& s, string key):Surface(s) { this->key = key; }
     Surface(TiXmlHandle hdl, Building* pBuilding, ostream* pLogStr=nullptr);
-    Surface(unsigned int id, TiXmlElement* pPosList); // contructor from CityGML posList
+    Surface(unsigned int id, TiXmlElement* pPosList, vector<double> origin, string key=""); // contructor from CityGML posList
     ~Surface() {
         //cout << "Deleting surface...";
         if (pvPanel) delete pvPanel;
@@ -429,7 +423,7 @@ public:
     }
 
     uint64_t getId() const { return id; }
-    string getName() { return name; }
+    string getKey() { return key; }
     virtual SType getType(){return SURFACE;}
 
     void pushVertex(float x, float y, float z) { vertices.push_back(GENPoint::Cartesian(x,y,z)); }
@@ -557,6 +551,7 @@ public:
     void setPVRatio(float r) { pvRatio=r; }
     float getSTRatio(){ return stRatio; }
     void setSTRatio(float r) { stRatio=r; }
+    bool getHasSolarThermal(){return (stPanel!=NULL);}; // Added by Max
 
     // method to set the PV panel
     void setPVPanel(float pvRatio, PhotoVoltaic* pv) {
@@ -718,7 +713,7 @@ public:
     :Surface(id,shortWaveReflectance,glazingGvalue,glazingUvalue,glazingOpenableRatio,glazingRatio,logStr){
         composite = c;
     }
-    Wall(Surface s):Surface(s){ computeNormalAndArea();} // Incomplete constructor for DXF reading, do not use without completing the geometry...
+    Wall(const Surface& s):Surface(s) { computeNormalAndArea(); } // Incomplete constructor for DXF reading, do not use without completing the geometry...
     Wall(int id, GENPoint p1, GENPoint p2, float elevation):Surface(id){
         // for wall to be oriented outside, floor vertices (positive orientation) must be taken backwards
         vertices.push_back(p2);
@@ -767,7 +762,7 @@ public:
     void eraseUpperShadingState_back() { upperShadingState.pop_back(); }
 
     void writeXML(ofstream& file, string tab=""){
-        file << tab << "<Wall id=\"" << id << "\" type=\"";
+        file << tab << "<Wall id=\"" << id << "\" key=\"" << key << "\" type=\"";
         if(!composite) cout << "ERROR: no composite defined for Wall " << id << endl;
         else file << composite->getId();
         streamsize ss = file.precision();
@@ -800,7 +795,7 @@ public:
     float getUAground() { return pow((double)(getComposite()->getResistance() + 1.f/3.f),(double)-1.)*area; /* hc_int = 3 from CIBSE guide */ }
 
     void writeXML(ofstream& file, string tab=""){
-        file << tab << "<Floor id=\"" << id << "\" type=\"";
+        file << tab << "<Floor id=\"" << id << "\" key=\"" << key << "\" type=\"";
         if(!composite) cout << "ERROR: no composite defined for Floor " << id << endl;
         else file << composite->getId();
         streamsize ss = file.precision();
@@ -892,7 +887,7 @@ public:
     void eraseWaterEvapotranspiration(unsigned int keepValue) { if (!waterEvapotranspiration.empty()) waterEvapotranspiration.erase(waterEvapotranspiration.begin(),waterEvapotranspiration.end()-min(keepValue,(unsigned int)waterEvapotranspiration.size())); } // removes all elements but the last one
 
     void writeXML(ofstream& file, string tab=""){
-        file << tab << "<Roof id=\"" << id << "\" type=\"";
+        file << tab << "<Roof id=\"" << id << "\" key=\"" << key << "\" type=\"";
         if(composite) file << composite->getId();
         else throw("No composite defined in Roof id=" + toString(id));
         streamsize ss = file.precision();
@@ -924,8 +919,8 @@ public:
         composite = c;
         initialiseModel();
     }
-    Ground(Surface s):Surface(s){ computeNormalAndArea();} // Incomplete constructor for DXF reading, do not use without completing the geometry...
-    Ground(Surface *s, Composite *c, string name=""):Surface(*s,name) { composite=c; computeNormalAndArea(); }
+    Ground(Surface *s, Composite *c):Surface(*s) { composite=c; initialiseModel(); }
+    Ground(Surface *s, Composite *c, string key):Surface(*s,key) { composite=c; initialiseModel(); }
     Ground(TiXmlHandle hdl, Composite* c, ostream* pLogStream=NULL);
 
     friend bool operator>(const Ground& lhs, const Ground& rhs) { return lhs.getId() > rhs.getId(); }
@@ -999,11 +994,9 @@ public:
     }
 
     void writeXML(ofstream& file, string tab="") {
-        file << tab << "<Ground id=\"" << id << "\" ";
+        file << tab << "<Ground id=\"" << id << "\" key=\"" << key << "\" ";
         if (composite) file << "type=\"" << composite->getId() << "\" ";
         else throw("No composite defined in Ground id=" + toString(id));
-        // write the name if it exists
-        if (!name.empty()) file << "name=\"" << name << "\" ";
         streamsize ss = file.precision();
         file.precision(6); // for fixed format, two decimal p
         file << "ShortWaveReflectance=\"" << shortWaveReflectance << "\" ";

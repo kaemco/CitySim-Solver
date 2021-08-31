@@ -280,18 +280,18 @@ Surface::Surface(TiXmlHandle hdl, Building* pBuilding, ostream* pLogStr):b(pBuil
     glazingGvalue_hemispherical = computeGlazingGvalueHemispherical();
 }
 
-Surface::Surface(unsigned int id, TiXmlElement* pPosList):id(id),logStream(std::cout.rdbuf()) {
+Surface::Surface(unsigned int id, TiXmlElement* pPosList, vector<double> origin, string key):id(id),key(key),logStream(std::cout.rdbuf()) {
     // creates the surface from a posList in text format read in an XML file
     string value;
     stringstream ss;
-    float px,py,pz;
+    double px,py,pz;
     ss << pPosList->GetText();
     while (ss >> value) {
-        px = to<float>(value);
+        px = to<double>(value)-origin.at(0);
         ss >> value;
-        py = to<float>(value);
+        py = to<double>(value)-origin.at(1);
         ss >> value;
-        pz = to<float>(value);
+        pz = to<double>(value)-origin.at(2);
         //cout << "Vertex: " << px << " " << py << " " << pz << endl;
         pushVertex(px,py,pz);
     }
