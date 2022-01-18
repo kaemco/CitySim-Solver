@@ -1332,9 +1332,13 @@ void Building::writeGML(ofstream& file, string tab) {
                      << subtab << "\t\t\t<energy:PhotovoltaicSystem gml:id=\"PV_1\">\n"
                      << subtab << "\t\t\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getWall(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
                      << subtab << "\t\t\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getWall(j)->getPVRatio()*zones[i]->getWall(j)->getArea() << "</energy:collectorSurface>\n"
-                     << subtab << "\t\t\t\t<energy:panelAzimuth uom=\"deg\">" << zones[i]->getWall(j)->getAzimuth() << "</energy:panelAzimuth>\n"
-                     << subtab << "\t\t\t\t<energy:panelInclination uom=\"deg\">" << zones[i]->getWall(j)->getAltitude() << "</energy:panelInclination>\n"
-                     << subtab << "\t\t\t\t<energy:installedOn xlink:href=\"#Wall_" << zones[i]->getWall(j)->getId() << "\"/>\n"
+                     << subtab << "\t\t\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
+                     << subtab << "\t\t\t\t\t<gen:value uom=\"deg\"> \n" << zones[i]->getWall(j)->getAzimuth() << "</gen:value>\n"
+                     << subtab << "\t\t\t\t</gen:measureAttribute>\n"
+                     << subtab << "\t\t\t\t<gen:measureAttribute name=\"panelInclination\">\n"
+                     << subtab << "\t\t\t\t\t<gen:value uom=\"deg\">\n" << zones[i]->getWall(j)->getAltitude() << "</gen:value>\n"
+                     << subtab << "\t\t\t\t</gen:measureAttribute>\n"
+                     << subtab << "\t\t\t\t<energy:installedOnBoundarySurface xlink:href=\"#Wall_" << zones[i]->getWall(j)->getId() << "\"/>\n"
                      << subtab << "\t\t\t</energy:PhotovoltaicSystem>\n"
                      << subtab << "\t\t</energy:equippedWith>\n" << flush;
             }
@@ -1375,9 +1379,13 @@ void Building::writeGML(ofstream& file, string tab) {
                      << subtab << "\t\t\t<energy:PhotovoltaicSystem gml:id=\"PV_1\">\n"
                      << subtab << "\t\t\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getRoof(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
                      << subtab << "\t\t\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getRoof(j)->getPVRatio()*zones[i]->getRoof(j)->getArea() << "</energy:collectorSurface>\n"
-                     << subtab << "\t\t\t\t<energy:panelAzimuth uom=\"deg\">" << zones[i]->getRoof(j)->getAzimuth() << "</energy:panelAzimuth>\n"
-                     << subtab << "\t\t\t\t<energy:panelInclination uom=\"deg\">" << zones[i]->getRoof(j)->getAltitude() << "</energy:panelInclination>\n"
-                     << subtab << "\t\t\t\t<energy:installedOn xlink:href=\"#Roof_" << zones[i]->getRoof(j)->getId() << "\"/>\n"
+                     << subtab << "\t\t\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
+                     << subtab << "\t\t\t\t\t<gen:value uom=\"deg\"> \n" << zones[i]->getRoof(j)->getAzimuth() << "</gen:value>\n"
+                     << subtab << "\t\t\t\t</gen:measureAttribute>\n"
+                     << subtab << "\t\t\t\t<gen:measureAttribute name=\"panelInclination\">\n"
+                     << subtab << "\t\t\t\t\t<gen:value uom=\"deg\">\n" << zones[i]->getRoof(j)->getAltitude() << "</gen:value>\n"
+                     << subtab << "\t\t\t\t</gen:measureAttribute>\n"
+                     << subtab << "\t\t\t\t<energy:installedOnBoundarySurface xlink:href=\"#Roof_" << zones[i]->getRoof(j)->getId() << "\"/>\n"
                      << subtab << "\t\t\t</energy:PhotovoltaicSystem>\n"
                      << subtab << "\t\t</energy:equippedWith>\n" << flush;
             }
