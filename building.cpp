@@ -1432,7 +1432,7 @@ void Building::writeGML(ofstream& file, string tab) {
             zones[i]->getWall(j)->writeGML_composedOf(file,subtab+"\t\t\t\t");
 
             // the partOf is made if you have one surface that belongs to two different zones (e.g. ZoneSurface)
-            file << subtab << "\t\t\t\t<energy:delimits xlink:href=\"TZ_" << zones.at(i)->getId() << "\"/>" << endl;
+            file << subtab << "\t\t\t\t<energy:delimits xlink:href=\"#TZ_" << zones.at(i)->getId() << "\"/>" << endl;
 
             // this is where the link is given to the boundedBy Surface
             file << subtab << tabs(4) << "<energy:relatesTo xlink:href=\"#Wall_" << zones[i]->getWall(j)->getId() << "\"/>" << endl;
