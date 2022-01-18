@@ -1261,42 +1261,30 @@ void Building::writeGML(ofstream& file, string tab) {
          << tab << "\t\t\t<gml:exterior>\n"
          << tab << "\t\t\t\t<gml:CompositeSurface>\n";
 
-    subtab=tab+"\t\t\t\t\t";
+    subtab=tab+"\t";
 
     for (size_t i=0; i < zones.size(); ++i) {
         // writes the different surface elements
         for (size_t j=0; j < zones[i]->getnWalls(); ++j) {
-            file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon ";
+            file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getWall(j)->getKey().empty())
-                file << "gml:id=\"b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                file << "b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
             else
-                file << "gml:id=\"" << zones[i]->getWall(j)->getKey() << "\">" << endl;
-            zones[i]->getWall(j)->writeGML(file,subtab+"\t");
-            file << subtab << "\t</gml:Polygon>\n"
-                 << subtab << "</gml:surfaceMember>" << endl;
+                file << zones[i]->getWall(j)->getKey() << "\">" << endl;
         }
         for (size_t j=0; j < zones[i]->getnRoofs(); ++j) {
-            file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon ";
+            file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getRoof(j)->getKey().empty())
-                file << "gml:id=\"b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+                file << "b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
             else
-                file << "gml:id=\"" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
-            zones[i]->getRoof(j)->writeGML(file,subtab+"\t");
-            file << subtab << "\t</gml:Polygon>\n"
-                 << subtab << "</gml:surfaceMember>" << endl;
+                file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
         }
         for (size_t j=0; j < zones[i]->getnFloors(); ++j) {
-            file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon ";
+            file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getFloor(j)->getKey().empty())
-                file << "gml:id=\"b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+                file << "b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
             else
-                file << "gml:id=\"" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
-            zones[i]->getFloor(j)->writeGML(file,subtab+"\t");
-            file << subtab << "\t</gml:Polygon>\n"
-                 << subtab << "</gml:surfaceMember>" << endl;
+                file << zones[i]->getFloor(j)->getKey() << "\">" << endl;
         }
     }
 
@@ -1305,7 +1293,7 @@ void Building::writeGML(ofstream& file, string tab) {
          << tab << "\t\t</gml:Solid>\n"
          << tab << "\t</bldg:lod2Solid>" << endl;
 
-    // add the bounded by tags, in order to recognize Wall, Roof and Floor using xlink:href and the id
+    // add the bounded by tags, in order to recognize Wall, Roof and Floor
     subtab=tab+"\t";
     for (size_t i=0; i < zones.size(); ++i) {
         // writes the different surface elements
@@ -1314,12 +1302,15 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t<bldg:WallSurface gml:id=\"Wall_" << zones[i]->getWall(j)->getId() << "\">\n"
                  << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
-            if (zones[i]->getWall(j)->getKey().empty())
-                file << "b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
-            else
-                file << zones[i]->getWall(j)->getKey() << "\">" << endl;
-            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t\t<gml:Polygon ";
+                if (zones[i]->getWall(j)->getKey().empty())
+                    file << "gml:id=\"b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                else
+                    file << "gml:id=\"" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                zones[i]->getWall(j)->writeGML(file,subtab+"\t");
+                file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
+                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
 // removed in version 1.0 (to be checked)
@@ -1355,12 +1346,15 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t<bldg:RoofSurface gml:id=\"Roof_" << zones[i]->getRoof(j)->getId() << "\">\n"
                  << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
-            if (zones[i]->getRoof(j)->getKey().empty())
-                file << "b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
-            else
-                file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
-            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t\t<gml:Polygon ";
+                if (zones[i]->getRoof(j)->getKey().empty())
+                    file << "gml:id=\"b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+                else
+                    file << "gml:id=\"" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+                zones[i]->getRoof(j)->writeGML(file,subtab+"\t");
+                file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
+                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
 //                 << subtab << "\t\t<energy:globalSolarIrradiance>\n"
@@ -1395,12 +1389,15 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t<bldg:GroundSurface gml:id=\"Floor_" << zones[i]->getFloor(j)->getId() << "\">\n"
                  << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
-            if (zones[i]->getFloor(j)->getKey().empty())
-                file << "b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
-            else
-                file << zones[i]->getFloor(j)->getKey() << "\">" << endl;
-            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t\t<gml:Polygon ";
+                if (zones[i]->getFloor(j)->getKey().empty())
+                    file << "gml:id=\"b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+                else
+                    file << "gml:id=\"" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
+                zones[i]->getFloor(j)->writeGML(file,subtab+"\t");
+                file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
+                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
                  << subtab << "\t</bldg:GroundSurface>\n"
