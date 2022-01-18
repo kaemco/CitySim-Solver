@@ -438,9 +438,9 @@ void District::writeGML(ofstream& file, string tab) {
 
     // write the buildings
     for (size_t i=0; i<buildings.size(); ++i) {
-        file << tab << "<core:cityObjectMember>" << endl;
-        buildings[i]->writeGML(file, tab+"\t");
-        file << tab << "</core:cityObjectMember>" << endl;
+
+        buildings[i]->writeGML(file, tab);
+
     }
 }
 

@@ -1179,13 +1179,61 @@ void Building::writeXML(ofstream& file, string tab){
 
 void Building::writeGML(ofstream& file, string tab) {
 
-    file << tab << "<bldg:Building gml:id=\"";
+    // output of the PV panel
+    for (size_t i=0; i < zones.size(); ++i) {
+        // writes the different surface elements
+        for (size_t j=0; j < zones[i]->getnWalls(); ++j) {
+            if (zones[i]->getWall(j)->getPVRatio() > 0.f) {
+                file << tab << "<core:cityObjectMember>\n"
+                     << tab << "\t<energy:PhotovoltaicSystem gml:id=\"PV_1\">\n"
+                     << tab << "\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getWall(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
+                     << tab << "\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getWall(j)->getPVRatio()*zones[i]->getWall(j)->getArea() << "</energy:collectorSurface>\n"
+                     << tab << "\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
+                     << tab << "\t\t\t<gen:value uom=\"deg\">" << zones[i]->getWall(j)->getAzimuth() << "</gen:value>\n"
+                     << tab << "\t\t</gen:measureAttribute>\n"
+                     << tab << "\t\t<gen:measureAttribute name=\"panelInclination\">\n"
+                     << tab << "\t\t\t<gen:value uom=\"deg\">\n" << zones[i]->getWall(j)->getAltitude() << "</gen:value>\n"
+                     << tab << "\t\t</gen:measureAttribute>\n"
+                     << tab << "\t\t<energy:installedOnBoundarySurface xlink:href=\"#";
+                    if (zones[i]->getWall(j)->getKey().empty())
+                        file << "Wall_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                    else
+                        file << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                file << tab << "\t</energy:PhotovoltaicSystem>\n"
+                     << tab << "</core:cityObjectMember>\n" << flush;
+            }
+        }
+        for (size_t j=0; j < zones[i]->getnRoofs(); ++j) {
+            if (zones[i]->getRoof(j)->getPVRatio() > 0.f) {
+                file << tab << "<core:cityObjectMember>\n"
+                     << tab << "\t<energy:PhotovoltaicSystem gml:id=\"PV_1\">\n"
+                     << tab << "\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getRoof(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
+                     << tab << "\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getRoof(j)->getPVRatio()*zones[i]->getRoof(j)->getArea() << "</energy:collectorSurface>\n"
+                     << tab << "\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
+                     << tab << "\t\t\t<gen:value uom=\"deg\">" << zones[i]->getRoof(j)->getAzimuth() << "</gen:value>\n"
+                     << tab << "\t\t</gen:measureAttribute>\n"
+                     << tab << "\t\t<gen:measureAttribute name=\"panelInclination\">\n"
+                     << tab << "\t\t\t<gen:value uom=\"deg\">" << zones[i]->getRoof(j)->getAltitude() << "</gen:value>\n"
+                     << tab << "\t\t</gen:measureAttribute>\n"
+                     << tab << "\t\t<energy:installedOnBoundarySurface xlink:href=\"#";
+                    if (zones[i]->getRoof(j)->getKey().empty())
+                        file << "Roof_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+                    else
+                        file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+                file << tab << "\t</energy:PhotovoltaicSystem>\n"
+                     << tab << "</core:cityObjectMember>\n" << flush;
+            }
+        }
+    }
+
+    file << tab << "<core:cityObjectMember>" << endl;
+    file << tab << "\t<bldg:Building gml:id=\"";
     if (key.empty())
         file << "Bldg-" << id << "\">" << endl;
     else
         file << key << "\">" << endl;
 
-    string subtab=tab+"\t";
+    string subtab=tab+"\t\t";
 
     // add the energy demand computed by CitySim
     if (pDistrict->getScene()->getTimeStepsSimulated() > 0) {
@@ -1326,22 +1374,6 @@ void Building::writeGML(ofstream& file, string tab) {
 //                 << subtab << "\t\t\t</energy:RegularTimeSeriesFile>\n"
 //                 << subtab << "\t\t</energy:globalSolarIrradiance>\n"
                  << flush;
-            // output of the PV panel
-            if (zones[i]->getWall(j)->getPVRatio() > 0.f) {
-                file << subtab << "\t\t<energy:equippedWith>\n"
-                     << subtab << "\t\t\t<energy:PhotovoltaicSystem gml:id=\"PV_1\">\n"
-                     << subtab << "\t\t\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getWall(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
-                     << subtab << "\t\t\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getWall(j)->getPVRatio()*zones[i]->getWall(j)->getArea() << "</energy:collectorSurface>\n"
-                     << subtab << "\t\t\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
-                     << subtab << "\t\t\t\t\t<gen:value uom=\"deg\"> \n" << zones[i]->getWall(j)->getAzimuth() << "</gen:value>\n"
-                     << subtab << "\t\t\t\t</gen:measureAttribute>\n"
-                     << subtab << "\t\t\t\t<gen:measureAttribute name=\"panelInclination\">\n"
-                     << subtab << "\t\t\t\t\t<gen:value uom=\"deg\">\n" << zones[i]->getWall(j)->getAltitude() << "</gen:value>\n"
-                     << subtab << "\t\t\t\t</gen:measureAttribute>\n"
-                     << subtab << "\t\t\t\t<energy:installedOnBoundarySurface xlink:href=\"#Wall_" << zones[i]->getWall(j)->getId() << "\"/>\n"
-                     << subtab << "\t\t\t</energy:PhotovoltaicSystem>\n"
-                     << subtab << "\t\t</energy:equippedWith>\n" << flush;
-            }
             file << subtab << "\t</bldg:WallSurface>\n"
                  << subtab << "</bldg:boundedBy>" << endl;
         }
@@ -1373,22 +1405,6 @@ void Building::writeGML(ofstream& file, string tab) {
 //                 << subtab << "\t\t\t</energy:RegularTimeSeriesFile>\n"
 //                 << subtab << "\t\t</energy:globalSolarIrradiance>\n"
                  << flush;
-            // output of the PV panel
-            if (zones[i]->getRoof(j)->getPVRatio() > 0.f) {
-                file << subtab << "\t\t<energy:equippedWith>\n"
-                     << subtab << "\t\t\t<energy:PhotovoltaicSystem gml:id=\"PV_1\">\n"
-                     << subtab << "\t\t\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getRoof(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
-                     << subtab << "\t\t\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getRoof(j)->getPVRatio()*zones[i]->getRoof(j)->getArea() << "</energy:collectorSurface>\n"
-                     << subtab << "\t\t\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
-                     << subtab << "\t\t\t\t\t<gen:value uom=\"deg\"> \n" << zones[i]->getRoof(j)->getAzimuth() << "</gen:value>\n"
-                     << subtab << "\t\t\t\t</gen:measureAttribute>\n"
-                     << subtab << "\t\t\t\t<gen:measureAttribute name=\"panelInclination\">\n"
-                     << subtab << "\t\t\t\t\t<gen:value uom=\"deg\">\n" << zones[i]->getRoof(j)->getAltitude() << "</gen:value>\n"
-                     << subtab << "\t\t\t\t</gen:measureAttribute>\n"
-                     << subtab << "\t\t\t\t<energy:installedOnBoundarySurface xlink:href=\"#Roof_" << zones[i]->getRoof(j)->getId() << "\"/>\n"
-                     << subtab << "\t\t\t</energy:PhotovoltaicSystem>\n"
-                     << subtab << "\t\t</energy:equippedWith>\n" << flush;
-            }
             file << subtab << "\t</bldg:RoofSurface>\n"
                  << subtab << "</bldg:boundedBy>" << endl;
         }
@@ -1607,7 +1623,8 @@ void Building::writeGML(ofstream& file, string tab) {
     file << subtab << "</energy:usageZone>" << endl;
 
     // close the tag building
-    file << tab << "</bldg:Building>" << endl;
+    file << subtab << "\t</bldg:Building>" << endl;
+    file << tab << "</core:cityObjectMember>" << endl;
 }
 
 void Building::computeVolume() {
