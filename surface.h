@@ -369,7 +369,7 @@ public:
         file << tab << "\t\t\t\t\t<energy:OpticalProperties>" << endl;
         file << tab << "\t\t\t\t\t\t<energy:transmittance>" << endl;
         file << tab << "\t\t\t\t\t\t\t<energy:Transmittance>" << endl;
-        file << tab << "\t\t\t\t\t\t\t\t<energy:fraction uom=\"scale\">" << glazingGvalue << "</energy:fraction>" << endl;
+        file << tab << "\t\t\t\t\t\t\t\t<energy:fraction uom=\"ratio\">" << glazingGvalue << "</energy:fraction>" << endl;
         file << tab << "\t\t\t\t\t\t\t\t<energy:wavelengthRange>total</energy:wavelengthRange>" << endl;
         file << tab << "\t\t\t\t\t\t\t</energy:Transmittance>" << endl;
         file << tab << "\t\t\t\t\t\t</energy:transmittance>" << endl;

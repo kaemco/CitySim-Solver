@@ -1515,9 +1515,9 @@ void Building::writeGML(ofstream& file, string tab) {
         file << subtab << tabs(3) << "<energy:Occupants>" << endl;
         file << subtab << tabs(4) << "<energy:heatDissipation>" << endl;
         file << subtab << tabs(5) << "<energy:HeatExchangeType>" << endl;
-        file << subtab << tabs(6) << "<energy:convectiveFraction uom=\"none\">" << zones.at(i)->getOccupantsSensibleHeat()*(1.f-zones.at(i)->getOccupantsSensibleHeatRadiantFraction())/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:convectiveFraction>" << endl;
-        file << subtab << tabs(6) << "<energy:latentFraction uom=\"none\">" << zones.at(i)->getOccupantsLatentHeat()/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:latentFraction>" << endl;
-        file << subtab << tabs(6) << "<energy:radiantFraction uom=\"none\">" << zones.at(i)->getOccupantsSensibleHeat()*zones.at(i)->getOccupantsSensibleHeatRadiantFraction()/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:radiantFraction>" << endl;
+        file << subtab << tabs(6) << "<energy:convectiveFraction uom=\"ratio\">" << zones.at(i)->getOccupantsSensibleHeat()*(1.f-zones.at(i)->getOccupantsSensibleHeatRadiantFraction())/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:convectiveFraction>" << endl;
+        file << subtab << tabs(6) << "<energy:latentFraction uom=\"ratio\">" << zones.at(i)->getOccupantsLatentHeat()/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:latentFraction>" << endl;
+        file << subtab << tabs(6) << "<energy:radiantFraction uom=\"ratio\">" << zones.at(i)->getOccupantsSensibleHeat()*zones.at(i)->getOccupantsSensibleHeatRadiantFraction()/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:radiantFraction>" << endl;
         file << subtab << tabs(6) << "<energy:totalValue uom=\"W\">" << zones.at(i)->getOccupantsNumber()*(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:totalValue>" << endl;
         file << subtab << tabs(5) << "</energy:HeatExchangeType>" << endl;
         file << subtab << tabs(4) << "</energy:heatDissipation>" << endl;
