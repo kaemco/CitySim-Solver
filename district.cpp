@@ -429,16 +429,17 @@ void District::writeXML(ofstream& file, string tab){
 
 void District::writeGML(ofstream& file, string tab) {
 
+    // write the composites
+    for (map<string,Composite*>::iterator it=composites.begin();it!=composites.end();++it) {
+        file << tab << "<gml:featureMember>" << endl;
+        it->second->writeGML(file, tab+"\t");
+        file << tab << "</gml:featureMember>" << endl;
+    }
+
     // write the buildings
     for (size_t i=0; i<buildings.size(); ++i) {
         file << tab << "<core:cityObjectMember>" << endl;
         buildings[i]->writeGML(file, tab+"\t");
-        file << tab << "</core:cityObjectMember>" << endl;
-    }
-    // write the composites
-    for (map<string,Composite*>::iterator it=composites.begin();it!=composites.end();++it) {
-        file << tab << "<core:cityObjectMember>" << endl;
-        it->second->writeGML(file, tab+"\t");
         file << tab << "</core:cityObjectMember>" << endl;
     }
 }
