@@ -1521,7 +1521,7 @@ void Building::writeGML(ofstream& file, string tab) {
         file << subtab << tabs(6) << "<energy:totalValue uom=\"W\">" << zones.at(i)->getOccupantsNumber()*(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:totalValue>" << endl;
         file << subtab << tabs(5) << "</energy:HeatExchangeType>" << endl;
         file << subtab << tabs(4) << "</energy:heatDissipation>" << endl;
-        file << subtab << tabs(4) << "<energy:numberOfOccupants>" << zones.at(i)->getOccupantsNumber() << "</energy:numberOfOccupants>" << endl;
+        file << subtab << tabs(4) << "<energy:numberOfOccupants>" << round(zones.at(i)->getOccupantsNumber()) << "</energy:numberOfOccupants>" << endl;
         /* -> compute occupancyRate according to stochastic and deterministic profiles ? */
         file << subtab << tabs(4) << "<energy:occupancyRate>" << endl;
         file << subtab << tabs(5) << "<energy:TimeSeriesSchedule>" << endl;
