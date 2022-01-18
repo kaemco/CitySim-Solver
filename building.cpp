@@ -1482,7 +1482,7 @@ void Building::writeGML(ofstream& file, string tab) {
     // add the occupancy through the UsageZone
     file << subtab << "<energy:usageZone>" << endl;
     for (size_t i=0; i < zones.size(); ++i) {
-        file << subtab << tabs(1) << "<energy:UsageZone gml:id=\"ID_" << zones.at(i)->getId() << "\">" << endl;
+        file << subtab << tabs(1) << "<energy:UsageZone gml:id=\"UZ_" << zones.at(i)->getId() << "\">" << endl;
         // cooling schedule
         file << subtab << tabs(2) << "<energy:coolingSchedule>" << endl;
         file << subtab << tabs(3) << "<energy:ConstantValueSchedule>" << endl;
