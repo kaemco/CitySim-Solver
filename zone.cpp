@@ -260,7 +260,8 @@ void Zone::writeXML(ofstream& file, string tab=""){
         file << "true";
     else
         file << "false";
-    file << "\" >" << endl;
+    file << "\" nightVentilationBegin=\"" << nightVentilationBegin << "\" nightVentilationEnd=\"" << nightVentilationEnd;
+    file << "\">" << endl;
     string subtab =tab+"\t";
     file << subtab << "<Occupants n=\"" << occupantsNumber << "\" sensibleHeat=\"" << getOccupantsSensibleHeat()
                                                            << "\" sensibleHeatRadiantFraction=\"" << getOccupantsSensibleHeatRadiantFraction()
