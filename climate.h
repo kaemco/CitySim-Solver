@@ -67,6 +67,7 @@ public :
         for (map<float,vector<float> >::iterator it=Ta.begin(); it!=Ta.end();++it) {
             if (height < it->first) return it->second.at((day-1)*24 + hour -1);
         }
+        return NAN;
     }
     float getToutCelsius(int step)                              { return (step >= 0) ? Tout[step] : Tout[step + Tout.size()]; }
 
@@ -78,12 +79,14 @@ public :
         for (map<float,vector<float> >::iterator it=FF.begin(); it!=FF.end();++it) {
             if (height < it->first) return it->second.at((day-1)*24 + hour -1);
         }
+        return NAN;
     }
     float getWindDirection(unsigned int day, unsigned int hour) { return windDirection[(day-1)*24 + hour -1]; }
     float getWindDirection(unsigned int day, unsigned int hour, float height) {
         for (map<float,vector<float> >::iterator it=DD.begin(); it!=DD.end();++it) {
             if (height < it->first) return it->second.at((day-1)*24 + hour -1);
         }
+        return NAN;
     }
 
     float getRelativeHumidity(unsigned int day, unsigned int hour) { return relativeHumidity[(day-1)*24 + hour -1]/100.f; } // relative humidity \in [0,1]

@@ -262,9 +262,9 @@ void Zone::writeXML(ofstream& file, string tab=""){
         file << "false";
     file << "\" >" << endl;
     string subtab =tab+"\t";
-    file << subtab << "<Occupants n=\"" << occupantsNumber << "\" d=\"";
-    if(getFloorArea() > 0.f) file << occupantsNumber/getFloorArea();
-    else file << 0;
+    file << subtab << "<Occupants n=\"" << occupantsNumber << "\" sensibleHeat=\"" << getOccupantsSensibleHeat()
+                                                           << "\" sensibleHeatRadiantFraction=\"" << getOccupantsSensibleHeatRadiantFraction()
+                                                           << "\" latentHeat=\"" << getOccupantsLatentHeat();
     file << "\" type=\"" << occupantsYearProfile->getId() << "\"";
     if (activityType != numeric_limits<unsigned int>::signaling_NaN()) file << " activityType=\"" << activityType << "\"";
     file << " DHWType=\"" << getDHWYearProfile()->getId() << "\"";

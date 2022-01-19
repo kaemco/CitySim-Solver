@@ -1691,6 +1691,15 @@ void XmlScene::readClimate(string fileName){
 
 XmlScene::~XmlScene() {
 
+#ifdef DEBUG
+    fstream output_IAM("iam_scene.txt", ios::out | ios::trunc);
+    output_IAM << ss_IAM.rdbuf();
+    output_IAM.close();
+    fstream output_IAM_irradiance("iam_scene_irradiance.txt", ios::out | ios::trunc);
+    output_IAM_irradiance << ss_IAM_irradiance.rdbuf();
+    output_IAM_irradiance.close();
+#endif // DEBUG
+
     //logStream << "Destructor of XmlScene." << endl << flush;
     delete pDistrict;
 
@@ -2671,10 +2680,16 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
                         irradiationDiffuseSky[surfaceIndex] += factors->unobstructed * lv[factors->patchNo];
 #ifdef DEBUG
                         if (((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()) {
-                            float theta = acos(GEN::dot_product(scene.GetSurface(surfaceIndex).Normal(),tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal())));
-                            stringstream ss; // cout is thread-safe but multiple << are considered as multiple functions
-                            ss << "Surface: " << surfaceIndex << " elevation: " << 90.f-scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << " SKY patch: " << factors->patchNo << " Theta: " << theta*180./M_PI << endl;
-                            //cout << ss.str();
+                            float theta = acos(cosAngleBetween(scene.GetSurface(surfaceIndex).Normal(),tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal())));
+                            ss_IAM << day << "\t" << hour << "\t" << surfaceIndex << "\t"
+                                   << scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << "\t"
+                                   << scene.GetSurface(surfaceIndex).Normal().Azimuth().degrees() << "\t"
+                                   << "SKY\t" << factors->patchNo + 1 << "\t"
+                                   << tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal()).Altitude().degrees() << "\t"
+                                   << tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal()).Azimuth().degrees() << "\t"
+                                   << theta*180./M_PI << "\t"
+                                   << factors->unobstructed * lv[factors->patchNo] << "\t"
+                                   << ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta) << endl;
                             irradiationSW_IAM[surfaceIndex] += factors->unobstructed * lv[factors->patchNo] * ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta);
                         }
 #endif
@@ -2682,10 +2697,16 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
 #ifdef DEBUG
                     else if (((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()) {
                         // diffuse part ground
-                        float theta = acos(GEN::dot_product(scene.GetSurface(surfaceIndex).Normal(),tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal())));
-                        stringstream ss; // cout is thread-safe but multiple << are considered as multiple functions
-                        ss << "Surface: " << surfaceIndex << " elevation: " << 90.f-scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << " GROUND patch: " << factors->patchNo << " Theta: " << theta*180./M_PI << endl;
-                        //cout << ss.str();
+                        float theta = acos(cosAngleBetween(scene.GetSurface(surfaceIndex).Normal(),tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal())));
+                        ss_IAM << day << "\t" << hour << "\t" << surfaceIndex << "\t"
+                        << scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << "\t"
+                        << scene.GetSurface(surfaceIndex).Normal().Azimuth().degrees() << "\t"
+                        << "GROUND\t" << factors->patchNo + 1 << "\t"
+                        << tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal()).Altitude().degrees() << "\t"
+                        << tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal()).Azimuth().degrees() << "\t"
+                        << theta*180./M_PI << "\t"
+                        << factors->unobstructed * groundRadiance << "\t"
+                        << ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta) << endl;
                         irradiationSW_IAM[surfaceIndex] += factors->unobstructed * groundRadiance * ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta);
                     }
 #endif
@@ -2696,16 +2717,22 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
             irradiationDiffuseGround[surfaceIndex] += ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getProjectedSolidAngle_ground() * groundRadiance;
             // direct part
             if (sunVisibleFarField(pSun->GetPosition().Azimuth().degrees(), pSun->GetPosition().Altitude().degrees()) && Ibn > 0.f) {
-                double cosTheta = GEN::dot_product(scene.GetSurface(surfaceIndex).Normal(),pSun->GetPosition());
+                double cosTheta = cosAngleBetween(scene.GetSurface(surfaceIndex).Normal(),pSun->GetPosition());
                 if (cosTheta > 0.) {
                     irradiationSW[surfaceIndex] += scene.GetSurface(surfaceIndex).InsolationFactors().GetInsolationFactor(*pSun) * Ibn * cosTheta; // fraction of the surface that is light by the sun
                     irradiationBeam[surfaceIndex] = scene.GetSurface(surfaceIndex).InsolationFactors().GetInsolationFactor(*pSun) * Ibn * cosTheta; // fraction of the surface that is light by the sun
 #ifdef DEBUG
                     if (((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()) {
                         float theta = acos(cosTheta);
-                        stringstream ss; // cout is thread-safe but multiple << are considered as multiple functions
-                        ss << "Surface: " << surfaceIndex << " elevation: " << 90.f-scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << " SUN Theta: " << theta*180./M_PI << endl;
-                        //cout << ss.str();
+                        ss_IAM << day << "\t" << hour << "\t" << surfaceIndex << "\t"
+                        << scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << "\t"
+                        << scene.GetSurface(surfaceIndex).Normal().Azimuth().degrees() << "\t"
+                        << "SUN\t" << "0" << "\t"
+                        << pSun->GetPosition().Altitude().degrees() << "\t"
+                        << pSun->GetPosition().Azimuth().degrees() << "\t"
+                        << theta*180./M_PI << "\t"
+                        << scene.GetSurface(surfaceIndex).InsolationFactors().GetInsolationFactor(*pSun) * Ibn * cosTheta << "\t"
+                        << ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta) << endl;
                         irradiationSW_IAM[surfaceIndex] += scene.GetSurface(surfaceIndex).InsolationFactors().GetInsolationFactor(*pSun) * Ibn * cosTheta
                                                            * ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta);
                     }
@@ -2766,9 +2793,10 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
         if (((Surface*)(scene.GetSurface(scene.SurfaceCount()-distance(it,scene.GetAllSurfaces().end())).SurfaceDelegate()))->getPVPanel()) {
             ((Surface*)(it->SurfaceDelegate()))->setShortWaveIrradiance_IAM(irradiationSW_IAM[scene.SurfaceCount()-distance(it,scene.GetAllSurfaces().end())]);
 #ifdef DEBUG
-            /*cout << "Surface: " << scene.SurfaceCount()-distance(it,scene.GetAllSurfaces().end())
-                 << " - Irradiance: " << irradiationSWn[scene.SurfaceCount()-distance(it,scene.GetAllSurfaces().end())]
-                 << " - Irradiance IAM: " << irradiationSW_IAM[scene.SurfaceCount()-distance(it,scene.GetAllSurfaces().end())] << endl;*/
+        ss_IAM_irradiance << day << "\t" << hour << "\t"
+                          << scene.SurfaceCount()-distance(it,scene.GetAllSurfaces().end()) << "\t"
+                          << irradiationSWn[scene.SurfaceCount()-distance(it,scene.GetAllSurfaces().end())] << "\t"
+                          << irradiationSW_IAM[scene.SurfaceCount()-distance(it,scene.GetAllSurfaces().end())] << endl;
 #endif
         }
     }
@@ -3719,7 +3747,7 @@ void XmlScene::eraseResults(unsigned int keepValue, bool eraseAllResults) {
                 pDistrict->getBuilding(j)->getZone(zone)->eraseHVACMassFlowRateAvailable(keepValue);
             }
             pDistrict->getBuilding(j)->getZone(zone)->eraseQi(keepValue);
-            pDistrict->getBuilding(j)->getZone(zone)->eraseQs(keepValue);
+            pDistrict->getBuilding(j)->getZone(zone)->eraseQs(eraseAllResults); // never keep a value in the vector
             pDistrict->getBuilding(j)->getZone(zone)->eraseVdotVent(keepValue);
 
 
@@ -3905,15 +3933,18 @@ void XmlScene::writeSWHeaderText(string fileOut) {
         for (unsigned int zone=0; zone<pDistrict->getBuilding(j)->getnZones();++zone) {
             // loop on the walls, added the id of the surface
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnWalls(); ++k) {
-                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getId() << "\t";
+                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" <<
+                            pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getKey() << "):Irradiance(W/m2)" << "\t";
             }
             // loop on the roofs
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnRoofs(); ++k) {
-                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getId() << "\t";
+                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" <<
+                            pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getKey() << "):Irradiance(W/m2)" << "\t";
             }
             // loop on the obstructing surfaces
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnSurfaces(); ++k) {
-                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getSurface(k)->getId() << "\t";
+                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" <<
+                            pDistrict->getBuilding(j)->getZone(zone)->getSurface(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getSurface(k)->getKey() << "):Irradiance(W/m2)" << "\t";
             }
         } // end the loop on zones
     }
@@ -3921,15 +3952,16 @@ void XmlScene::writeSWHeaderText(string fileOut) {
     // loop on the tree surfaces in the district itself
     for (size_t j=0; j<pDistrict->getnTrees(); ++j)
         for (size_t k=0;k<pDistrict->getTree(j)->getnSurfaces();++k)
-            textFile << pDistrict->getTree(j)->getId() << "(" << pDistrict->getTree(j)->getKey() << "):" << pDistrict->getTree(j)->getSurface(k)->getId() << "\t";
+            textFile << pDistrict->getTree(j)->getId() << "(" << pDistrict->getTree(j)->getKey() << "):" <<
+                        pDistrict->getTree(j)->getSurface(k)->getId() << "(" << pDistrict->getTree(j)->getSurface(k)->getKey() << "):Irradiance(W/m2)" << "\t";
 
     // loop on the obstructing surfaces in the district itself
     for (unsigned int j=0; j<pDistrict->getnSurfaces(); ++j)
-        textFile << "NA(NA):" << pDistrict->getSurface(j)->getId() << "\t";
+        textFile << "NA(NA):" << pDistrict->getSurface(j)->getId() << "(" << pDistrict->getSurface(j)->getKey() << "):Irradiance(W/m2)" << "\t";
 
     // loop on the obstructing surfaces in the district itself
     for (forward_list<Ground*>::iterator it=pDistrict->getGrounds()->begin();it!=pDistrict->getGrounds()->end();++it)
-        textFile << "NA(NA):" << (*it)->getId() << "\t";
+        textFile << "NA(NA):" << (*it)->getId() << "(" << (*it)->getKey() << "):Irradiance(W/m2)" << "\t";
 
     textFile << endl;
     textFile.close();
@@ -4340,7 +4372,7 @@ void XmlScene::writeTHResultsText(string fileOut) {
                             << fixed << setprecision(1) << pDistrict->getBuilding(j)->getZone(k)->getHVACMassFlowRateAvailable(i) << "\t";
                 }
                 textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getQi(i) << "\t";
-                textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getQs(i) << "\t";
+                textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getQs(i-preTimeStepsSimulated) << "\t";
                 textFile << fixed << setprecision(1) << 3600.f*pDistrict->getBuilding(j)->getZone(k)->getVdotVent(i) << "\t";
             }
             textFile << fixed << setprecision(1) << pDistrict->getBuilding(j)->getHeatStockTemperature(i) << "\t";
@@ -5017,6 +5049,11 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     // MRT indicator
     float mrt = 0.f, MRTcount=0.f;
     float MRT, COMFA, ITS, COMFAcount=0.f, ITScount=0.f;
+    // KPI
+    float totalThermalLoss = 0.f;
+    float totalHeatingUnsatisfied = 0.f;
+    float totalCoolingUnsatisfied = 0.f;
+    float electricPump = 0.f;
 
     // loop on the number of buildings
     for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
@@ -5053,6 +5090,17 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
 
             }
         }
+        // KPI
+        totalHeatingUnsatisfied += pDistrict->getBuilding(j)->getHeatingDemandUnsatisfied();
+        totalCoolingUnsatisfied += pDistrict->getBuilding(j)->getCoolingDemandUnsatisfied();
+    }
+
+    //Added by Max
+    for(size_t i(0); i < pDistrict->getnDECs(); ++i){
+        totalThermalLoss += pDistrict->getDEC(i)->getYearlyTotalThermalLoss();
+        for(size_t j(0); j < pDistrict->getDEC(i)->getnThermalStations(); ++j){
+           electricPump += pDistrict->getDEC(i)->getThermalStation(j)->getTotalPumpPower();
+        }
     }
 
     textFile << "#Total yearly energy demand & supply\n";
@@ -5060,14 +5108,18 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     textFile << "Cooling (Wh):\t" << cooling << "\n";
     textFile << "DHW (J):\t" << dhw << "\n";
     textFile << "Fuel (J):\t" << fuel << "\n";
-    textFile << "Electric Consumption (J):\t" << electric << "\n";
-    textFile << "Electric PV Production(J):\t" << pv << endl;
+    textFile << "ElectricConsumption (J):\t" << electric << "\n";
+    textFile << "ElectricPVProduction (J):\t" << pv << endl;
+    textFile << "HeatingUnsatisfied (Wh):\t" << totalHeatingUnsatisfied << endl; //Added by Max
+    textFile << "CoolingUnsatisfied (Wh):\t" << totalCoolingUnsatisfied << endl; //Added by Max
     textFile << "NRE (MJ):\t" << nre << "\n";
     textFile << "GWP (kgCO2):\t" << gwp << "\n";
     textFile << "UBP (pts):\t" << ubp << endl;
     textFile << "MRT (°C):\t" << mrt/MRTcount << endl;
     textFile << "ITS (h):\t" << ITScount << endl;
     textFile << "COMFA (h):\t" << COMFAcount << endl;
+    textFile << "DHNTotalThermalLosses (Wh):\t" << totalThermalLoss << endl; //Added by Max
+    textFile << "DHNElectricPump (J):\t" << electricPump << endl; //Added by Max
 
 // Cognet: Deleted it, to put back, need to change how Fuel and ElectricConsumption are saved.
 //    //beginning of contents added by Dapeng
