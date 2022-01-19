@@ -1468,6 +1468,7 @@ void Building::writeGML(ofstream& file, string tab) {
     file << subtab << "<energy:thermalZone>" << endl;
     for (size_t i=0; i < zones.size(); ++i) {
         file << subtab << "\t<energy:ThermalZone gml:id=\"TZ_" << zones.at(i)->getId() << "\">" << endl;
+        file << subtab << "\t\t<energy:contains xlink:href=\"#UZ_" << zones.at(i)->getId() << "\">" << endl;
         file << subtab << "\t\t<energy:additionalThermalBridgeUValue uom=\"W/(m2K)\">" << zones.at(i)->getKpsi()/(zones.at(i)->getSwi()+zones.at(i)->getWallArea()+zones.at(i)->getRoofArea()+zones.at(i)->getFloorArea()) << "</energy:additionalThermalBridgeUValue>" << endl;
         file << subtab << "\t\t<energy:infiltrationRate uom=\"1/h\">" << zones.at(i)->getNinf() << "</energy:infiltrationRate>" << endl;
         file << subtab << "\t\t<energy:isCooled>" << (this->getCoolingUnit()?"true":"false") << "</energy:isCooled>" << endl;
