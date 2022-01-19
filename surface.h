@@ -84,8 +84,10 @@ public:
         file << tab << tabs(6) << "<energy:conductivity uom=\"W/(mK)\">" << kw << "</energy:conductivity>" << endl;
         file << tab << tabs(6) << "<energy:density uom=\"kg/m3\">" << rho << "</energy:density>" << endl;
         file << tab << tabs(6) << "<energy:specificHeat uom=\"J/(kgK)\">" << Cp << "</energy:specificHeat>" << endl;
-        file << tab << tabs(6) << "<energy:embodiedCarbon uom=\"kgCO2/kg\">" << gwp << "</energy:embodiedCarbon>" << endl;
-        file << tab << tabs(6) << "<energy:embodiedEnergy uom=\"MJ/kg\">" << nre << "</energy:embodiedEnergy>" << endl;
+        if (gwp > 0.)
+            file << tab << tabs(6) << "<energy:embodiedCarbon uom=\"kgCO2/kg\">" << gwp << "</energy:embodiedCarbon>" << endl;
+        if (nre > 0.)
+            file << tab << tabs(6) << "<energy:embodiedEnergy uom=\"MJ/kg\">" << nre << "</energy:embodiedEnergy>" << endl;
         file << tab << tabs(5) << "</energy:SolidMaterial>" << endl;
         file << tab << tabs(4) << "</energy:material>" << endl;
         file << tab << tabs(3) << "</energy:LayerComponent>" << endl;
