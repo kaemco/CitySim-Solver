@@ -8,7 +8,7 @@
 // *** Occupants class, CitySim  *** //
 // *** jerome.kaempf@epfl.ch     *** //
 
-DayProfile OccupancyProfiles::emptyDay(0,"empty day profile",vector<float>(365,0));
+DayProfile OccupancyProfiles::emptyDay(0,"empty day profile",vector<float>(24,0));
 YearProfile OccupancyProfiles::emptyYear = YearProfile(0,"empty year profile",vector<DayProfile*>(365,&OccupancyProfiles::emptyDay));
 
 StochasticOccupantsPresence::StochasticOccupantsPresence(float occupantsNumber, StochasticPresenceParameters *presParam, StochasticWindowParameters *winParam, StochasticBlindsParameters *blindsParam, StochasticLightsParameters *lightsParam) : Occupants(occupantsNumber)

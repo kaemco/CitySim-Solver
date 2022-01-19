@@ -14,7 +14,7 @@
 				<Option deps_output="C:/Documents and Settings/cgiller/Bureau/SVN/Dtool/.deps" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters='&quot;C:\Users\kaempf\SWITCHdrive\Simulations\Marta\CROCETTA(o.p.).xml&quot;' />
+				<Option parameters='&quot;C:\src\CitySim\Solver\bin\Hassan\0- House-basecase-adaptation.xml&quot;' />
 				<Option projectResourceIncludeDirsRelation="1" />
 				<Compiler>
 					<Add option="-Wfatal-errors" />
@@ -36,10 +36,9 @@
 				<Option deps_output="C:/Documents and Settings/cgiller/Bureau/SVN/Dtool/.deps" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters='&quot;C:\Users\kaempf\Desktop\CityGML\nord.xml&quot;' />
+				<Option parameters='&quot;C:\src\CitySim\Solver\bin\Hassan\0- House-basecase-adaptation.xml&quot;' />
 				<Option projectResourceIncludeDirsRelation="1" />
 				<Compiler>
-					<Add option="-march=core2" />
 					<Add option="-O2" />
 					<Add option="-fopenmp" />
 				</Compiler>

@@ -359,14 +359,19 @@ void Model::ThermalStepImplicitTemperature(Building *pBuilding, Climate* pClimat
             float VdotVent = Model::ventilationFlowRate(pBuilding->getZone(i)->getTaForeseen()+273.15f, pClimate->getToutCelsius(day,hour)+273.15f, pClimate->getWindSpeed(day,hour), pBuilding->getZone(i)->getSwiO());
             //cerr << "timeStep: " << ((day-1)*24 + hour -1) << ", day: " << day << ", hour: " << hour << "\tTi: " << pBuilding->getZone(i)->getTaForeseen() << "\tTout: " << Tout << "\tVdotVent: " << VdotVent << endl;
 
-            float depletionTime = 0.f;
+            float depletionTime = static_cast<float>(Model::dt); // by default natural ventilation is happening during the whole time step
             if (VdotVent > 0.f) {
-                // linear approximation
-                //depletionTime = (pBuilding->getZone(i)->getVi()/VdotVent)*((pBuilding->getZone(i)->getTaForeseen()-max(pBuilding->getTmin(),Tout+temperaturePrecision))/(pBuilding->getZone(i)->getTaForeseen()-Tout));
-                // log approximation
-                depletionTime = (pBuilding->getZone(i)->getVi()/VdotVent)*log((Tout-pBuilding->getZone(i)->getTaForeseen())/(Tout-max(pBuilding->getZone(i)->getTmin(),Tout+temperaturePrecision)));
-                //cerr << "depletion time: " << depletionTime << endl;
-                depletionTime = min(depletionTime,(float)(Model::dt));
+                if (!(hour >= pBuilding->getZone(i)->getNightVentilationBegin() && (hour < pBuilding->getZone(i)->getNightVentilationEnd())
+                    || ((pBuilding->getZone(i)->getNightVentilationEnd() < pBuilding->getZone(i)->getNightVentilationBegin())
+                        && (hour >= pBuilding->getZone(i)->getNightVentilationBegin() || hour < pBuilding->getZone(i)->getNightVentilationEnd()))))
+                    {
+                    // linear approximation
+                    //depletionTime = (pBuilding->getZone(i)->getVi()/VdotVent)*((pBuilding->getZone(i)->getTaForeseen()-max(pBuilding->getTmin(),Tout+temperaturePrecision))/(pBuilding->getZone(i)->getTaForeseen()-Tout));
+                    // log approximation
+                    depletionTime = (pBuilding->getZone(i)->getVi()/VdotVent)*log((Tout-pBuilding->getZone(i)->getTaForeseen())/(Tout-max(pBuilding->getZone(i)->getTmin(),Tout+temperaturePrecision)));
+                    //cerr << "depletion time: " << depletionTime << endl;
+                    depletionTime = min(depletionTime,static_cast<float>(Model::dt));
+                }
             }
             //cerr << "time (s): " << depletionTime << "\tratio: " << depletionTime/(float)(Model::dt) << "\tVdotVent\': " << (depletionTime/(float)(Model::dt))*VdotVent << endl;
             pBuilding->getZone(i)->setVdotVent((depletionTime/(float)(Model::dt))*VdotVent);

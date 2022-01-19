@@ -906,6 +906,14 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
             }
             else zones.back()->setTmax(to<float>(hdl.ToElement()->Attribute("Tmax")));
 
+            // adds the night ventilation
+            if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("nightVentilationBegin")) {
+                zones.back()->setNightVentilationBegin(to<unsigned int>(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("nightVentilationBegin")));
+            }
+            if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("nightVentilationEnd")) {
+                zones.back()->setNightVentilationEnd(to<unsigned int>(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("nightVentilationEnd")));
+            }
+
             // adds the ep_id if it exists
             if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("ep_id")) {
                     zones.back()->setEp_id(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("ep_id"));
