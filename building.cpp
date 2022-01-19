@@ -1199,8 +1199,11 @@ void Building::writeGML(ofstream& file, string tab) {
                         file << "Wall_" << zones[i]->getWall(j)->getId() << "\">" << endl;
                     else
                         file << zones[i]->getWall(j)->getKey() << "\">" << endl;
-                file << tab << "\t\t<energy:installedIn xlink:href=\"#Bldg-" << id << "\"/>\n"
-                     << tab << "\t\t<energy:cellType>monocrystalline</energy:cellType>\n"
+                    if (key.empty())
+                        file << tab << "\t\t<energy:installedIn xlink:href=\"#Bldg-" << id << "\"/>"  << endl;
+                    else
+                        file << tab << "\t\t<energy:installedIn xlink:href=\"#" << key << "\"/>"  << endl;
+                file << tab << "\t\t<energy:cellType>monocrystalline</energy:cellType>\n"
                      << tab << "\t</energy:PhotovoltaicSystem>\n"
                      << tab << "</core:cityObjectMember>\n" << flush;
             }
@@ -1222,8 +1225,11 @@ void Building::writeGML(ofstream& file, string tab) {
                         file << "Roof_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
                     else
                         file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
-                file << tab << "\t\t<energy:installedIn xlink:href=\"#Bldg-" << id << "\"/>\n"
-                     << tab << "\t\t<energy:cellType>monocrystalline</energy:cellType>\n"
+                    if (key.empty())
+                        file << tab << "\t\t<energy:installedIn xlink:href=\"#Bldg-" << id << "\"/>"  << endl;
+                    else
+                        file << tab << "\t\t<energy:installedIn xlink:href=\"#" << key << "\"/>"  << endl;
+                file << tab << "\t\t<energy:cellType>monocrystalline</energy:cellType>\n"
                      << tab << "\t</energy:PhotovoltaicSystem>\n"
                      << tab << "</core:cityObjectMember>\n" << flush;
             }
