@@ -845,7 +845,7 @@ protected:
 public:
     static Substation* createNewSubstation(TiXmlHandle hdl,  Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
     Substation(TiXmlHandle hdl,  Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
-    virtual ~Substation() { delete valve; logStream << "Destructor of Substation" << endl; }
+    virtual ~Substation() { delete valve; /*logStream << "Destructor of Substation" << endl;*/ }
 
     void writeXML(ofstream& file, string tab){ file << tab << "Substation saving not supported yet" << endl; }
     string getLabel() { return "Substation"; }
@@ -991,7 +991,7 @@ private:
     HeatPump* heatPump;
 public:
     SubstationHeatPump(TiXmlHandle hdl, Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
-    virtual ~SubstationHeatPump() { logStream << "Destructor of SubstationHP" << endl; }
+    virtual ~SubstationHeatPump() { /*logStream << "Destructor of SubstationHP" << endl;*/ }
     void writeXML(ofstream& file, string tab) override{ file << tab << "SubstationHeatPump saving not supported yet" << endl; }
     string getLabel() override{ return "SubstationHeatPump"; }
     virtual double getThermalPower(double sourceTemp) override;
@@ -1260,7 +1260,7 @@ public:
     static ThermalStation* createNewThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr);
 
     ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr);
-    virtual ~ThermalStation() { ThermalStation::deleteDynAllocated(); }
+    virtual ~ThermalStation() { deleteDynAllocated(); }
 
     EnergyConversionSystem* getEcs() { return ecs; }
     float getThermalPowerProvided() { return thermalPowerProvided; }
@@ -1303,7 +1303,6 @@ public:
 class ThermalStationMaster: public ThermalStation{ // One thermal station to rule them all.
 public:
     ThermalStationMaster(TiXmlHandle hdl, Network* net, ostream* pLogStr):ThermalStation(hdl,net,pLogStr){}
-    virtual ~ThermalStationMaster() { ThermalStationMaster::deleteDynAllocated(); }
     bool getMaster(){return true;}
 };
 
@@ -1325,7 +1324,6 @@ private:
 
 public:
     ThermalStationSlave(TiXmlHandle hdl, Network* net, ostream* pLogStr);
-    virtual ~ThermalStationSlave() { ThermalStationSlave::deleteDynAllocated(); }
     void computePressureDiff(float const& massFlow, float const& rho, float& deltaP, float& dDeltaP_dm);
     void setDesiredMassFlow(float rho, float cp, double sourceTemp, Climate* pClimate, unsigned int day, unsigned int hour);
     void updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate);
@@ -1356,27 +1354,27 @@ private:
 
 public:
     SeasonalStorageHeatingThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr);
-    virtual ~SeasonalStorageHeatingThermalStation() { SeasonalStorageHeatingThermalStation::deleteDynAllocated(); }
+    ~SeasonalStorageHeatingThermalStation() { deleteDynAllocated(); }
 
-    virtual void computePressureDiff(float const& massFlow, float const& rho, float& deltaP, float& dDeltaP_dm) override;
+    void computePressureDiff(float const& massFlow, float const& rho, float& deltaP, float& dDeltaP_dm) override;
 
-    virtual void updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate) override;
+    void updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate) override;
 
-    virtual void computeThermal(float pressureDiff, float massFlow, float rho, float cp, float inputTemp, Climate *pClimate, unsigned int day, unsigned int hour);
+    void computeThermal(float pressureDiff, float massFlow, float rho, float cp, float inputTemp, Climate *pClimate, unsigned int day, unsigned int hour);
 
-    virtual void updateOperationMode(float const& sumSubstationDesiredMassFlow, size_t const& nbThermalStations) override;
+    void updateOperationMode(float const& sumSubstationDesiredMassFlow, size_t const& nbThermalStations) override;
 
     void confirmStorage(float const& massFlow, float const& cp) { storage->confirmStoredHeat(tempDiffAroundStorage, abs(massFlow), cp); }
 
-    virtual void errorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& absErr, float& sumErrP, float& sumDesiredP) override;
+    void errorPressureDiff(float const& massFlow, float const& pressureDiff, float& relErr, float& absErr, float& sumErrP, float& sumDesiredP) override;
 
-    virtual void writeTHHeaderText(fstream& textFile, string prefix) override;
-    virtual void writeTHResultsText(fstream& textFile, unsigned int i) override;
+    void writeTHHeaderText(fstream& textFile, string prefix) override;
+    void writeTHResultsText(fstream& textFile, unsigned int i) override;
 
 
-    virtual void recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour, float const& massFlow, float const& cp) override { ThermalStation::recordTimeStep(pClim, day, hour, massFlow, cp);  confirmStorage(massFlow, cp); storage->recordTimeStep(); }
-    virtual void eraseRecords(unsigned int keepValue) override { ThermalStation::eraseRecords(keepValue); storage->eraseRecords(keepValue); }
-    virtual void eraseRecords_back() override { ThermalStation::eraseRecords_back(); storage->eraseRecords_back(); }
+    void recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour, float const& massFlow, float const& cp) override { ThermalStation::recordTimeStep(pClim, day, hour, massFlow, cp);  confirmStorage(massFlow, cp); storage->recordTimeStep(); }
+    void eraseRecords(unsigned int keepValue) override { ThermalStation::eraseRecords(keepValue); storage->eraseRecords(keepValue); }
+    void eraseRecords_back() override { ThermalStation::eraseRecords_back(); storage->eraseRecords_back(); }
 };
 
 
@@ -1809,8 +1807,7 @@ public:
     ostream logStream;
 
     Network(TiXmlHandle hdl, DistrictEnergyCenter *pDEC, ostream *pLogStr);
-
-    ~Network();
+    ~Network() { /*logStream << "Destructor of Network" << endl;*/ deleteNodesAndPipes(); }
 
     float getSoilkValue() { return soilkValue; }
 
@@ -1914,7 +1911,7 @@ public:
     ostream logStream;
 
     DistrictEnergyCenter(TiXmlHandle hdl, District* pDistrict, ostream *pLogStr);
-    ~DistrictEnergyCenter();
+    ~DistrictEnergyCenter() { /*logStream << "Destructor of DistrictEnergyCenter" << endl;*/ deleteDynAllocated(); }
     void deleteDynAllocated();
 
     District* getDistrict() {return pDistrict;}

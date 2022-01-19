@@ -1,46 +1,67 @@
 CXX		= g++
-CXXFLAGS	= -fopenmp -march=native -O2 -DTIXML_USE_STL
-LD		= g++
-LDFLAGS		= -fopenmp
-LIBRARIES	= -lglu32
-INCLUDES	= -I./NR -I./Sky -I./Tinyxml -I./VFCLibrary
+F95		= gfortran
+CXXFLAGS	= -std=c++11 -O2 -fopenmp -fPIC -DTIXML_USE_STL
+LDFLAGS		= -lGLU32 -lgfortran -lquadmath -fopenmp
+CXXFLAGS_D	= -std=c++11 -g -DDEBUG -DTIXML_USE_STL
+LDFLAGS_D	= -lGLU32 -lgfortran -lquadmath
+INCLUDES	= -I./Sky -I./Tinyxml -I./VFCLibrary
 DEFINES		=
+AR		= ar
 EXEC		= CitySim
-LIB			= lib$(EXEC).dll
+EXEC_D		= CitySimd
+LIB		= lib$(EXEC).dll
 
-MAINSRC		= building.cpp district.cpp models.cpp plant.cpp scene.cpp zone.cpp climate.cpp occupants.cpp result.cpp util.cpp
-NRSRC		= $(wildcard ./NR/*.cpp)
+MAINSRC		= building.cpp district.cpp models.cpp plant.cpp scene.cpp zone.cpp climate.cpp occupants.cpp result.cpp util.cpp surface.cpp
+LAPACKSRC	= $(wildcard ./LAPACK/*.f)
 SKYSRC		= $(wildcard ./Sky/*.cpp)
 TINYXMLSRC	= $(wildcard ./Tinyxml/*.cpp)
 VFCLIBRARYSRC	= $(wildcard ./VFCLibrary/*.cpp)
+
 MAINOBJ		= $(patsubst %.cpp, %.o, $(MAINSRC))
-NROBJ		= $(patsubst %.cpp, %.o, $(NRSRC))
+LAPACKOBJ	= $(patsubst %.f, %.o, $(LAPACKSRC))
 SKYOBJ		= $(patsubst %.cpp, %.o, $(SKYSRC))
 TINYXMLOBJ	= $(patsubst %.cpp, %.o, $(TINYXMLSRC))
 VFCLIBRARYOBJ	= $(patsubst %.cpp, %.o, $(VFCLIBRARYSRC))
 
-all: $(EXEC) $(LIB)
+MAINOBJ_D	= $(patsubst %.cpp, %d.o, $(MAINSRC))
+LAPACKOBJ_D	= $(patsubst %.f, %d.o, $(LAPACKSRC))
+SKYOBJ_D	= $(patsubst %.cpp, %d.o, $(SKYSRC))
+TINYXMLOBJ_D	= $(patsubst %.cpp, %d.o, $(TINYXMLSRC))
+VFCLIBRARYOBJ_D	= $(patsubst %.cpp, %d.o, $(VFCLIBRARYSRC))
 
-$(EXEC): main.o $(MAINOBJ) $(NROBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
-	$(LD) -static $(LDFLAGS) -o $@ $^ $(LIBRARIES)
+all: $(EXEC) $(EXEC_D) $(LIB)
 
-$(LIB): $(MAINOBJ) $(NROBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
-	$(CXX) -shared $(LDFLAGS) -o $@ $^ $(LIBRARIES)
+$(EXEC): main.o $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+	move $(EXEC).exe ./bin
 
-fromLib: $(LIB)
-	$(CXX) $(INCLUDES) $(LDFLAGS) -Wl,--enable-auto-import -o $(EXEC) main.cpp -L. -lCitySim $(LIBRARIES)
+$(EXEC_D): maind.o $(MAINOBJ_D) $(LAPACKOBJ_D) $(SKYOBJ_D) $(TINYXMLOBJ_D) $(VFCLIBRARYOBJ_D)
+	$(CXX) -o $@ $^ $(LDFLAGS_D)
+	move $(EXEC_D).exe ./bin
+
+$(LIB): $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
+	$(AR) rcs $@ $^
+	move $(LIB) ./lib/CitySim 
+	xcopy .\\*.h .\\lib\\CitySim /y
+	xcopy .\\Sky\\*.h .\\lib\\CitySim /y
+	xcopy .\\Tinyxml\\*.h .\\lib\\CitySim /y
+	xcopy .\\VFCLibrary\\*.h .\\lib\\CitySim /y
+	xcopy .\\VFCLibrary\\*.inl .\\lib\\CitySim /y
+	xcopy main.cpp .\\lib\\CitySim /y
+	@echo all: main.cpp $(LIB) > ./lib/CitySim/Makefile
+	@echo 	$(CXX) $(CXXFLAGS) -L. main.cpp -l$(EXEC) $(LDFLAGS) -o $(EXEC) >> ./lib/CitySim/Makefile
 
 %.o: %.cpp
 	$(CXX) $(INCLUDES) $(DEFINES) $(CXXFLAGS) -c $< -o $*.o
 
-clean:
-	erase *.o
+%.o: %.f
+	$(F95) -c -O2 $< -o $*.o
 
-	erase .\NR\*.o
+%d.o: %.cpp
+	$(CXX) $(INCLUDES) $(DEFINES) $(CXXFLAGS_D) -c $< -o $*d.o
 
-	erase .\Sky\*.o
+%d.o: %.f
+	$(F95) -c -g $< -o $*d.o
 
-	erase .\Tinyxml\*.o
-
-	erase .\VFCLibrary\*.o
-
+clean: 
+	del /f /s *.o

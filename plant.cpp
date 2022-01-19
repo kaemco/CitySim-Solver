@@ -3596,11 +3596,6 @@ void DistrictEnergyCenter::deleteDynAllocated() {
     if (pipelineNetwork!=nullptr) { delete pipelineNetwork; }
 }
 
-DistrictEnergyCenter::~DistrictEnergyCenter() {
-    logStream << "Destructor of DistrictEnergyCenter" << endl;
-    deleteDynAllocated();
-}
-
 double DistrictEnergyCenter::getMu(double temp) {
     float mu_ = 0.0004; // JK - added default value to 0.0004
     if (mu==muPossibilities[0]){ mu_ = 0.0004; }
@@ -3753,13 +3748,6 @@ Network::Network(TiXmlHandle hdl, DistrictEnergyCenter *pDEC, ostream *pLogStr) 
         // should it throw error ?
     }
 }
-
-
-Network::~Network() {
-    logStream << "Destructor of Network" << endl;
-    deleteNodesAndPipes();
-}
-
 
 void Network::writeTHHeaderText(fstream& textFile) {
     unsigned int decId = pDEC->getId();

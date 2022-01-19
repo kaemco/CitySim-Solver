@@ -42,6 +42,8 @@ private:
     // for the stochastic model
     vector<float> lumint;
 
+    unsigned int nightVentilationBegin = 0, nightVentilationEnd = 0; //!< Night ventilation timings during the day
+
 //  vector<double> windowAirExchangeRate;
 //
 //  vector<int> vPresence;
@@ -249,6 +251,11 @@ public:
     float getVdotVent(unsigned int step) { if (VdotVent.empty()) return 0.f; else return VdotVent.at(step); }
     void eraseVdotVent(unsigned int keepValue) { VdotVent.erase(VdotVent.begin(),VdotVent.end()-min(keepValue,(unsigned int)VdotVent.size())); }
     void eraseVdotVent_back() { VdotVent.pop_back(); }
+
+    unsigned int getNightVentilationBegin() { return nightVentilationBegin; }
+    void setNightVentilationBegin(unsigned int value) { nightVentilationBegin = value; }
+    unsigned int getNightVentilationEnd() { return nightVentilationEnd; }
+    void setNightVentilationEnd(unsigned int value) { nightVentilationEnd = value; }
 
     float getRadiativeInternalHeatGains() { return Lr; }
     float getConvectiveInternalHeatGains() { return Lc; }
