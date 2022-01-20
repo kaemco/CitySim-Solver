@@ -1336,21 +1336,21 @@ void Building::writeGML(ofstream& file, string tab) {
             if (zones[i]->getWall(j)->getKey().empty())
                 file << "Wallp_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
             else
-                file << "Wallp_" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                file << zones[i]->getWall(j)->getKey() << "\">" << endl;
         }
         for (size_t j=0; j < zones[i]->getnRoofs(); ++j) {
             file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getRoof(j)->getKey().empty())
                 file << "Roofp_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
             else
-                file << "Roofp_" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+                file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
         }
         for (size_t j=0; j < zones[i]->getnFloors(); ++j) {
             file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getFloor(j)->getKey().empty())
                 file << "Groundp_b_" << id << "_s_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
             else
-                file << "Groundp_" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
+                file << zones[i]->getFloor(j)->getKey() << "\">" << endl;
         }
     }
 
@@ -1375,8 +1375,8 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t\t\t\t\t<gml:Polygon ";
                 if (zones[i]->getWall(j)->getKey().empty()) // construct a unique key Wallp_b_$_s_$
                     file << "gml:id=\"Wallp_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
-                else // use the key with a Wallp_ prefix
-                    file << "gml:id=\"Wallp_" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                else // use the key
+                    file << "gml:id=\"" << zones[i]->getWall(j)->getKey() << "\">" << endl;
                 zones[i]->getWall(j)->writeGML(file,subtab+"\t");
                 file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
                  << subtab << "\t\t\t\t</gml:surfaceMember>\n"
@@ -1410,8 +1410,8 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t\t\t\t\t<gml:Polygon ";
                 if (zones[i]->getRoof(j)->getKey().empty()) // construct a unique key Roofp_b_$_s_$
                     file << "gml:id=\"Roofp_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
-                else // use the key with a Roofp_ prefix
-                    file << "gml:id=\"Roofp_" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+                else // use the key
+                    file << "gml:id=\"" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
                 zones[i]->getRoof(j)->writeGML(file,subtab+"\t");
                 file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
                  << subtab << "\t\t\t\t</gml:surfaceMember>\n"
@@ -1444,8 +1444,8 @@ void Building::writeGML(ofstream& file, string tab) {
                  << subtab << "\t\t\t\t\t<gml:Polygon ";
                 if (zones[i]->getFloor(j)->getKey().empty()) // construct a unique key Groundp_b_$_s_$
                     file << "gml:id=\"Groundp_b_" << id << "_p_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
-                else // use the key with a Groundp_ prefix
-                    file << "gml:id=\"Groundp_" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
+                else // use the key
+                    file << "gml:id=\"" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
                 zones[i]->getFloor(j)->writeGML(file,subtab+"\t");
                 file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
                  << subtab << "\t\t\t\t</gml:surfaceMember>\n"
