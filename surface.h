@@ -84,8 +84,10 @@ public:
         file << tab << tabs(6) << "<energy:conductivity uom=\"W/(mK)\">" << kw << "</energy:conductivity>" << endl;
         file << tab << tabs(6) << "<energy:density uom=\"kg/m3\">" << rho << "</energy:density>" << endl;
         file << tab << tabs(6) << "<energy:specificHeat uom=\"J/(kgK)\">" << Cp << "</energy:specificHeat>" << endl;
-        file << tab << tabs(6) << "<energy:embodiedCarbon uom=\"kgCO2/kg\">" << gwp << "</energy:embodiedCarbon>" << endl;
-        file << tab << tabs(6) << "<energy:embodiedEnergy uom=\"MJ/kg\">" << nre << "</energy:embodiedEnergy>" << endl;
+        if (gwp > 0.)
+            file << tab << tabs(6) << "<energy:embodiedCarbon uom=\"kgCO2/kg\">" << gwp << "</energy:embodiedCarbon>" << endl;
+        if (nre > 0.)
+            file << tab << tabs(6) << "<energy:embodiedEnergy uom=\"MJ/kg\">" << nre << "</energy:embodiedEnergy>" << endl;
         file << tab << tabs(5) << "</energy:SolidMaterial>" << endl;
         file << tab << tabs(4) << "</energy:material>" << endl;
         file << tab << tabs(3) << "</energy:LayerComponent>" << endl;
@@ -335,19 +337,19 @@ public:
     }
 
     void writeGML(ofstream& file, string tab=""){
-        file << tab << "\t<gml:exterior>\n"
-             << tab << "\t\t<gml:LinearRing>\n"
-             << tab << "\t\t\t<gml:posList>\n";
-        string subtab = tab + "\t\t\t\t";
+        file << tab << "\t\t\t\t\t<gml:exterior>\n"
+             << tab << "\t\t\t\t\t\t<gml:LinearRing>\n"
+             << tab << "\t\t\t\t\t\t\t<gml:posList>\n";
+        string subtab = tab + "\t\t\t\t\t\t\t\t";
         for (unsigned int i=0; i< vertices.size(); ++i){
             file << subtab << (vertices[i])[0] << " " << (vertices[i])[1] << " " << (vertices[i])[2] << "\n";
         }
         // repeat the first point
         file << subtab << (vertices[0])[0] << " " << (vertices[0])[1] << " " << (vertices[0])[2] << "\n";
         // close the tabs
-        file << tab << "\t\t\t</gml:posList>\n"
-             << tab << "\t\t</gml:LinearRing>\n"
-             << tab << "\t</gml:exterior>" << endl;
+        file << tab << "\t\t\t\t\t\t\t</gml:posList>\n"
+             << tab << "\t\t\t\t\t\t</gml:LinearRing>\n"
+             << tab << "\t\t\t\t\t</gml:exterior>" << endl;
     }
 
     virtual void writeGML_composedOf(ofstream& file, string tab="") {
@@ -369,7 +371,7 @@ public:
         file << tab << "\t\t\t\t\t<energy:OpticalProperties>" << endl;
         file << tab << "\t\t\t\t\t\t<energy:transmittance>" << endl;
         file << tab << "\t\t\t\t\t\t\t<energy:Transmittance>" << endl;
-        file << tab << "\t\t\t\t\t\t\t\t<energy:fraction uom=\"scale\">" << glazingGvalue << "</energy:fraction>" << endl;
+        file << tab << "\t\t\t\t\t\t\t\t<energy:fraction uom=\"ratio\">" << glazingGvalue << "</energy:fraction>" << endl;
         file << tab << "\t\t\t\t\t\t\t\t<energy:wavelengthRange>total</energy:wavelengthRange>" << endl;
         file << tab << "\t\t\t\t\t\t\t</energy:Transmittance>" << endl;
         file << tab << "\t\t\t\t\t\t</energy:transmittance>" << endl;
