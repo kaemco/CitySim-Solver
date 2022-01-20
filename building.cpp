@@ -1179,13 +1179,79 @@ void Building::writeXML(ofstream& file, string tab){
 
 void Building::writeGML(ofstream& file, string tab) {
 
-    file << tab << "<bldg:Building gml:id=\"";
+    // output of the PV panel
+    for (size_t i=0; i < zones.size(); ++i) {
+        // writes the different surface elements
+        for (size_t j=0; j < zones[i]->getnWalls(); ++j) {
+            if (zones[i]->getWall(j)->getPVRatio() > 0.f) {
+                file << tab << "<core:cityObjectMember>\n"
+                     << tab << "\t<energy:PhotovoltaicSystem gml:id=\"PV_";
+                    if (zones[i]->getWall(j)->getKey().empty())
+                        file << "Wall_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                    else
+                        file << "Wall_" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                file << tab << "\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getWall(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
+                     << tab << "\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getWall(j)->getPVRatio()*zones[i]->getWall(j)->getArea() << "</energy:collectorSurface>\n"
+                     << tab << "\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
+                     << tab << "\t\t\t<gen:value uom=\"deg\">" << zones[i]->getWall(j)->getAzimuth() << "</gen:value>\n"
+                     << tab << "\t\t</gen:measureAttribute>\n"
+                     << tab << "\t\t<gen:measureAttribute name=\"panelInclination\">\n"
+                     << tab << "\t\t\t<gen:value uom=\"deg\">\n" << zones[i]->getWall(j)->getAltitude() << "</gen:value>\n"
+                     << tab << "\t\t</gen:measureAttribute>\n"
+                     << tab << "\t\t<energy:installedOnBoundarySurface xlink:href=\"#";
+                    if (zones[i]->getWall(j)->getKey().empty())
+                        file << "Wall_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                    else
+                        file << "Wall_" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                    if (key.empty())
+                        file << tab << "\t\t<energy:installedIn xlink:href=\"#Bldg_" << id << "\"/>"  << endl;
+                    else
+                        file << tab << "\t\t<energy:installedIn xlink:href=\"#" << key << "\"/>"  << endl;
+                file << tab << "\t\t<energy:cellType>monocrystalline</energy:cellType>\n"
+                     << tab << "\t</energy:PhotovoltaicSystem>\n"
+                     << tab << "</core:cityObjectMember>\n" << flush;
+            }
+        }
+        for (size_t j=0; j < zones[i]->getnRoofs(); ++j) {
+            if (zones[i]->getRoof(j)->getPVRatio() > 0.f) {
+                file << tab << "<core:cityObjectMember>\n"
+                     << tab << "\t<energy:PhotovoltaicSystem gml:id=\"PV_";
+                    if (zones[i]->getWall(j)->getKey().empty())
+                        file << "Roof_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                    else
+                        file << "Roof_" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                file << tab << "\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getRoof(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
+                     << tab << "\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getRoof(j)->getPVRatio()*zones[i]->getRoof(j)->getArea() << "</energy:collectorSurface>\n"
+                     << tab << "\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
+                     << tab << "\t\t\t<gen:value uom=\"deg\">" << zones[i]->getRoof(j)->getAzimuth() << "</gen:value>\n"
+                     << tab << "\t\t</gen:measureAttribute>\n"
+                     << tab << "\t\t<gen:measureAttribute name=\"panelInclination\">\n"
+                     << tab << "\t\t\t<gen:value uom=\"deg\">" << zones[i]->getRoof(j)->getAltitude() << "</gen:value>\n"
+                     << tab << "\t\t</gen:measureAttribute>\n"
+                     << tab << "\t\t<energy:installedOnBoundarySurface xlink:href=\"#";
+                    if (zones[i]->getRoof(j)->getKey().empty())
+                        file << "Roof_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+                    else
+                        file << "Roof_" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+                    if (key.empty())
+                        file << tab << "\t\t<energy:installedIn xlink:href=\"#Bldg_" << id << "\"/>"  << endl;
+                    else
+                        file << tab << "\t\t<energy:installedIn xlink:href=\"#" << key << "\"/>"  << endl;
+                file << tab << "\t\t<energy:cellType>monocrystalline</energy:cellType>\n"
+                     << tab << "\t</energy:PhotovoltaicSystem>\n"
+                     << tab << "</core:cityObjectMember>\n" << flush;
+            }
+        }
+    }
+
+    file << tab << "<core:cityObjectMember>" << endl;
+    file << tab << "\t<bldg:Building gml:id=\"";
     if (key.empty())
-        file << "Bldg-" << id << "\">" << endl;
+        file << "Bldg_" << id << "\">" << endl;
     else
         file << key << "\">" << endl;
 
-    string subtab=tab+"\t";
+    string subtab=tab+"\t\t";
 
     // add the energy demand computed by CitySim
     if (pDistrict->getScene()->getTimeStepsSimulated() > 0) {
@@ -1261,42 +1327,30 @@ void Building::writeGML(ofstream& file, string tab) {
          << tab << "\t\t\t<gml:exterior>\n"
          << tab << "\t\t\t\t<gml:CompositeSurface>\n";
 
-    subtab=tab+"\t\t\t\t\t";
+    subtab=tab+"\t";
 
     for (size_t i=0; i < zones.size(); ++i) {
         // writes the different surface elements
         for (size_t j=0; j < zones[i]->getnWalls(); ++j) {
-            file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon ";
+            file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getWall(j)->getKey().empty())
-                file << "gml:id=\"b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                file << "Wallp_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
             else
-                file << "gml:id=\"" << zones[i]->getWall(j)->getKey() << "\">" << endl;
-            zones[i]->getWall(j)->writeGML(file,subtab+"\t");
-            file << subtab << "\t</gml:Polygon>\n"
-                 << subtab << "</gml:surfaceMember>" << endl;
+                file << zones[i]->getWall(j)->getKey() << "\">" << endl;
         }
         for (size_t j=0; j < zones[i]->getnRoofs(); ++j) {
-            file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon ";
+            file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getRoof(j)->getKey().empty())
-                file << "gml:id=\"b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+                file << "Roofp_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
             else
-                file << "gml:id=\"" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
-            zones[i]->getRoof(j)->writeGML(file,subtab+"\t");
-            file << subtab << "\t</gml:Polygon>\n"
-                 << subtab << "</gml:surfaceMember>" << endl;
+                file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
         }
         for (size_t j=0; j < zones[i]->getnFloors(); ++j) {
-            file << subtab << "<gml:surfaceMember>\n"
-                 << subtab << "\t<gml:Polygon ";
+            file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getFloor(j)->getKey().empty())
-                file << "gml:id=\"b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+                file << "Groundp_b_" << id << "_s_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
             else
-                file << "gml:id=\"" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
-            zones[i]->getFloor(j)->writeGML(file,subtab+"\t");
-            file << subtab << "\t</gml:Polygon>\n"
-                 << subtab << "</gml:surfaceMember>" << endl;
+                file << zones[i]->getFloor(j)->getKey() << "\">" << endl;
         }
     }
 
@@ -1305,21 +1359,27 @@ void Building::writeGML(ofstream& file, string tab) {
          << tab << "\t\t</gml:Solid>\n"
          << tab << "\t</bldg:lod2Solid>" << endl;
 
-    // add the bounded by tags, in order to recognize Wall, Roof and Floor using xlink:href and the id
+    // add the bounded by tags, in order to recognize Wall, Roof and Floor
     subtab=tab+"\t";
     for (size_t i=0; i < zones.size(); ++i) {
         // writes the different surface elements
         for (size_t j=0; j < zones[i]->getnWalls(); ++j) {
-            file << subtab << "<bldg:boundedBy>\n"
-                 << subtab << "\t<bldg:WallSurface gml:id=\"Wall_" << zones[i]->getWall(j)->getId() << "\">\n"
-                 << subtab << "\t\t<bldg:lod2MultiSurface>\n"
+            file << subtab << "<bldg:boundedBy>\n";
+                if (zones[i]->getWall(j)->getKey().empty()) // construct a unique key Wall_b_$_s_$
+                    file << subtab << "\t<bldg:WallSurface gml:id=\"Wall_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                else // use the key with a Wall_ prefix
+                    file << subtab << "\t\t<bldg:WallSurface gml:id=\"Wall_" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+            file << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
-            if (zones[i]->getWall(j)->getKey().empty())
-                file << "b" << id << "_p_w_" << zones[i]->getWall(j)->getId() << "\">" << endl;
-            else
-                file << zones[i]->getWall(j)->getKey() << "\">" << endl;
-            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t\t<gml:Polygon ";
+                if (zones[i]->getWall(j)->getKey().empty()) // construct a unique key Wallp_b_$_s_$
+                    file << "gml:id=\"Wallp_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                else // use the key
+                    file << "gml:id=\"" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                zones[i]->getWall(j)->writeGML(file,subtab+"\t");
+                file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
+                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
 // removed in version 1.0 (to be checked)
@@ -1335,32 +1395,26 @@ void Building::writeGML(ofstream& file, string tab) {
 //                 << subtab << "\t\t\t</energy:RegularTimeSeriesFile>\n"
 //                 << subtab << "\t\t</energy:globalSolarIrradiance>\n"
                  << flush;
-            // output of the PV panel
-            if (zones[i]->getWall(j)->getPVRatio() > 0.f) {
-                file << subtab << "\t\t<energy:equippedWith>\n"
-                     << subtab << "\t\t\t<energy:PhotovoltaicSystem gml:id=\"PV_1\">\n"
-                     << subtab << "\t\t\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getWall(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
-                     << subtab << "\t\t\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getWall(j)->getPVRatio()*zones[i]->getWall(j)->getArea() << "</energy:collectorSurface>\n"
-                     << subtab << "\t\t\t\t<energy:panelAzimuth uom=\"deg\">" << zones[i]->getWall(j)->getAzimuth() << "</energy:panelAzimuth>\n"
-                     << subtab << "\t\t\t\t<energy:panelInclination uom=\"deg\">" << zones[i]->getWall(j)->getAltitude() << "</energy:panelInclination>\n"
-                     << subtab << "\t\t\t\t<energy:installedOn xlink:href=\"#Wall_" << zones[i]->getWall(j)->getId() << "\"/>\n"
-                     << subtab << "\t\t\t</energy:PhotovoltaicSystem>\n"
-                     << subtab << "\t\t</energy:equippedWith>\n" << flush;
-            }
             file << subtab << "\t</bldg:WallSurface>\n"
                  << subtab << "</bldg:boundedBy>" << endl;
         }
         for (size_t j=0; j < zones[i]->getnRoofs(); ++j) {
-            file << subtab << "<bldg:boundedBy>\n"
-                 << subtab << "\t<bldg:RoofSurface gml:id=\"Roof_" << zones[i]->getRoof(j)->getId() << "\">\n"
-                 << subtab << "\t\t<bldg:lod2MultiSurface>\n"
+            file << subtab << "<bldg:boundedBy>\n";
+                if (zones[i]->getRoof(j)->getKey().empty()) // construct a unique key Roof_b_$_s_$
+                    file << subtab << "\t<bldg:RoofSurface gml:id=\"Roof_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+                else // use the key with a Roof_ prefix
+                    file << subtab << "\t\t<bldg:RoofSurface gml:id=\"Roof_" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+            file << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
-            if (zones[i]->getRoof(j)->getKey().empty())
-                file << "b" << id << "_p_r_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
-            else
-                file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
-            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t\t<gml:Polygon ";
+                if (zones[i]->getRoof(j)->getKey().empty()) // construct a unique key Roofp_b_$_s_$
+                    file << "gml:id=\"Roofp_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+                else // use the key
+                    file << "gml:id=\"" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+                zones[i]->getRoof(j)->writeGML(file,subtab+"\t");
+                file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
+                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
 //                 << subtab << "\t\t<energy:globalSolarIrradiance>\n"
@@ -1375,32 +1429,26 @@ void Building::writeGML(ofstream& file, string tab) {
 //                 << subtab << "\t\t\t</energy:RegularTimeSeriesFile>\n"
 //                 << subtab << "\t\t</energy:globalSolarIrradiance>\n"
                  << flush;
-            // output of the PV panel
-            if (zones[i]->getRoof(j)->getPVRatio() > 0.f) {
-                file << subtab << "\t\t<energy:equippedWith>\n"
-                     << subtab << "\t\t\t<energy:PhotovoltaicSystem gml:id=\"PV_1\">\n"
-                     << subtab << "\t\t\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getRoof(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
-                     << subtab << "\t\t\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getRoof(j)->getPVRatio()*zones[i]->getRoof(j)->getArea() << "</energy:collectorSurface>\n"
-                     << subtab << "\t\t\t\t<energy:panelAzimuth uom=\"deg\">" << zones[i]->getRoof(j)->getAzimuth() << "</energy:panelAzimuth>\n"
-                     << subtab << "\t\t\t\t<energy:panelInclination uom=\"deg\">" << zones[i]->getRoof(j)->getAltitude() << "</energy:panelInclination>\n"
-                     << subtab << "\t\t\t\t<energy:installedOn xlink:href=\"#Roof_" << zones[i]->getRoof(j)->getId() << "\"/>\n"
-                     << subtab << "\t\t\t</energy:PhotovoltaicSystem>\n"
-                     << subtab << "\t\t</energy:equippedWith>\n" << flush;
-            }
             file << subtab << "\t</bldg:RoofSurface>\n"
                  << subtab << "</bldg:boundedBy>" << endl;
         }
         for (size_t j=0; j < zones[i]->getnFloors(); ++j) {
-            file << subtab << "<bldg:boundedBy>\n"
-                 << subtab << "\t<bldg:GroundSurface gml:id=\"Floor_" << zones[i]->getFloor(j)->getId() << "\">\n"
-                 << subtab << "\t\t<bldg:lod2MultiSurface>\n"
+            file << subtab << "<bldg:boundedBy>\n";
+                if (zones[i]->getFloor(j)->getKey().empty()) // construct an unique key Ground_b_$_g_$
+                    file << subtab << "\t<bldg:GroundSurface gml:id=\"Ground_b_" << id << "_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+                else // use the key with a Ground_ prefix
+                    file << subtab << "\t\t<bldg:GroundSurface gml:id=\"Ground_" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
+            file << subtab << "\t\t<bldg:lod2MultiSurface>\n"
                  << subtab << "\t\t\t<gml:MultiSurface>\n"
-                 << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
-            if (zones[i]->getFloor(j)->getKey().empty())
-                file << "b" << id << "_p_g_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
-            else
-                file << zones[i]->getFloor(j)->getKey() << "\">" << endl;
-            file << subtab << "\t\t\t\t</gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t<gml:surfaceMember>\n"
+                 << subtab << "\t\t\t\t\t<gml:Polygon ";
+                if (zones[i]->getFloor(j)->getKey().empty()) // construct a unique key Groundp_b_$_s_$
+                    file << "gml:id=\"Groundp_b_" << id << "_p_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+                else // use the key
+                    file << "gml:id=\"" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
+                zones[i]->getFloor(j)->writeGML(file,subtab+"\t");
+                file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
+                 << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
                  << subtab << "\t\t</bldg:lod2MultiSurface>\n"
                  << subtab << "\t</bldg:GroundSurface>\n"
@@ -1420,6 +1468,7 @@ void Building::writeGML(ofstream& file, string tab) {
     file << subtab << "<energy:thermalZone>" << endl;
     for (size_t i=0; i < zones.size(); ++i) {
         file << subtab << "\t<energy:ThermalZone gml:id=\"TZ_" << zones.at(i)->getId() << "\">" << endl;
+        file << subtab << "\t\t<energy:contains xlink:href=\"#UZ_" << zones.at(i)->getId() << "\">" << endl;
         file << subtab << "\t\t<energy:additionalThermalBridgeUValue uom=\"W/(m2K)\">" << zones.at(i)->getKpsi()/(zones.at(i)->getSwi()+zones.at(i)->getWallArea()+zones.at(i)->getRoofArea()+zones.at(i)->getFloorArea()) << "</energy:additionalThermalBridgeUValue>" << endl;
         file << subtab << "\t\t<energy:infiltrationRate uom=\"1/h\">" << zones.at(i)->getNinf() << "</energy:infiltrationRate>" << endl;
         file << subtab << "\t\t<energy:isCooled>" << (this->getCoolingUnit()?"true":"false") << "</energy:isCooled>" << endl;
@@ -1435,10 +1484,13 @@ void Building::writeGML(ofstream& file, string tab) {
             zones[i]->getWall(j)->writeGML_composedOf(file,subtab+"\t\t\t\t");
 
             // the partOf is made if you have one surface that belongs to two different zones (e.g. ZoneSurface)
-            file << subtab << "\t\t\t\t<energy:delimits xlink:href=\"TZ_" << zones.at(i)->getId() << "\"/>" << endl;
+            file << subtab << "\t\t\t\t<energy:delimits xlink:href=\"#TZ_" << zones.at(i)->getId() << "\"/>" << endl;
 
             // this is where the link is given to the boundedBy Surface
-            file << subtab << tabs(4) << "<energy:relatesTo xlink:href=\"#Wall_" << zones[i]->getWall(j)->getId() << "\"/>" << endl;
+            if (zones[i]->getWall(j)->getKey().empty()) // construct a unique key Wall_b_$_s_$
+                file << subtab << tabs(4) <<  "<energy:relatesTo xlink:href=\"#Wall_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+            else // use the key with a Wall_ prefix
+                file << subtab << tabs(4) <<  "<energy:relatesTo xlink:href=\"#Wall_" << zones[i]->getWall(j)->getKey() << "\">" << endl;
 
             file << subtab << tabs(3) << "</energy:ThermalBoundary>" << endl;
             file << subtab << tabs(2) << "</energy:boundedBy>" << endl;
@@ -1453,10 +1505,13 @@ void Building::writeGML(ofstream& file, string tab) {
             zones.at(i)->getRoof(j)->writeGML_composedOf(file,subtab+"\t\t\t\t");
 
             // the partOf is made if you have one surface that belongs to two different zones (e.g. ZoneSurface)
-            file << subtab << "\t\t\t\t<energy:delimits xlink:href=\"TZ_" << zones.at(i)->getId() << "\"/>" << endl;
+            file << subtab << "\t\t\t\t<energy:delimits xlink:href=\"#TZ_" << zones.at(i)->getId() << "\"/>" << endl;
 
             // this is where the link is given to the boundedBy Surface
-            file << subtab << tabs(4) << "<energy:relatesTo xlink:href=\"#Roof_" << zones[i]->getRoof(j)->getId() << "\"/>" << endl;
+            if (zones[i]->getRoof(j)->getKey().empty()) // construct a unique key Roof_b_$_s_$
+                file << subtab << tabs(4) <<  "<energy:relatesTo xlink:href=\"#Roof_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
+            else // use the key with a Roof_ prefix
+                file << subtab << tabs(4) <<  "<energy:relatesTo xlink:href=\"#Roof_" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
             file << subtab << tabs(3) << "</energy:ThermalBoundary>" << endl;
             file << subtab << tabs(2) << "</energy:boundedBy>" << endl;
         }
@@ -1470,10 +1525,13 @@ void Building::writeGML(ofstream& file, string tab) {
             zones[i]->getFloor(j)->writeGML_composedOf(file,subtab+"\t\t\t\t");
 
             // the partOf is made if you have one surface that belongs to two different zones (e.g. ZoneSurface)
-            file << subtab << "\t\t\t\t<energy:delimits xlink:href=\"TZ_" << zones.at(i)->getId() << "\"/>" << endl;
+            file << subtab << "\t\t\t\t<energy:delimits xlink:href=\"#TZ_" << zones.at(i)->getId() << "\"/>" << endl;
 
             // this is where the link is given to the boundedBy Surface
-            file << subtab << tabs(4) << "<energy:relatesTo xlink:href=\"#Floor_" << zones[i]->getFloor(j)->getId() << "\"/>" << endl;
+            if (zones[i]->getFloor(j)->getKey().empty()) // construct a unique key Floor_b_$_s_$
+                file << subtab << tabs(4) <<  "<energy:relatesTo xlink:href=\"#Floor_b_" << id << "_s_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
+            else // use the key with a Floor_ prefix
+                file << subtab << tabs(4) <<  "<energy:relatesTo xlink:href=\"#Floor_" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
             file << subtab << tabs(3) << "</energy:ThermalBoundary>" << endl;
             file << subtab << tabs(2) << "</energy:boundedBy>" << endl;
         }
@@ -1485,7 +1543,7 @@ void Building::writeGML(ofstream& file, string tab) {
     // add the occupancy through the UsageZone
     file << subtab << "<energy:usageZone>" << endl;
     for (size_t i=0; i < zones.size(); ++i) {
-        file << subtab << tabs(1) << "<energy:UsageZone gml:id=\"ID_" << zones.at(i)->getId() << "\">" << endl;
+        file << subtab << tabs(1) << "<energy:UsageZone gml:id=\"UZ_" << zones.at(i)->getId() << "\">" << endl;
         // cooling schedule
         file << subtab << tabs(2) << "<energy:coolingSchedule>" << endl;
         file << subtab << tabs(3) << "<energy:ConstantValueSchedule>" << endl;
@@ -1518,13 +1576,13 @@ void Building::writeGML(ofstream& file, string tab) {
         file << subtab << tabs(3) << "<energy:Occupants>" << endl;
         file << subtab << tabs(4) << "<energy:heatDissipation>" << endl;
         file << subtab << tabs(5) << "<energy:HeatExchangeType>" << endl;
-        file << subtab << tabs(6) << "<energy:convectiveFraction uom=\"none\">" << zones.at(i)->getOccupantsSensibleHeat()*(1.f-zones.at(i)->getOccupantsSensibleHeatRadiantFraction())/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:convectiveFraction>" << endl;
-        file << subtab << tabs(6) << "<energy:latentFraction uom=\"none\">" << zones.at(i)->getOccupantsLatentHeat()/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:latentFraction>" << endl;
-        file << subtab << tabs(6) << "<energy:radiantFraction uom=\"none\">" << zones.at(i)->getOccupantsSensibleHeat()*zones.at(i)->getOccupantsSensibleHeatRadiantFraction()/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:radiantFraction>" << endl;
+        file << subtab << tabs(6) << "<energy:convectiveFraction uom=\"ratio\">" << zones.at(i)->getOccupantsSensibleHeat()*(1.f-zones.at(i)->getOccupantsSensibleHeatRadiantFraction())/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:convectiveFraction>" << endl;
+        file << subtab << tabs(6) << "<energy:latentFraction uom=\"ratio\">" << zones.at(i)->getOccupantsLatentHeat()/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:latentFraction>" << endl;
+        file << subtab << tabs(6) << "<energy:radiantFraction uom=\"ratio\">" << zones.at(i)->getOccupantsSensibleHeat()*zones.at(i)->getOccupantsSensibleHeatRadiantFraction()/(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:radiantFraction>" << endl;
         file << subtab << tabs(6) << "<energy:totalValue uom=\"W\">" << zones.at(i)->getOccupantsNumber()*(zones.at(i)->getOccupantsSensibleHeat()+zones.at(i)->getOccupantsLatentHeat()) << "</energy:totalValue>" << endl;
         file << subtab << tabs(5) << "</energy:HeatExchangeType>" << endl;
         file << subtab << tabs(4) << "</energy:heatDissipation>" << endl;
-        file << subtab << tabs(4) << "<energy:numberOfOccupants>" << zones.at(i)->getOccupantsNumber() << "</energy:numberOfOccupants>" << endl;
+        file << subtab << tabs(4) << "<energy:numberOfOccupants>" << round(zones.at(i)->getOccupantsNumber()) << "</energy:numberOfOccupants>" << endl;
         /* -> compute occupancyRate according to stochastic and deterministic profiles ? */
         file << subtab << tabs(4) << "<energy:occupancyRate>" << endl;
         file << subtab << tabs(5) << "<energy:TimeSeriesSchedule>" << endl;
@@ -1602,7 +1660,8 @@ void Building::writeGML(ofstream& file, string tab) {
     file << subtab << "</energy:usageZone>" << endl;
 
     // close the tag building
-    file << tab << "</bldg:Building>" << endl;
+    file << subtab << "\t</bldg:Building>" << endl;
+    file << tab << "</core:cityObjectMember>" << endl;
 }
 
 void Building::computeVolume() {
