@@ -361,7 +361,7 @@ void Model::ThermalStepImplicitTemperature(Building *pBuilding, Climate* pClimat
 
             float depletionTime = static_cast<float>(Model::dt); // by default natural ventilation is happening during the whole time step
             if (VdotVent > 0.f) {
-                if (!(hour >= pBuilding->getZone(i)->getNightVentilationBegin() && (hour < pBuilding->getZone(i)->getNightVentilationEnd())
+                if (!( (hour >= pBuilding->getZone(i)->getNightVentilationBegin() && (hour < pBuilding->getZone(i)->getNightVentilationEnd()))
                     || ((pBuilding->getZone(i)->getNightVentilationEnd() < pBuilding->getZone(i)->getNightVentilationBegin())
                         && (hour >= pBuilding->getZone(i)->getNightVentilationBegin() || hour < pBuilding->getZone(i)->getNightVentilationEnd()))))
                     {

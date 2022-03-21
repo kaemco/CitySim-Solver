@@ -3024,8 +3024,9 @@ void XmlScene::computeLongWave(unsigned int day, unsigned int hour) {
                 if (!isnan(Tmainobstructing)) {
                     //cout << "Tmainobstructing=" << Tmainobstructing << endl;
                     // check physical limits
-                    if (Tmainobstructing > 500.f) throw string("Surface: " + toString(((Surface*)(scene.GetSurface(factors->mainobstructing).SurfaceDelegate()))->getId())
-                                                                                          +", Temperature: " + toString(Tmainobstructing));
+                    if (Tmainobstructing > 500.f) throw string("Main obstructing surface id(key): " + toString(((Surface*)(scene.GetSurface(factors->mainobstructing).SurfaceDelegate()))->getId())
+                                                               + "(" + toString(((Surface*)(scene.GetSurface(factors->mainobstructing).SurfaceDelegate()))->getKey()) + ")"
+                                                               +", Temperature: " + toString(Tmainobstructing));
                     // compute the average temperature^4
                     Tenv4 += factors->obstructed*emissivity_mainobstructing*pow(Tmainobstructing,4);
                 }
