@@ -661,6 +661,7 @@ private:
 
 public:
     Pump(TiXmlHandle hdl);
+    float getn() { return n; }
 
     /**
      * @brief computeElectricAndThermalPower
@@ -1262,6 +1263,8 @@ public:
     ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr);
     virtual ~ThermalStation() { deleteDynAllocated(); }
 
+    Pump* getPump() { return pump; }
+
     EnergyConversionSystem* getEcs() { return ecs; }
     float getThermalPowerProvided() { return thermalPowerProvided; }
     float getOutputTemperature() { return outputTemperature; }
@@ -1750,6 +1753,8 @@ class ValveNodePair: public NodePairConnectingSupplyReturn{
         ValveNodePair(TiXmlHandle hdl, float initTemp);
         virtual ~ValveNodePair() override { }
 
+        Valve* getValve() { return valve; }
+
         int nbEdges() override{ return valve->nbEdges(); }
 
         virtual float maxKv();
@@ -1925,6 +1930,7 @@ public:
     int nbFloatsRecorded() { return 1+pipelineNetwork->nbFloatsRecorded(); }
 
     float getTotalThermalLoss(unsigned int step) {return totalThermalLossRecord.at(step); }
+    float getTotalThermalLoss() { return totalThermalLossRecord.back(); }
     float getYearlyTotalThermalLoss();
     size_t getnThermalStations() {return thermalStations.size();}
     ThermalStation* getThermalStation(unsigned int index) {return thermalStations[index];}

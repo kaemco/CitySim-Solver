@@ -214,7 +214,7 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
 
 #ifdef DEBUG
             ofstream file((filename.substr(0,filename.size()-4)+"_SW.out").c_str());
-            file << "#Ibn\tIdh\tIgh" << endl << flush;
+            file << "#solarAltitude\tIbn\tIdh\tIgh" << endl << flush;
             logStream << "G_Dh and G_h present, calculating G_Bn from the solar position." << endl << flush;
 #endif
 
@@ -241,7 +241,7 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
                 }
 
 #ifdef DEBUG
-                file << Ibn[j] << "\t" << Idh[j] << "\t" << Igh[j] << endl;
+                file << solarAltitude*180.f/M_PI << "\t" << Ibn[j] << "\t" << Idh[j] << "\t" << Igh[j] << endl;
 #endif
             }
 

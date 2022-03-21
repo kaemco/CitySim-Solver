@@ -420,6 +420,11 @@ void Zone3N::setTos(float Tout) {
                                   +walls[i]->getShortWaveIrradiance()*(1.-walls[i]->getShortWaveReflectance_opaque())
                                   +walls[i]->get_hr()*walls[i]->getEnvironmentalTemperature() )
                                 / (Kw1 + walls[i]->get_hc() + walls[i]->get_hr());
+        if (wallTemperature>100) {
+            logStream << "Tw: " << Tw << "\tTout: " << Tout << "\tIrradiance: " << walls[i]->getShortWaveIrradiance() << "\tIrradiance absorbed: " << walls[i]->getShortWaveIrradiance()*(1.-walls[i]->getShortWaveReflectance_opaque())
+                      << "\tEnvironmental Temperature: " << walls[i]->get_hr()*walls[i]->getEnvironmentalTemperature();
+            throw (string("Wall: ") + toString(walls[i]->getId()) + "(" + toString(walls[i]->getKey()) + "), Temperature: " + toString(wallTemperature));
+        }
         walls[i]->setTemperature(wallTemperature);
     }
     for (size_t i=0; i<roofs.size(); ++i) {
@@ -428,6 +433,11 @@ void Zone3N::setTos(float Tout) {
                                   +roofs[i]->get_hr()*roofs[i]->getEnvironmentalTemperature()
                                   -roofs[i]->get_Y() )
                                 / (Kr1 + roofs[i]->get_hc() + roofs[i]->get_hr() + roofs[i]->get_X());
+        if (roofTemperature>100) {
+            logStream << "Tr: " << Tr << "\tTout: " << Tout << "\tIrradiance: " << roofs[i]->getShortWaveIrradiance() << "\tIrradiance absorbed: " << roofs[i]->getShortWaveIrradiance()*(1.-roofs[i]->getShortWaveReflectance_opaque())
+                      << "\tEnvironmental Temperature: " << roofs[i]->get_hr()*roofs[i]->getEnvironmentalTemperature();
+            throw (string("Roof: ") + toString(roofs[i]->getId()) + "(" + toString(roofs[i]->getKey()) + "), Temperature: " + toString(roofTemperature));
+        }
         roofs[i]->setTemperature(roofTemperature);
     }
 }
@@ -475,6 +485,8 @@ void Zone3N_floor::update(bool constructor){
 // Zone4N
 Zone4N::Zone4N(unsigned int id, Building* pBuilding, bool groundFloor, float Vi, vector<Wall*> walls, vector<Roof*> roofs, vector<Surface*> surfaces, vector<Floor*> floors, Occupants *pOccupants)
         :Zone3N(id,pBuilding,groundFloor,Vi,walls,roofs,surfaces,floors,pOccupants) {
+
+    logStream << "Zone4N with 4 thermal nodes." << endl;
 
     // intialisation
     nNodes=4;

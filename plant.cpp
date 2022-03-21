@@ -4687,6 +4687,46 @@ void Network::convergeToEquilibrium(MCR* mcr, float rho, float cp, Climate *pCli
     // The TimeClock of the slave thermalStations need to be updated.
     mcr->updateThermalStationSlaveClock(prevCurrentStages);
 
+#ifdef DEBUG
+    /*
+    For the valves: kv, resistance coefficient;
+    For the pumps: rotational speed, k1, k2 and k3
+    For pipes: friction factor
+    */
+
+    // output debug information to a file
+    ostringstream oss;
+    for (auto& vsnp : valveNodePairs) { // for each valveNodePair get the Valve and get the corresponding kv and output it
+        // if first iteration (with day hour) then write the header with NodePairId
+        if (day==1 && hour==1) {
+            oss << "valveNodePair_" << vsnp->getId() << "_Valve_kv\t";
+        }
+        // then write the kv
+        oss << vsnp->getValve()->getkv() << "\t";
+    }
+    for (auto& tsnp : thermalStationNodePairs) {
+        // if first iteration then write the header
+        if (day==1 && hour==1) {
+            oss << "thermalStationNodePair_" << tsnp->getId() << "_Pump_n\t";
+        }
+        // then get the thermalStation and get the Pump and get n()
+        oss << tsnp->getThermalStation()->getPump()->getn() << "\t";
+    }
+    // output computeDarcyFrictionFactor for go and return pipes
+    for (auto& pP : pipePairs) {
+        // if first iteration then write the header
+        if (day==1 && hour==1) {
+            oss << "pipePair_" << pP->getId() << "_Supply_DarcyFrictionFactor\tpipePair_" << pP->getId() << "_Return_DarcyFrictionFactor";
+        }
+        // supply pipe first
+        oss << computeDarcyFrictionFactor(abs(pP->getSupplyPipe()->getMassFlow()), pP->getInnerRadius(), pP->getSupplyPipe()->getDownstreamTemp()) << "\t";
+        // return pipe in second
+        oss << computeDarcyFrictionFactor(abs(pP->getReturnPipe()->getMassFlow()), pP->getInnerRadius(), pP->getReturnPipe()->getDownstreamTemp()) << "\t";
+    }
+    oss << endl;
+    save(string("dhn_debug.dat"),oss,false);
+#endif
+
 }
 
 void Network::computeDerivative(float& deriv, vector<float>& prev, float const& curr, size_t const& idx) {
@@ -5401,8 +5441,8 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         if ( hdl.ToElement()->QueryFloatAttribute("length", &length) )                          { throw string("Error in the XML file: a PipePair doesn't have attribute: 'length' in meters."); }
         if ( hdl.ToElement()->QueryFloatAttribute("innerRadius", &innerRadius) )                { throw string("Error in the XML file: a PipePair doesn't have attribute: 'innerRadius' in meters."); }
         if ( hdl.ToElement()->QueryFloatAttribute("interPipeDistance", &interPipeDistance) )    { throw string("Error in the XML file: a PipePair doesn't have attribute: 'interPipeDistance' in meters."); }
-        if ( hdl.ToElement()->QueryStringAttribute("singular1", &singulars[0]) )    { cout<<"Warning in the XML file: a PipePair uses default values for singular1."; }
-        if ( hdl.ToElement()->QueryStringAttribute("singular2", &singulars[1]) )    { cout<<"Warning in the XML file: a PipePair uses default values for singular2."; }
+        if ( hdl.ToElement()->QueryStringAttribute("singular1", &singulars[0]) )    { cout<<"Warning in the XML file: PipePair id=" << this->getId() << " uses default values for singular1." << endl; }
+        if ( hdl.ToElement()->QueryStringAttribute("singular2", &singulars[1]) )    { cout<<"Warning in the XML file: PipePair id=" << this->getId() << " uses default values for singular2." << endl; }
 
         connectedNodes[0] = net->pointerOfNodeWithId(node1Id);
         if (connectedNodes[0]==nullptr) { throw string("Error in the XML file: in Network of PipePair id="+to_string(id)+" the node1="+to_string(node1Id)+" is referenced, but isn't present in the Network of DistrictEnergyCenter id="+to_string(net->getDEC()->getId())+"."); }
@@ -5434,6 +5474,21 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         else { returnPipe = new Pipe( returnPipeHdl, this, net->getSoilkValue(), initDownstreamTemp ); }
 
         interPipeThermalResistance = supplyPipe->computeInsulationResistance(innerRadius) + returnPipe->computeInsulationResistance(innerRadius) + computeInterPipeSoilThermalResistance(supplyPipe, returnPipe, interPipeDistance, innerRadius, net->getSoilkValue());
+        if (isnan(interPipeThermalResistance))
+        {
+            if (supplyPipe->computeInsulationResistance(innerRadius)<0.f || isnan(supplyPipe->computeInsulationResistance(innerRadius))) {
+                throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic insulation resistance in the supply pipe."));
+            }
+            else if (returnPipe->computeInsulationResistance(innerRadius)<0.f || isnan(returnPipe->computeInsulationResistance(innerRadius))) {
+                throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic insulation resistance in the return pipe."));
+            }
+            else if (isnan(computeInterPipeSoilThermalResistance(supplyPipe, returnPipe, interPipeDistance, innerRadius, net->getSoilkValue()))) {
+                throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic interpipe soil thermal resistance."));
+            }
+            else {
+                throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic physical characteristics."));
+            }
+        }
 
         // Check that id is unique. This is done last so that the id is added to ids only if the constructor finishes successfully.
         if ( std::find(ids.begin(), ids.end(), id) != ids.end() ) { throw string("Error in the XML file: multiple PipePairs have the same id="+to_string(id)+"."); }
