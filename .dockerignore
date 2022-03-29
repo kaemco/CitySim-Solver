@@ -1,0 +1,11 @@
+# ignore .git, .svn and .cache folders
+.git
+.svn
+.cache
+
+# ignore all locally compiled objects (o)
+**/*.o
+
+# ignore all markdown files (md) and all text files (txt)
+*.md
+*.txt
