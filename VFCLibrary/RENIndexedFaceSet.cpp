@@ -111,7 +111,7 @@ std::unique_ptr<RENBoundingSphereABC> RENIndexedFaceSet::GetBoundingSphere() con
     std::unique_ptr<WEMSphere> boundingSphere(new WEMSphere);
 	boundingSphere->Radius()=s.Radius();
 	boundingSphere->Centre()=s.Centre();
-    return move(boundingSphere);
+    return boundingSphere;
 }
 // ..........................................................................
 

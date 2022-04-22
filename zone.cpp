@@ -421,9 +421,9 @@ void Zone3N::setTos(float Tout) {
                                   +walls[i]->get_hr()*walls[i]->getEnvironmentalTemperature() )
                                 / (Kw1 + walls[i]->get_hc() + walls[i]->get_hr());
         if (wallTemperature>100) {
-            logStream << "Tw: " << Tw << "\tTout: " << Tout << "\tIrradiance: " << walls[i]->getShortWaveIrradiance() << "\tIrradiance absorbed: " << walls[i]->getShortWaveIrradiance()*(1.-walls[i]->getShortWaveReflectance_opaque())
-                      << "\tEnvironmental Temperature: " << walls[i]->get_hr()*walls[i]->getEnvironmentalTemperature();
-            throw (string("Wall: ") + toString(walls[i]->getId()) + "(" + toString(walls[i]->getKey()) + "), Temperature: " + toString(wallTemperature));
+            logStream << "Wall: " + toString(walls[i]->getId()) + "(" + toString(walls[i]->getKey()) + "), Temperature: " + toString(wallTemperature)
+                      << "\tTw: " << Tw << "\tTout: " << Tout << "\tIrradiance: " << walls[i]->getShortWaveIrradiance() << "\tIrradiance absorbed: " << walls[i]->getShortWaveIrradiance()*(1.-walls[i]->getShortWaveReflectance_opaque())
+                      << "\tEnvironmental Temperature: " << walls[i]->get_hr()*walls[i]->getEnvironmentalTemperature() << endl;
         }
         walls[i]->setTemperature(wallTemperature);
     }
@@ -434,9 +434,9 @@ void Zone3N::setTos(float Tout) {
                                   -roofs[i]->get_Y() )
                                 / (Kr1 + roofs[i]->get_hc() + roofs[i]->get_hr() + roofs[i]->get_X());
         if (roofTemperature>100) {
-            logStream << "Tr: " << Tr << "\tTout: " << Tout << "\tIrradiance: " << roofs[i]->getShortWaveIrradiance() << "\tIrradiance absorbed: " << roofs[i]->getShortWaveIrradiance()*(1.-roofs[i]->getShortWaveReflectance_opaque())
-                      << "\tEnvironmental Temperature: " << roofs[i]->get_hr()*roofs[i]->getEnvironmentalTemperature();
-            throw (string("Roof: ") + toString(roofs[i]->getId()) + "(" + toString(roofs[i]->getKey()) + "), Temperature: " + toString(roofTemperature));
+            logStream << "Roof: " + toString(roofs[i]->getId()) + "(" + toString(roofs[i]->getKey()) + "), Temperature: " + toString(roofTemperature)
+                      << "Tr: " << Tr << "\tTout: " << Tout << "\tIrradiance: " << roofs[i]->getShortWaveIrradiance() << "\tIrradiance absorbed: " << roofs[i]->getShortWaveIrradiance()*(1.-roofs[i]->getShortWaveReflectance_opaque())
+                      << "\tEnvironmental Temperature: " << roofs[i]->get_hr()*roofs[i]->getEnvironmentalTemperature() << endl;
         }
         roofs[i]->setTemperature(roofTemperature);
     }
