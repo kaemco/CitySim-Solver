@@ -88,7 +88,7 @@ public:
 
     float getGroundAlbedo() { return groundAlbedo; }
 
-    unsigned int getnGrounds() { unsigned int count = 0; for (forward_list<Ground*>::iterator it=grounds.begin();it!=grounds.end();++it) ++count; return count; }
+    unsigned int getnGrounds() { return distance(grounds.begin(),grounds.end()); }
     forward_list<Ground*>* getGrounds() { return &grounds;}
     Ground* getGround() { if (grounds.empty()) return NULL; else return grounds.front(); }
     void addGround(Ground* g);

@@ -3091,11 +3091,17 @@ void XmlScene::computeThermal(unsigned int day, unsigned int hour) {
     }
 
     // evaluates the ground temperature
-    for (forward_list<Ground*>::iterator it=pDistrict->getGrounds()->begin();it!=pDistrict->getGrounds()->end();++it) {
-        if ((*it)->isDetailedSimulation())
-            Model::ThermalStepImplicitTemperature((*it),pClimate,day,hour);
-        else
-            Model::ThermalStepImplicitTemperature_simplified((*it),pClimate,day,hour);
+    #pragma omp parallel
+    {
+        for (forward_list<Ground*>::iterator it=pDistrict->getGrounds()->begin();it!=pDistrict->getGrounds()->end();++it) {
+            #pragma omp single nowait
+            {
+                if ((*it)->isDetailedSimulation())
+                    Model::ThermalStepImplicitTemperature((*it),pClimate,day,hour);
+                else
+                    Model::ThermalStepImplicitTemperature_simplified((*it),pClimate,day,hour);
+            }
+        }
     }
 
     return;

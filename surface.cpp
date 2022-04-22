@@ -215,6 +215,9 @@ Surface::Surface(TiXmlHandle hdl, Building* pBuilding, ostream* pLogStr):b(pBuil
 
     id = to<uint64_t>(hdl.ToElement()->Attribute("id"));
 
+    if (hdl.ToElement()->Attribute("key"))
+        key = hdl.ToElement()->Attribute("key");
+
     if (hdl.ToElement()->Attribute("ShortWaveReflectance"))
         shortWaveReflectance = to<float>(hdl.ToElement()->Attribute("ShortWaveReflectance"));
 

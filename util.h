@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
-#include <stdint.h> // for usage of uint32_t
+#include <cstdint> // for usage of uint32_t
 
 #include "GENPoint.h"
 
