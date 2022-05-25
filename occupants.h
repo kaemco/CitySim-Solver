@@ -202,12 +202,9 @@ public:
 
     void writeXML(ofstream& file, string tab="", string type="Occupancy"){
         file << tab << "<" << type << "DayProfile id=\""<< id << "\" name=\"" << name << "\" ";
-        streamsize ss = file.precision();
-        file.precision(2); // for fixed format, two decimal p
         for (unsigned int i=0; i<profile.size(); ++i){
             file << "p" << i+1 << "=\"" << profile[i] << "\" ";
         }
-        file.precision(ss); // restore default
         file << "/>" << endl;
     }
 };
@@ -605,7 +602,6 @@ private:
 
         }
         void writeXML(ofstream& file, string tab="") {
-            file.precision(cout.precision());
             file << tab << "<Device name=\"" << name << "\" avgPower=\"" << avgPower << "\" convectiveFraction=\"" << convectiveFraction << "\" radiativeFraction=\"" << radiativeFraction << "\"";
             for (size_t i=0;i<profile.size();++i) file << " p" << i+1 << "=\"" << profile.at(i) << "\"";
             file << "/>" << endl;

@@ -397,10 +397,7 @@ void District::writeXML(ofstream& file, string tab){
         file << subtab << "\t<Surface id=\"" << surfaces[i]->getId() << "\" ";
         // write the key if it exists
         if (!surfaces[i]->getKey().empty()) file << "key=\"" << surfaces[i]->getKey() << "\" ";
-        streamsize ss = file.precision();
-        file.precision(6); // for fixed format, two decimal p
         file << "ShortWaveReflectance=\"" << surfaces[i]->getShortWaveReflectance();
-        file.precision(ss); // restore default
         file << "\">" << endl;
         surfaces[i]->writeXML(file,subtab+"\t\t");
         file << subtab << "\t</Surface>" << endl;
@@ -415,10 +412,7 @@ void District::writeXML(ofstream& file, string tab){
     file << subtab << "</Trees>" << endl;
 
     // Write Ground
-    streamsize ss = file.precision();
-    file.precision(6); // for fixed format, two decimal p
     file << subtab << "<GroundSurface ShortWaveReflectance=\"" << groundAlbedo << "\">" << endl;
-    file.precision(ss); // restore default precision
     for (forward_list<Ground*>::iterator it=grounds.begin(); it!=grounds.end(); ++it){
         (*it)->writeXML(file,subtab+"\t");
     }

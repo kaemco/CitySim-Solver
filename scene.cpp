@@ -233,7 +233,10 @@ void Scene::exportRadFile(string radFile,bool triangulated) {
 
     // open the output file
     ofstream outputRad((radFile.substr(0,radFile.size()-4) + ".rad").c_str(), ios::binary);
-    outputRad << setprecision(12);
+
+    outputRad.setf(ios::fixed); // set fixed floating format
+    outputRad.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+    outputRad.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
 
     // test d'ouverture
     if (!outputRad.is_open()) throw string("Error opening file: " + (radFile.substr(0,radFile.size()-4) + ".rad"));
@@ -315,7 +318,10 @@ void Scene::exportInpFile(string radFile, bool buildingsOnly) {
 
     // open the output file
     ofstream outputInp((radFile.substr(0,radFile.size()-4) + ".inp").c_str(), ios::binary);
-    outputInp << setprecision(12);
+
+    outputInp.setf(ios::fixed); // set fixed floating format
+    outputInp.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+    outputInp.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
 
     // test d'ouverture
     if (!outputInp.is_open()) throw string("Error opening file: " + (radFile.substr(0,radFile.size()-4) + ".inp"));
@@ -369,7 +375,9 @@ void Scene::exportDXF(string fileName) {
     if (!outputDxf.good()) throw(string("Error creating model: " + fileName));
 
     // setting good precision for the points
-    outputDxf << setprecision(12);
+    outputDxf.setf(ios::fixed); // set fixed floating format
+    outputDxf.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+    outputDxf.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
 
     // writing the HEADER
     outputDxf << "999\n" << "CitySim DXF" << endl;
@@ -758,8 +766,10 @@ void Radscene::clearResults() {
 void Radscene::exportSWFile(string filename) {
 
   fstream output (filename.c_str(), ios::out | ios::binary);
-  output.setf(ios_base::fixed);
-  output.precision(12);
+
+  output.setf(ios::fixed); // set fixed floating format
+  output.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+  output.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
 
   for (unsigned int i=0;i<irradiationBeam.size();++i) output << irradiationBeam[i]+irradiationDiffuseSky[i]+irradiationDiffuseGround[i]+irradiationReflection[i] << endl;
 
@@ -857,7 +867,10 @@ void Radscene::compareWithRadianceExternalIrradiance(unsigned int day, unsigned 
         // loop on the surfaces to create the _mesh.inp
         ofstream outputInp((inputFile.substr(0,inputFile.size()-4) + "_mesh.inp").c_str(), ios::binary);
         if (!outputInp.is_open()) throw string("Error opening file: " + (inputFile.substr(0,inputFile.size()-4) + "_mesh.inp"));
-        outputInp << setprecision(12);
+
+        outputInp.setf(ios::fixed); // set fixed floating format
+        outputInp.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+        outputInp.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
 
         // save the number of points per surface
         vector<unsigned int> numberOfPointsPerSurface;
@@ -1035,7 +1048,10 @@ void Radscene::withRadianceClimate(string climateFile) {
     // loop on the surfaces to create the _mesh.inp
     ofstream outputInp((inputFile.substr(0,inputFile.size()-4) + "_mesh.inp").c_str(), ios::binary);
     if (!outputInp.is_open()) throw string("Error opening file: " + (inputFile.substr(0,inputFile.size()-4) + "_mesh.inp"));
-    outputInp << setprecision(12);
+
+    outputInp.setf(ios::fixed); // set fixed floating format
+    outputInp.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+    outputInp.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
 
     // save the number of points per surface
     vector<unsigned int> numberOfPointsPerSurface;
@@ -1313,7 +1329,6 @@ void Radscene::writeHeader(string filename) {
     // test d'ouverture
     if (!outputInFile.is_open()) throw(string("Error opening: " + filename));
 
-    outputInFile << setprecision(6);
     outputInFile << "#day\thour\tsurface\twithInter\tsun\tsky\tground\twithInter\tsun\tsky\tground\n";
 
     outputInFile.flush();
@@ -1727,8 +1742,13 @@ void XmlScene::exportXMLFile(string fileName){
         pClimate->exportCliFile(cliFileName);
     }
 
+    // set the precision for the floating point numbers output in the CitySim XML file
+    file.setf(ios::fixed); // set fixed floating format
+    file.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+    file.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
+
     // write .xml file header
-    file << setprecision(9) << "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>" << endl;
+    file << "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>" << endl;
     file << "<CitySim name=\"test\">" << endl;
 
     // extract day/month version of beginDay and endDay
@@ -1771,8 +1791,13 @@ void XmlScene::exportGML(string fileName) {
     ofstream file(fileName.c_str());
     if (!file.good()) throw(string("Error creating model .gml file: "+fileName));
 
+    // set the precision for the floating point numbers output in the CityGML file
+    file.setf(ios::fixed); // set fixed floating format
+    file.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+    file.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
+
     // write .xml file header
-    file << setprecision(9) << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << endl;
+    file << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << endl;
     file << "<core:CityModel xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
          << " xsi:schemaLocation=\"http://www.opengis.net/citygml/2.0 http://www.citygmlwiki.org/images/a/ac/EnergyADE.xsd\"\n"
          << " xmlns:xAL=\"urn:oasis:names:tc:ciq:xsdschema:xAL:2.0\"\n"
@@ -1799,7 +1824,9 @@ void XmlScene::exportDXF(string fileName) {
     if (!outputDxf.good()) throw(string("Error creating model: " + fileName));
 
     // setting good precision for the points
-    outputDxf << setprecision(12);
+    outputDxf.setf(ios::fixed); // set fixed floating format
+    outputDxf.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+    outputDxf.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
 
     // writing the HEADER
     outputDxf << "999\n" << "CitySim" << endl;
@@ -1890,7 +1917,9 @@ void XmlScene::exportSTL_ascii(string fileName) {
     if (!output.good()) throw(string("Error creating model: " + fileName));
 
     // setting good precision for the points
-    output << setprecision(12);
+    output.setf(ios::fixed); // set fixed floating format
+    output.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+    output.precision(numeric_limits<float>::max_digits10); // set the precision to the maximum digits possible with float
 
     // loop on buildings and zones
     for (size_t buildingIndex=0; buildingIndex<pDistrict->getnBuildings(); ++buildingIndex) {

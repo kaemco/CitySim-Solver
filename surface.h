@@ -57,23 +57,13 @@ public:
     friend bool operator!=(const Layer& l1, const Layer& l2){ return !(l1.equals(l2));}
 
     virtual void writeXML(ofstream& file, bool isInsulation, string tab){
-        ios::fmtflags old_settings = file.flags();
-        streamsize ss = file.precision();
-        file.setf(ios::fixed, ios::floatfield); // set fixed floating format
-        file.precision(4); // for fixed format, two decimal p
         file << tab << "<Layer Thickness=\"" << xx << "\" Conductivity=\"" << kw << "\"";
-        file.precision(ss); // restore default
-        file.flags(old_settings); // restore default
         file << " Cp=\"" << Cp << "\" Density=\"" << rho << "\" NRE=\"" << nre << "\" GWP=\"" << gwp << "\" UBP=\"" << ubp << "\"";
         if(isInsulation) file << " insulation=\"true\"";
         file << "/>" << endl;
     }
 
     void writeGML(ofstream& file, string tab) {
-        ios::fmtflags old_settings = file.flags();
-        streamsize ss = file.precision();
-        file.setf(ios::fixed, ios::floatfield); // set fixed floating format
-        file.precision(4); // for fixed format, two decimal p
         file << tab << "<energy:layer>" << endl;
         file << tab << tabs(1) << "<energy:Layer>" << endl;
         file << tab << tabs(2) << "<energy:layerComponent>" << endl;
@@ -94,8 +84,6 @@ public:
         file << tab << tabs(2) << "</energy:layerComponent>" << endl;
         file << tab << tabs(1) << "</energy:Layer>" << endl;
         file << tab << "</energy:layer>" << endl;
-        file.precision(ss); // restore default
-        file.flags(old_settings); // restore default
     }
 
 };
@@ -321,19 +309,13 @@ public:
     ostream logStream;
 
     void writeXML(ofstream& file, string tab=""){
-        streamsize ss = file.precision();
-        ios::fmtflags old_settings = file.flags();
-        file.setf(ios::fixed, ios::floatfield); // set fixed floating format
-        file.precision(2); // for fixed format, two decimal p
-        for (unsigned int i=0; i< vertices.size(); ++i){
+        // write the vertices
+        for (unsigned int i=0; i< vertices.size(); ++i) {
             file << tab << "<V" << i <<" x=\"" << (vertices[i])[0] << "\" y=\"" << (vertices[i])[1] << "\" z=\"" << (vertices[i])[2] << "\"/>" << endl;
         }
-        file.flags(old_settings); // restore default
-        file.precision(6); // for float
         if (pvPanel) pvPanel->writeXML(file,pvRatio,tab);
         if (stPanel) stPanel->writeXML(file,stRatio,tab);
         /// TODO: write the hybrid panel
-        file.precision(ss); // restore default
     }
 
     void writeGML(ofstream& file, string tab=""){
@@ -767,11 +749,8 @@ public:
         file << tab << "<Wall id=\"" << id << "\" key=\"" << key << "\" type=\"";
         if(!composite) cout << "ERROR: no composite defined for Wall " << id << endl;
         else file << composite->getId();
-        streamsize ss = file.precision();
-        file.precision(6); // for fixed format, two decimal p
         file << "\" ShortWaveReflectance=\"" << shortWaveReflectance << "\" GlazingRatio=\"" << glazingRatio <<
             "\" GlazingGValue=\"" << glazingGvalue << "\" GlazingUValue=\"" << glazingUvalue << "\" OpenableRatio=\"" << glazingOpenableRatio;
-        file.precision(ss); // restore default
         file << "\">" << endl;
         Surface::writeXML(file, tab+"\t");
         file << tab << "</Wall>" << endl;
@@ -800,11 +779,8 @@ public:
         file << tab << "<Floor id=\"" << id << "\" key=\"" << key << "\" type=\"";
         if(!composite) cout << "ERROR: no composite defined for Floor " << id << endl;
         else file << composite->getId();
-        streamsize ss = file.precision();
-        file.precision(6); // for fixed format, two decimal p
         file  << "\" ShortWaveReflectance=\"" << shortWaveReflectance << "\" GlazingRatio=\"" << glazingRatio <<
              "\" GlazingGValue=\"" << glazingGvalue << "\" GlazingUValue=\"" << glazingUvalue << "\" OpenableRatio=\"" << glazingOpenableRatio << "\">" << endl;
-        file.precision(ss); // restore default
         Surface::writeXML(file, tab+"\t");
         file << tab << "</Floor>" << endl;
     }
@@ -892,14 +868,10 @@ public:
         file << tab << "<Roof id=\"" << id << "\" key=\"" << key << "\" type=\"";
         if(composite) file << composite->getId();
         else throw("No composite defined in Roof id=" + toString(id));
-        streamsize ss = file.precision();
-        file.precision(6); // for fixed format, two decimal p
         file << "\" ShortWaveReflectance=\"" << shortWaveReflectance << "\" GlazingRatio=\"" << glazingRatio <<
              "\" GlazingGValue=\"" << glazingGvalue << "\" GlazingUValue=\"" << glazingUvalue << "\" OpenableRatio=\"" << glazingOpenableRatio << "\" ";
         file << "kFactor=\"" << kFactor << "\"";
         file << ">" << endl;
-        file.precision(ss); // restore default
-
         Surface::writeXML(file, tab+"\t");
         file << tab << "</Roof>" << endl;
     }
@@ -999,13 +971,10 @@ public:
         file << tab << "<Ground id=\"" << id << "\" key=\"" << key << "\" ";
         if (composite) file << "type=\"" << composite->getId() << "\" ";
         else throw("No composite defined in Ground id=" + toString(id));
-        streamsize ss = file.precision();
-        file.precision(6); // for fixed format, two decimal p
         file << "ShortWaveReflectance=\"" << shortWaveReflectance << "\" ";
         file << "kFactor=\"" << kFactor << "\" ";
         file << "detailedSimulation=\"" << ((detailedSimulation)?("true"):("false")) << "\"";
         file << ">" << endl;
-        file.precision(ss); // restore default
         Surface::writeXML(file, tab+"\t");
         file << tab << "</Ground>" << endl;
     }
