@@ -73,8 +73,10 @@ template <class T> ostream& operator<<(ostream &os, const vector<T>& v)
 template <class T> void save(const string filename, const vector<T> &vector) {
 
   fstream output (filename.c_str(), ios::out | ios::binary);
-  output.setf(ios_base::fixed);
-  output.precision(12);
+
+  output.setf(ios::fixed); // set fixed floating format
+  output.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+  output.precision(numeric_limits<T>::max_digits10); // set the precision to the maximum digits possible with float
 
   for (unsigned int i=0;i<vector.size();i++) output << vector[i] << endl;
 
@@ -87,8 +89,10 @@ template <class T> void save(const string filename, const vector<T> &vector) {
 template <class T> void save(const string filename, const T &value) {
 
   fstream output (filename.c_str(), ios::out | ios::binary);
-  output.setf(ios_base::fixed);
-  output.precision(12);
+
+  output.setf(ios::fixed); // set fixed floating format
+  output.unsetf(ios::floatfield); //  precision will only specifies the maximum number of digits to be displayed, but not the minimum
+  output.precision(numeric_limits<T>::max_digits10); // set the precision to the maximum digits possible with float
 
   output << value << endl;
   output.close();

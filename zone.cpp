@@ -251,8 +251,7 @@ float Zone::getDHWConsumption(unsigned int day, unsigned int hour)
 }
 
 void Zone::writeXML(ofstream& file, string tab=""){
-    streamsize ss = file.precision();
-    file.precision(6); // use max 6 significant numbers for floats...
+
     file << tab << "<Zone id=\"" << id << "\" volume=\"" << Vi << "\" psi=\"" << Kpsi
          << "\" Tmin=\"" << Tmin << "\" Tmax=\"" << Tmax << "\" groundFloor=\"";
 
@@ -270,7 +269,6 @@ void Zone::writeXML(ofstream& file, string tab=""){
     if (activityType != numeric_limits<unsigned int>::signaling_NaN()) file << " activityType=\"" << activityType << "\"";
     file << " DHWType=\"" << getDHWYearProfile()->getId() << "\"";
     file << "/>" << endl;
-    file.precision(ss); // restore default
 
     for (unsigned int i=0; i<walls.size(); ++i){
         walls[i]->writeXML(file,subtab);
@@ -284,10 +282,7 @@ void Zone::writeXML(ofstream& file, string tab=""){
     // Write Shading Surfaces inside the building
     for (size_t i=0; i<surfaces.size(); ++i) {
         file << subtab << "<Surface id=\"" << surfaces[i]->getId();
-        streamsize ss = file.precision();
-        file.precision(6); // for fixed format, two decimal p
         file << "\" ShortWaveReflectance=\"" << surfaces[i]->getShortWaveReflectance();
-        file.precision(ss); // restore default
         file << "\">" << endl;
         surfaces[i]->writeXML(file,subtab+"\t");
         file << subtab << "</Surface>" << endl;

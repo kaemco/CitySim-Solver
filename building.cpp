@@ -1152,10 +1152,7 @@ void Building::update() {
 void Building::writeXML(ofstream& file, string tab){
     file << tab << "<Building id=\"" << id << "\" key=\"" << key << "\" Vi=\"" << getVolume();
 
-    streamsize ss = file.precision();
-    file.precision(6); // use max 6 significant numbers for floats...
     file << "\" Ninf=\""<< getNinf() << "\" BlindsLambda=\"" << blindsLambda << "\" BlindsIrradianceCutOff=\"" << blindsIrradianceCutOff;
-    file.precision(ss); // restore default
     file << "\" Simulate=\"true\">" << endl;
 
     // Energy system not considered
@@ -1336,21 +1333,21 @@ void Building::writeGML(ofstream& file, string tab) {
             if (zones[i]->getWall(j)->getKey().empty())
                 file << "Wallp_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\"/>" << endl;
             else
-                file << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                file << zones[i]->getWall(j)->getKey() << "\"/>" << endl;
         }
         for (size_t j=0; j < zones[i]->getnRoofs(); ++j) {
             file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getRoof(j)->getKey().empty())
                 file << "Roofp_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\"/>" << endl;
             else
-                file << zones[i]->getRoof(j)->getKey() << "\">" << endl;
+                file << zones[i]->getRoof(j)->getKey() << "\"/>" << endl;
         }
         for (size_t j=0; j < zones[i]->getnFloors(); ++j) {
             file << subtab << "\t\t\t\t<gml:surfaceMember xlink:href=\"#";
             if (zones[i]->getFloor(j)->getKey().empty())
                 file << "Groundp_b_" << id << "_s_" << zones[i]->getFloor(j)->getId() << "\"/>" << endl;
             else
-                file << zones[i]->getFloor(j)->getKey() << "\">" << endl;
+                file << zones[i]->getFloor(j)->getKey() << "\"/>" << endl;
         }
     }
 
