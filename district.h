@@ -57,7 +57,7 @@ public:
     }
 
     void writeXML(ofstream& file, string tab="");
-    void writeGML(ofstream& file, string tab="");
+    void writeGML(ofstream& file, string tab="", const vector<double>& origin={0.,0.,0.});
 
     void readFarField(string fileName);
 

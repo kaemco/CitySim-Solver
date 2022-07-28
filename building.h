@@ -284,11 +284,13 @@ public:
     float getFloorUBP()    { float ubp = 0.f;  for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) ubp += zones[zoneIndex]->getFloorUBP(); return ubp; }
     //-Roof
     float getRoofArea()    { float area = 0.f; for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) area += zones[zoneIndex]->getRoofArea(); return area; }
+    float getRoofPVArea()  { float area = 0.f; for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) area += zones[zoneIndex]->getRoofPVArea(); return area; }
     float getRoofGWP()     { float gwp = 0.f;  for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) gwp += zones[zoneIndex]->getRoofGWP(); return gwp; }
     float getRoofNRE()     { float nre = 0.f;  for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) nre += zones[zoneIndex]->getRoofNRE(); return nre; }
     float getRoofUBP()     { float ubp = 0.f;  for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) ubp += zones[zoneIndex]->getRoofUBP(); return ubp; }
     //-Wall
     float getWallArea()    { float area = 0.f; for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) area += zones[zoneIndex]->getWallArea(); return area; }
+    float getWallPVArea()  { float area = 0.f; for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) area += zones[zoneIndex]->getWallPVArea(); return area; }
     float getWallGWP()     { float gwp = 0.f;  for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) gwp += zones[zoneIndex]->getWallGWP(); return gwp; }
     float getWallNRE()     { float nre = 0.f;  for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) nre += zones[zoneIndex]->getWallNRE(); return nre; }
     float getWallUBP()     { float ubp = 0.f;  for (size_t zoneIndex=0;zoneIndex<zones.size();++zoneIndex) ubp += zones[zoneIndex]->getWallUBP(); return ubp; }
@@ -309,7 +311,7 @@ public:
     float getMRT_Epsilon() { return mrtEpsilon; }
 
     void writeXML(ofstream& file, string tab="");
-    void writeGML(ofstream& file, string tab="");
+    void writeGML(ofstream& file, string tab="", const vector<double>& origin={0.,0.,0.});
 
     // method to determine the shading state of all facades and roofs
     void deterministicShadingAction(/*unsigned int day*/);

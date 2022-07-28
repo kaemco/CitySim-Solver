@@ -8,6 +8,7 @@
 #include <vector>
 #include <cmath>
 #include <cstdint> // for usage of uint32_t
+#include <limits>
 
 #include "GENPoint.h"
 

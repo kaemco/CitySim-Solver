@@ -184,6 +184,7 @@ public:
     size_t getnWalls() { return walls.size(); }
     Wall* getWall(unsigned int i) { return walls[i]; }
     float getWallArea() { float area = 0.f; for (size_t index=0;index<walls.size();++index) area += walls[index]->getWallArea(); return area; }
+    float getWallPVArea() { float area = 0.f; for (size_t index=0;index<walls.size();++index) area += walls[index]->getPVRatio()*walls[index]->getArea(); return area; }
     float getWallGWP()  { float gwp = 0.f; for (size_t index=0;index<walls.size();++index) gwp += walls[index]->getWallArea()*walls[index]->getComposite()->getGWP(); return gwp; }
     float getWallNRE()  { float nre = 0.f; for (size_t index=0;index<walls.size();++index) nre += walls[index]->getWallArea()*walls[index]->getComposite()->getNRE(); return nre; }
     float getWallUBP()  { float ubp = 0.f; for (size_t index=0;index<walls.size();++index) ubp += walls[index]->getWallArea()*walls[index]->getComposite()->getUBP(); return ubp; }
@@ -193,6 +194,7 @@ public:
     Roof* getRoof(unsigned int i) { return roofs[i]; }
     vector<Roof*>* getRoofs() { return &roofs; }
     float getRoofArea() { float area = 0.f; for (size_t index=0;index<roofs.size();++index) area += roofs[index]->getRoofArea(); return area; }
+    float getRoofPVArea() { float area = 0.f; for (size_t index=0;index<roofs.size();++index) area += roofs[index]->getPVRatio()*roofs[index]->getArea(); return area; }
     float getRoofGWP()  { float gwp = 0.f;  for (size_t index=0;index<roofs.size();++index) gwp += roofs[index]->getRoofArea()*roofs[index]->getComposite()->getGWP(); return gwp; }
     float getRoofNRE()  { float nre = 0.f;  for (size_t index=0;index<roofs.size();++index) nre += roofs[index]->getRoofArea()*roofs[index]->getComposite()->getNRE(); return nre; }
     float getRoofUBP()  { float ubp = 0.f;  for (size_t index=0;index<roofs.size();++index) ubp += roofs[index]->getRoofArea()*roofs[index]->getComposite()->getUBP(); return ubp; }

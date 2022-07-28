@@ -421,7 +421,7 @@ void District::writeXML(ofstream& file, string tab){
     file << tab << "</District>" << endl;
 }
 
-void District::writeGML(ofstream& file, string tab) {
+void District::writeGML(ofstream& file, string tab, const vector<double>& origin) {
 
     // write the composites
     for (map<string,Composite*>::iterator it=composites.begin();it!=composites.end();++it) {
@@ -433,7 +433,7 @@ void District::writeGML(ofstream& file, string tab) {
     // write the buildings
     for (size_t i=0; i<buildings.size(); ++i) {
 
-        buildings[i]->writeGML(file, tab);
+        buildings[i]->writeGML(file, tab, origin);
 
     }
 }

@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
             xmlscene.exportCumulativeRadiance();
 
             // prepare the output files (headers)
-            xmlscene.writeSWHeaderText(firstParameter.substr(0,firstParameter.size()-4) + "_SW.out");
+            xmlscene.writeSWHeaderText(firstParameter.substr(0,firstParameter.size()-4) + "_SW.out", "Irradiation(Wh/m2)");
 
             // pre-simulation process
             xmlscene.computeViewFactors();
