@@ -227,7 +227,7 @@ public:
     unsigned int getSimulationIndex(){ return simulationIndex;}
 
     void exportXMLFile(string fileName="");
-    void exportGML(string fileName="");
+    void exportGML(string fileName="", const vector<double>& origin={0.,0.,0.});
     void exportDXF(string fileName="");
     void exportSTL(string fileName="") { exportSTL_binary(fileName); }
     void exportSTL_ascii(string fileName="");
@@ -281,7 +281,7 @@ public:
     void eraseResultsIrradiation(unsigned int keepValue);
     // writes the files at the end of the simulation
     unsigned int getColumnIndex(Surface* surface);
-    void writeSWHeaderText(string fileOut);
+    void writeSWHeaderText(string fileOut, string unit="Irradiance(W/m2)");
     void writeSWResultsText(string fileOut); // in W/m2
     void writeSWResultsBinary(string fileOut);
     void writeSWvHeaderText(string fileOut);

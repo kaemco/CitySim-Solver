@@ -318,16 +318,16 @@ public:
         /// TODO: write the hybrid panel
     }
 
-    void writeGML(ofstream& file, string tab=""){
+    void writeGML(ofstream& file, string tab="", const vector<double>& origin={0.,0.,0.}){
         file << tab << "\t\t\t\t\t<gml:exterior>\n"
              << tab << "\t\t\t\t\t\t<gml:LinearRing>\n"
              << tab << "\t\t\t\t\t\t\t<gml:posList>\n";
         string subtab = tab + "\t\t\t\t\t\t\t\t";
         for (unsigned int i=0; i< vertices.size(); ++i){
-            file << subtab << (vertices[i])[0] << " " << (vertices[i])[1] << " " << (vertices[i])[2] << "\n";
+            file << subtab << origin[0]+(vertices[i])[0] << " " << origin[1]+(vertices[i])[1] << " " << origin[2]+(vertices[i])[2] << "\n";
         }
         // repeat the first point
-        file << subtab << (vertices[0])[0] << " " << (vertices[0])[1] << " " << (vertices[0])[2] << "\n";
+        file << subtab << origin[0]+(vertices[0])[0] << " " << origin[1]+(vertices[0])[1] << " " << origin[2]+(vertices[0])[2] << "\n";
         // close the tabs
         file << tab << "\t\t\t\t\t\t\t</gml:posList>\n"
              << tab << "\t\t\t\t\t\t</gml:LinearRing>\n"

@@ -1782,7 +1782,7 @@ void XmlScene::exportXMLFile(string fileName){
 
 }
 
-void XmlScene::exportGML(string fileName) {
+void XmlScene::exportGML(string fileName, const vector<double>& origin) {
     // define .xml file name
     //logStream << "exportGMLFile with fileName=" << fileName << endl;
     if(fileName=="") fileName=getInputFileNoExt()+".gml";
@@ -1809,7 +1809,7 @@ void XmlScene::exportGML(string fileName) {
          << " xmlns:energy=\"http://www.sig3d.org/citygml/2.0/energy/1.0\"\n"
          << " xmlns:bldg=\"http://www.opengis.net/citygml/building/2.0\">" << endl;
     // write scene in .xml file
-    pDistrict->writeGML(file,"\t");
+    pDistrict->writeGML(file,"\t",origin);
     file << "</core:CityModel>" << endl;
     file.close();
 }
@@ -3442,6 +3442,10 @@ void XmlScene::simulate() {
         }
     }
 
+    #ifdef DEBUG
+    writeTHResultsText(getInputFileNoExt() + "_TH.out");
+    #endif // DEBUG
+
     if(warmUpDays>0) clearPreConditioningResults();
 
     // debut de la simulation sur la periode consideree
@@ -3957,7 +3961,7 @@ unsigned int XmlScene::getColumnIndex(Surface *surface) {
     return 0;
 }
 
-void XmlScene::writeSWHeaderText(string fileOut) {
+void XmlScene::writeSWHeaderText(string fileOut, string unit) {
 
     // open the binary file
     fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::trunc);
@@ -3970,17 +3974,17 @@ void XmlScene::writeSWHeaderText(string fileOut) {
             // loop on the walls, added the id of the surface
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnWalls(); ++k) {
                 textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" <<
-                            pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getKey() << "):Irradiance(W/m2)" << "\t";
+                            pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getKey() << "):" << unit << "\t";
             }
             // loop on the roofs
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnRoofs(); ++k) {
                 textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" <<
-                            pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getKey() << "):Irradiance(W/m2)" << "\t";
+                            pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getKey() << "):" << unit << "\t";
             }
             // loop on the obstructing surfaces
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnSurfaces(); ++k) {
                 textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" <<
-                            pDistrict->getBuilding(j)->getZone(zone)->getSurface(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getSurface(k)->getKey() << "):Irradiance(W/m2)" << "\t";
+                            pDistrict->getBuilding(j)->getZone(zone)->getSurface(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getSurface(k)->getKey() << "):" << unit << "\t";
             }
         } // end the loop on zones
     }
@@ -3989,15 +3993,15 @@ void XmlScene::writeSWHeaderText(string fileOut) {
     for (size_t j=0; j<pDistrict->getnTrees(); ++j)
         for (size_t k=0;k<pDistrict->getTree(j)->getnSurfaces();++k)
             textFile << pDistrict->getTree(j)->getId() << "(" << pDistrict->getTree(j)->getKey() << "):" <<
-                        pDistrict->getTree(j)->getSurface(k)->getId() << "(" << pDistrict->getTree(j)->getSurface(k)->getKey() << "):Irradiance(W/m2)" << "\t";
+                        pDistrict->getTree(j)->getSurface(k)->getId() << "(" << pDistrict->getTree(j)->getSurface(k)->getKey() << "):" << unit << "\t";
 
     // loop on the obstructing surfaces in the district itself
     for (unsigned int j=0; j<pDistrict->getnSurfaces(); ++j)
-        textFile << "NA(NA):" << pDistrict->getSurface(j)->getId() << "(" << pDistrict->getSurface(j)->getKey() << "):Irradiance(W/m2)" << "\t";
+        textFile << "NA(NA):" << pDistrict->getSurface(j)->getId() << "(" << pDistrict->getSurface(j)->getKey() << "):" << unit << "\t";
 
     // loop on the obstructing surfaces in the district itself
     for (forward_list<Ground*>::iterator it=pDistrict->getGrounds()->begin();it!=pDistrict->getGrounds()->end();++it)
-        textFile << "NA(NA):" << (*it)->getId() << "(" << (*it)->getKey() << "):Irradiance(W/m2)" << "\t";
+        textFile << "NA(NA):" << (*it)->getId() << "(" << (*it)->getKey() << "):" << unit << "\t";
 
     textFile << endl;
     textFile.close();
@@ -4374,9 +4378,14 @@ void XmlScene::writeTHResultsText(string fileOut) {
     fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::app);
     if (!textFile.is_open()) throw(string("Cannot open file: ")+fileOut);
 
+    // if in pre-simulation phase, output all the values
+    float preTimeStepsSimulated = this->preTimeStepsSimulated;
+    float timeStepsSimulated = this->timeStepsSimulated;
+    if (timeStepsSimulated == 0) { timeStepsSimulated = preTimeStepsSimulated; preTimeStepsSimulated = 0; }
+
     // loop on the number of time steps
     for (unsigned int i=preTimeStepsSimulated; i<preTimeStepsSimulated+timeStepsSimulated; ++i) {
-        textFile << simulationIndex+i+1-preTimeStepsSimulated << "\t";
+        textFile << simulationIndex+i+1-((preTimeStepsSimulated>0)?preTimeStepsSimulated:timeStepsSimulated) << "\t";
 
         // loop on the number of DEC, add by Dapeng // Cognet: Adapted to new code.
         for(unsigned int j=0; j<pDistrict->getnDECs(); ++j) {
@@ -4498,10 +4507,6 @@ void XmlScene::writeTSHeaderText(string fileOut) {
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnRoofs(); ++k) {
                 textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getId() << ":Tos(°C)\t";
             }
-            // loop on the obstructing surfaces
-            for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnSurfaces(); ++k) {
-                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getSurface(k)->getId() << ":Tos(°C)\t";
-            }
         } // end the loop on zones
     }
 
@@ -4540,10 +4545,6 @@ void XmlScene::writeTSResultsText(string fileOut) {
                 // loop on the roofs
                 for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnRoofs(); ++k) {
                     textFile << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getTemperature(i) << "\t";
-                }
-                // loop on the obstructing surfaces
-                for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnSurfaces(); ++k) {
-                    textFile << "NA\t";
                 }
             } // end the loop on zones
         }
@@ -5221,6 +5222,12 @@ void XmlScene::writeAreaText(string fileOut) {
         textFile << pDistrict->getBuilding(j)->getRoofArea() << "\t";
     }
     textFile << endl;
+    // PV
+    textFile << "roofPVArea(m2)\t";
+    for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
+        textFile << pDistrict->getBuilding(j)->getRoofPVArea() << "\t";
+    }
+    textFile << endl;
     // NRE
     textFile << "roofNRE(MJ)\t";
     for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
@@ -5244,6 +5251,12 @@ void XmlScene::writeAreaText(string fileOut) {
     textFile << "wallArea(m2)\t";
     for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
         textFile << pDistrict->getBuilding(j)->getWallArea() << "\t";
+    }
+    textFile << endl;
+    // PV
+    textFile << "wallPVArea(m2)\t";
+    for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
+        textFile << pDistrict->getBuilding(j)->getWallPVArea() << "\t";
     }
     textFile << endl;
     // NRE

@@ -1174,7 +1174,7 @@ void Building::writeXML(ofstream& file, string tab){
     file << tab << "</Building>" << endl;
 }
 
-void Building::writeGML(ofstream& file, string tab) {
+void Building::writeGML(ofstream& file, string tab, const vector<double>& origin) {
 
     // output of the PV panel
     for (size_t i=0; i < zones.size(); ++i) {
@@ -1374,7 +1374,7 @@ void Building::writeGML(ofstream& file, string tab) {
                     file << "gml:id=\"Wallp_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
                 else // use the key
                     file << "gml:id=\"" << zones[i]->getWall(j)->getKey() << "\">" << endl;
-                zones[i]->getWall(j)->writeGML(file,subtab+"\t");
+                zones[i]->getWall(j)->writeGML(file,subtab+"\t",origin);
                 file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
                  << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
@@ -1409,7 +1409,7 @@ void Building::writeGML(ofstream& file, string tab) {
                     file << "gml:id=\"Roofp_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
                 else // use the key
                     file << "gml:id=\"" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
-                zones[i]->getRoof(j)->writeGML(file,subtab+"\t");
+                zones[i]->getRoof(j)->writeGML(file,subtab+"\t",origin);
                 file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
                  << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
@@ -1443,7 +1443,7 @@ void Building::writeGML(ofstream& file, string tab) {
                     file << "gml:id=\"Groundp_b_" << id << "_p_" << zones[i]->getFloor(j)->getId() << "\">" << endl;
                 else // use the key
                     file << "gml:id=\"" << zones[i]->getFloor(j)->getKey() << "\">" << endl;
-                zones[i]->getFloor(j)->writeGML(file,subtab+"\t");
+                zones[i]->getFloor(j)->writeGML(file,subtab+"\t",origin);
                 file << subtab << "\t\t\t\t\t</gml:Polygon>\n"
                  << subtab << "\t\t\t\t</gml:surfaceMember>\n"
                  << subtab << "\t\t\t</gml:MultiSurface>\n"
