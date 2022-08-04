@@ -1786,7 +1786,7 @@ void XmlScene::exportGML(string fileName, const vector<double>& origin) {
     // define .xml file name
     //logStream << "exportGMLFile with fileName=" << fileName << endl;
     if(fileName=="") fileName=getInputFileNoExt()+".gml";
-    else if(fileName.substr(fileName.size()-4,4)!=".gml") throw(string("exportGML: fileName must end with .gml"));
+    else if(fileName.substr(fileName.size()-4,4)!=".gml") fileName.append(".gml");
 
     ofstream file(fileName.c_str());
     if (!file.good()) throw(string("Error creating model .gml file: "+fileName));
