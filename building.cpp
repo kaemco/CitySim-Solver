@@ -1459,7 +1459,7 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
          << subtab << "\t\t<energy:type>grossVolume</energy:type>\n"
          << subtab << "\t\t<energy:value uom=\"m3\">" << getVolume() << "</energy:value>\n"
          << subtab << "\t</energy:VolumeType>\n"
-         << subtab << "</energy:volume>\n" << endl;
+         << subtab << "</energy:volume>" << endl;
 
     // adds the ThermalZones
     file << subtab << "<energy:thermalZone>" << endl;
@@ -1608,6 +1608,32 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
         file << subtab << tabs(4) << "</energy:occupancyRate>" << endl;
         file << subtab << tabs(3) << "</energy:Occupants>" << endl;
         file << subtab << tabs(2) << "</energy:occupiedBy>" << endl;
+        // DHW uaage
+        if (dhwStock) {
+            file << subtab << tabs(2) << "<energy:equippedWith>" << endl;
+            file << subtab << tabs(3) << "<energy:DHWFacilities>" << endl;
+            file << subtab << tabs(4) << "<energy:operationSchedule>" << endl;
+            file << subtab << tabs(5) << "<energy:TimeSeriesSchedule>" << endl;
+            file << subtab << tabs(6) << "<energy:RegularTimeSeries>" << endl;
+            file << subtab << tabs(7) << "<energy:temporalExtent/>" << endl;
+            file << subtab << tabs(7) << "<energy:timeInterval unit=\"hour\">1</energy:timeInterval>" << endl;
+            file << subtab << tabs(7) << "<energy:values uom=\"l\">";
+            for (unsigned int day=1;day<=365;++day) {
+                for (unsigned int hour=1;hour<=24;++hour) {
+                    file << zones.at(i)->getDHWConsumption(day,hour) << " ";
+                }
+            }
+            file << "</energy:values>" << endl;
+            file << subtab << tabs(6) << "</energy:RegularTimeSeries>" << endl;
+            file << subtab << tabs(5) << "</energy:TimeSeriesSchedule>" << endl;
+            file << subtab << tabs(4) << "</energy:operationSchedule>" << endl;
+            file << subtab << tabs(4) << "<energy:waterStorageVolume uom=\"m3\">";
+            file << dhwStock->getVolume();
+            file << "</energy:waterStorageVolume>" << endl;
+            file << subtab << tabs(3) << "</energy:DHWFacilities>" << endl;
+            file << subtab << tabs(2) << "</energy:equippedWith>" << endl;
+        }
+
         // appliances model
         unsigned int deviceType;
         if (zones.at(i)->getActivityType() != numeric_limits<unsigned int>::signaling_NaN()) { // activity is defined
@@ -1616,39 +1642,39 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
                 deviceType = pDistrict->getActivityType(zones.at(i)->getActivityType())->getActivityDeviceType(j);
                 for (size_t k = 0; k < pDistrict->getDeviceType(deviceType)->getnDevices(); ++k) {
                     // write the electrical appliance information
-        file << subtab << tabs(2) << "<energy:has>" << endl;
-        file << subtab << tabs(3) << "<energy:ElectricalAppliances>" << endl;
-        file << subtab << tabs(4) << "<energy:heatDissipation>" << endl;
-        file << subtab << tabs(5) << "<energy:HeatExchangeType>" << endl;
-        file << subtab << tabs(6) << "<energy:convectiveFraction uom=\"none\">" << pDistrict->getDeviceType(deviceType)->getDeviceConvectiveFraction(k) << "</energy:convectiveFraction>" << endl;
-        file << subtab << tabs(6) << "<energy:latentFraction uom=\"\">0</energy:latentFraction>" << endl;
-        file << subtab << tabs(6) << "<energy:radiantFraction uom=\"\">" << pDistrict->getDeviceType(deviceType)->getDeviceRadiativeFraction(k) << "</energy:radiantFraction>" << endl;
-        file << subtab << tabs(6) << "<energy:totalValue uom=\"\">" << pDistrict->getDeviceType(deviceType)->getDeviceAvgPower(k) << "</energy:totalValue>" << endl;
-        file << subtab << tabs(5) << "</energy:HeatExchangeType>" << endl;
-        file << subtab << tabs(4) << "</energy:heatDissipation>" << endl;
-        file << subtab << tabs(4) << "<energy:operationSchedule>" << endl;
-        file << subtab << tabs(5) << "<energy:DailyPatternSchedule>" << endl;
-        file << subtab << tabs(6) << "<energy:dailySchedule>" << endl;
-        file << subtab << tabs(7) << "<energy:DailySchedule>" << endl;
-        file << subtab << tabs(8) << "<energy:dayType>WeekDay</energy:dayType>" << endl;
-        file << subtab << tabs(8) << "<energy:schedule>" << endl;
-        file << subtab << tabs(9) << "<energy:RegularTimeSeries>" << endl;
-        file << subtab << tabs(10) << "<energy:temporalExtent></energy:temporalExtent>" << endl;
-        file << subtab << tabs(10) << "<energy:timeInterval unit=\"hour\">1</energy:timeInterval>" << endl;
-        file << subtab << tabs(10) << "<energy:values uom=\"none\">";
-        for (size_t hour=1;hour<=24;++hour) {
-            file << pDistrict->getActivityType(zones.at(i)->getActivityType())->getActivityProbability(j,hour)*pDistrict->getDeviceType(deviceType)->getDeviceProbability(k,hour) << " ";
-        }
-        file << "</energy:values>" << endl;
-        file << subtab << tabs(9) << "</energy:RegularTimeSeries>" << endl;
-        file << subtab << tabs(8) << "</energy:schedule>" << endl;
-        file << subtab << tabs(7) << "</energy:DailySchedule>" << endl;
-        file << subtab << tabs(6) << "</energy:dailySchedule>" << endl;
-        file << subtab << tabs(5) << "</energy:DailyPatternSchedule>" << endl;
-        file << subtab << tabs(4) << "</energy:operationSchedule>" << endl;
-        file << subtab << tabs(4) << "<energy:electricalPower uom=\"W\">" << pDistrict->getDeviceType(deviceType)->getDeviceAvgPower(k) << "</energy:electricalPower>" << endl;
-        file << subtab << tabs(3) << "</energy:ElectricalAppliances>" << endl;
-        file << subtab << tabs(2) << "</energy:has>" << endl;
+                    file << subtab << tabs(2) << "<energy:equippedWith>" << endl;
+                    file << subtab << tabs(3) << "<energy:ElectricalAppliances>" << endl;
+                    file << subtab << tabs(4) << "<energy:heatDissipation>" << endl;
+                    file << subtab << tabs(5) << "<energy:HeatExchangeType>" << endl;
+                    file << subtab << tabs(6) << "<energy:convectiveFraction uom=\"none\">" << pDistrict->getDeviceType(deviceType)->getDeviceConvectiveFraction(k) << "</energy:convectiveFraction>" << endl;
+                    file << subtab << tabs(6) << "<energy:latentFraction uom=\"\">0</energy:latentFraction>" << endl;
+                    file << subtab << tabs(6) << "<energy:radiantFraction uom=\"\">" << pDistrict->getDeviceType(deviceType)->getDeviceRadiativeFraction(k) << "</energy:radiantFraction>" << endl;
+                    file << subtab << tabs(6) << "<energy:totalValue uom=\"\">" << pDistrict->getDeviceType(deviceType)->getDeviceAvgPower(k) << "</energy:totalValue>" << endl;
+                    file << subtab << tabs(5) << "</energy:HeatExchangeType>" << endl;
+                    file << subtab << tabs(4) << "</energy:heatDissipation>" << endl;
+                    file << subtab << tabs(4) << "<energy:operationSchedule>" << endl;
+                    file << subtab << tabs(5) << "<energy:DailyPatternSchedule>" << endl;
+                    file << subtab << tabs(6) << "<energy:dailySchedule>" << endl;
+                    file << subtab << tabs(7) << "<energy:DailySchedule>" << endl;
+                    file << subtab << tabs(8) << "<energy:dayType>WeekDay</energy:dayType>" << endl;
+                    file << subtab << tabs(8) << "<energy:schedule>" << endl;
+                    file << subtab << tabs(9) << "<energy:RegularTimeSeries>" << endl;
+                    file << subtab << tabs(10) << "<energy:temporalExtent></energy:temporalExtent>" << endl;
+                    file << subtab << tabs(10) << "<energy:timeInterval unit=\"hour\">1</energy:timeInterval>" << endl;
+                    file << subtab << tabs(10) << "<energy:values uom=\"none\">";
+                    for (size_t hour=1;hour<=24;++hour) {
+                        file << pDistrict->getActivityType(zones.at(i)->getActivityType())->getActivityProbability(j,hour)*pDistrict->getDeviceType(deviceType)->getDeviceProbability(k,hour) << " ";
+                    }
+                    file << "</energy:values>" << endl;
+                    file << subtab << tabs(9) << "</energy:RegularTimeSeries>" << endl;
+                    file << subtab << tabs(8) << "</energy:schedule>" << endl;
+                    file << subtab << tabs(7) << "</energy:DailySchedule>" << endl;
+                    file << subtab << tabs(6) << "</energy:dailySchedule>" << endl;
+                    file << subtab << tabs(5) << "</energy:DailyPatternSchedule>" << endl;
+                    file << subtab << tabs(4) << "</energy:operationSchedule>" << endl;
+                    file << subtab << tabs(4) << "<energy:electricalPower uom=\"W\">" << pDistrict->getDeviceType(deviceType)->getDeviceAvgPower(k) << "</energy:electricalPower>" << endl;
+                    file << subtab << tabs(3) << "</energy:ElectricalAppliances>" << endl;
+                    file << subtab << tabs(2) << "</energy:equippedWith>" << endl;
                 }
             }
         }
@@ -1657,7 +1683,7 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
     file << subtab << "</energy:usageZone>" << endl;
 
     // close the tag building
-    file << subtab << "\t</bldg:Building>" << endl;
+    file << subtab << "</bldg:Building>" << endl;
     file << tab << "</core:cityObjectMember>" << endl;
 }
 

@@ -247,7 +247,7 @@ float Zone::getDHWConsumption(unsigned int day, unsigned int hour)
         }
         return DHWconsumption;
     }
-    else return occupantsCount*dhwYearProfile->getDayProfile(day)->getWaterConsumption()*dhwYearProfile->getDayProfile(day)->getHourValue(hour); // Cognet: Deleted the division by 24, so that the probabilities are normalized. TODO: check that this is correct.
+    else return occupantsNumber*occupantsYearProfile->getDayProfile(day)->getHourValue(hour)*dhwYearProfile->getDayProfile(day)->getWaterConsumption()*dhwYearProfile->getDayProfile(day)->getHourValue(hour); // Cognet: Deleted the division by 24, so that the probabilities are normalized. TODO: check that this is correct.
 }
 
 void Zone::writeXML(ofstream& file, string tab=""){

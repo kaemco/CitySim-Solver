@@ -166,8 +166,7 @@ int main(int argc, char *argv[])
             //xmlscene.computeCumulativeRadiance();
             xmlscene.exportDXF();
             xmlscene.exportSTL();
-            //cerr << "Writing XML file..." << endl;
-            //xmlscene.exportXMLFile();
+            xmlscene.exportGML();
 
             // prepare the output files (headers)
             xmlscene.writeSWHeaderText(firstParameter.substr(0,firstParameter.size()-4) + "_SW.out");
@@ -212,8 +211,8 @@ int main(int argc, char *argv[])
             xmlscene.writeYearlyResultsText(firstParameter.substr(0,firstParameter.size()-4) + "_YearlyResults.out");
             xmlscene.writeYearlyResultsPerBuildingText(firstParameter.substr(0,firstParameter.size()-4) + "_YearlyResultsPerBuilding.out");
 
-            // export in GML format
-            xmlscene.exportGML(firstParameter.substr(0,firstParameter.size()-4) + ".gml");
+            // export in GML format with results
+            xmlscene.exportGML();
 
             return 0;
 
