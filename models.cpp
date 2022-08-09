@@ -2057,25 +2057,26 @@ void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned
     // Give heating/cooling units the thermal power needs information.
     for (size_t i=0 ; i<pDis->getnBuildings() ; ++i) {
         Building* pBui = pDis->getBuilding(i);
-        if (pBui->getHeatingUnit()) {
-            float heatDemanded;
-            float heatDemandedHS;// Added by Max
-            float heatDemandedDHW;// Added by Max
-            if ( not pBui->hasImposedHeatDemand(day, hour, heatDemanded) ) { // If an imposed heat demand value exists, use the imposed value. (To get rid of imposed value code, remove this line.)
-                heatDemandedHS = pBui->getHS_needs();// Added by Max
-                heatDemandedDHW = pBui->getDHW_needs();// Added by Max
-                heatDemanded = heatDemandedHS + heatDemandedDHW;
+        float heatDemanded;
+        if (pBui->hasImposedHeatDemand(day, hour, heatDemanded) ) { // If an imposed heat demand value exists, use the imposed value.
+            if (pBui->getHeatingUnit()) {
+                pBui->getHeatingUnit()->setThermalPowerNeeded( heatDemanded );
+                pBui->getHeatingUnit()->setThermalPowerNeededHS( 0.8*heatDemanded ); // Added by Max. 0.8 and 0.2 are arbitrary
+                pBui->getHeatingUnit()->setThermalPowerNeededDHW( 0.2*heatDemanded ); // Added by Max. Needed to distinguish DHW from HS from a single value of imposedHeatDemand in the XML file
             }
-            else{
-                heatDemandedHS = 0.8*heatDemanded; // Added by Max. 0.8 and 0.2 are arbitrary
-                heatDemandedDHW = 0.2*heatDemanded; // Added by Max. Needed to distinguish DHW from HS from a single value of imposedHeatDemand in the XML file
-            } // (To get rid of imposed value code, remove this line.)
-            pBui->getHeatingUnit()->setThermalPowerNeeded( heatDemanded );
-            pBui->getHeatingUnit()->setThermalPowerNeededHS(heatDemandedHS); // Added by Max
-            pBui->getHeatingUnit()->setThermalPowerNeededDHW(heatDemandedDHW); // Added by Max
+            if (pBui->getCoolingUnit()) {
+                pBui->getCoolingUnit()->setThermalPowerNeeded(0.);
+            }
         }
-        if (pBui->getCoolingUnit()) {
-            pBui->getCoolingUnit()->setThermalPowerNeeded( pBui->getCS_needs() );
+        else {
+            if (pBui->getHeatingUnit()) {
+                pBui->getHeatingUnit()->setThermalPowerNeeded( pBui->getHS_needs()+pBui->getDHW_needs() );
+                pBui->getHeatingUnit()->setThermalPowerNeededHS( pBui->getHS_needs() ); // Added by Max
+                pBui->getHeatingUnit()->setThermalPowerNeededDHW( pBui->getDHW_needs() ); // Added by Max
+            }
+            if (pBui->getCoolingUnit()) {
+                pBui->getCoolingUnit()->setThermalPowerNeeded( pBui->getCS_needs() );
+            }
         }
     }
 
@@ -2091,7 +2092,6 @@ void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned
         // Heating Unit
         if (pBui->getHeatingUnit()) {
             double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getHeatingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
-
             double machineThermalPower = pBui->getHeatingUnit()->getThermalPower(heatPumpSrcTemp);
             DHW_Pp = min(pBui->getDHW_needs(), machineThermalPower); // Priority to the DHW in machineThermalPower not enough.
             HS_Pp = min(pBui->getHS_needs(), machineThermalPower-DHW_Pp); // Give what's left of machineThermalPower to HS.
@@ -2170,15 +2170,14 @@ void Model::noHVAC_Control_Finish(Building* pBui, Climate* pClim, unsigned int d
             pBui->addFuelConsumption(pBui->getHeatingUnit()->getFuelConsumption(double(dt), HS_Pp+DHW_Pp, heatPumpSrcTemp));
             pBui->addElectricConsumption(pBui->getHeatingUnit()->getElectricConsumption(double(dt), HS_Pp+DHW_Pp, heatPumpSrcTemp)); //TODO, what if we impose the heat demand? It doesn't seem to get the electricity consumption with the imposed heat demand (Max).
         }
+        // Energy consumption in primary resource (machine power is always positive, unlike CS_Pp which is always negative).
+        pBui->addMachinePower(-CS_Pp);
+        if (pBui->getCoolingUnit()) {
+            double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getCoolingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
+            pBui->addFuelConsumption(pBui->getCoolingUnit()->getFuelConsumption(double(dt),CS_Pp,heatPumpSrcTemp));
+            pBui->addElectricConsumption(pBui->getCoolingUnit()->getElectricConsumption(double(dt),CS_Pp,heatPumpSrcTemp));
+        }
     } // (To get rid of imposed value code, remove this line.)
-
-    // Energy consumption in primary resource (machine power is always positive, unlike CS_Pp which is always negative).
-    pBui->addMachinePower(-CS_Pp);
-    if (pBui->getCoolingUnit()) {
-        double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getCoolingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
-        pBui->addFuelConsumption(pBui->getCoolingUnit()->getFuelConsumption(double(dt),CS_Pp,heatPumpSrcTemp));
-        pBui->addElectricConsumption(pBui->getCoolingUnit()->getElectricConsumption(double(dt),CS_Pp,heatPumpSrcTemp));
-    }
 
     // Distribution of the energy in the zones.
     for (size_t i=0 ; i<pBui->getnZones() ; ++i) {
