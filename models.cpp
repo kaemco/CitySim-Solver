@@ -2036,6 +2036,7 @@ void Model::noHVAC_Control_Needs(Building* pBui, Climate* pClim, unsigned int da
             DHW_T1 = pBui->getDHWHeatStock()->temperature(dt, VdotUsed, 0., DHW_SolPp, DHW_T0, DHW_Tinlet, Tamb);
             if (DHW_T1 < DHW_Tmin) { // If DHW temperature goes below Tmin, heat to Tmax.
                 DHW_needs = pBui->getDHWHeatStock()->power(dt, DHW_Tmax, VdotUsed, DHW_SolPp, DHW_T0, DHW_Tinlet, Tamb);
+                if (isnan(DHW_needs)) throw string("Domestic hot water usage " + toString(VdotUsed) + " m3/s is too high for the tank volume " + toString(pBui->getDHWHeatStock()->getVolume()) + " m3.");
             }
         } // Otherwise DHW_needs=0
     }
