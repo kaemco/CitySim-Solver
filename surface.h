@@ -599,7 +599,6 @@ public:
     void eraseShortWaveIrradiance(unsigned int keepValue){ shortWaveIrradiance.erase(shortWaveIrradiance.begin(),shortWaveIrradiance.end()-min(keepValue,(unsigned int)shortWaveIrradiance.size())); } // removes all elements but the last one
 
     void setShortWaveIrradiance_IAM(float value) { shortWaveIrradiance_IAM = value; }
-    float getShortWaveIrradiance_IAM() { return shortWaveIrradiance_IAM; }
 
     void setBeamIrradiance(float value) { beamIrradiance = value; }
     void setBeamAngle(float value) { beamAngle = value; }
@@ -643,10 +642,10 @@ public:
     float getPVElectricProduction(float Tout) {
         pvProduction.push_back(0.f);
         if (pvPanel != NULL) {
-            pvProduction.back() += pvRatio*area*shortWaveIrradiance.back()*pvPanel->getMaxPowerEfficiency(shortWaveIrradiance.back(), Tout);
+            pvProduction.back() += pvRatio*area*shortWaveIrradiance_IAM*pvPanel->getMaxPowerEfficiency(shortWaveIrradiance_IAM, Tout);
         }
         if (pvtPanel != NULL) {
-            pvProduction.back() += pvtRatio*area*shortWaveIrradiance.back()*pvtPanel->getMaxPowerEfficiency(shortWaveIrradiance.back(), Tout);
+            pvProduction.back() += pvtRatio*area*shortWaveIrradiance_IAM*pvtPanel->getMaxPowerEfficiency(shortWaveIrradiance_IAM, Tout);
         }
         return pvProduction.back();
     }

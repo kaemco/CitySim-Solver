@@ -2707,9 +2707,9 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
                         // diffuse part sky
                         irradiationSW[surfaceIndex] += factors->unobstructed * lv[factors->patchNo];
                         irradiationDiffuseSky[surfaceIndex] += factors->unobstructed * lv[factors->patchNo];
-#ifdef DEBUG
                         if (((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()) {
                             float theta = acos(cosAngleBetween(scene.GetSurface(surfaceIndex).Normal(),tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal())));
+#ifdef DEBUG
                             ss_IAM << day << "\t" << hour << "\t" << surfaceIndex << "\t"
                                    << scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << "\t"
                                    << scene.GetSurface(surfaceIndex).Normal().Azimuth().degrees() << "\t"
@@ -2719,14 +2719,14 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
                                    << theta*180./M_PI << "\t"
                                    << factors->unobstructed * lv[factors->patchNo] << "\t"
                                    << ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta) << endl;
+#endif
                             irradiationSW_IAM[surfaceIndex] += factors->unobstructed * lv[factors->patchNo] * ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta);
                         }
-#endif
                     }
-#ifdef DEBUG
                     else if (((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()) {
                         // diffuse part ground
                         float theta = acos(cosAngleBetween(scene.GetSurface(surfaceIndex).Normal(),tregenzaSky.GetPatch(factors->patchNo)->averageVisibleDirection(scene.GetSurface(surfaceIndex).Normal())));
+#ifdef DEBUG
                         ss_IAM << day << "\t" << hour << "\t" << surfaceIndex << "\t"
                         << scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << "\t"
                         << scene.GetSurface(surfaceIndex).Normal().Azimuth().degrees() << "\t"
@@ -2736,9 +2736,9 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
                         << theta*180./M_PI << "\t"
                         << factors->unobstructed * groundRadiance << "\t"
                         << ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta) << endl;
+#endif
                         irradiationSW_IAM[surfaceIndex] += factors->unobstructed * groundRadiance * ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta);
                     }
-#endif
                 }
             }
             // diffuse part ground
@@ -2750,9 +2750,9 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
                 if (cosTheta > 0.) {
                     irradiationSW[surfaceIndex] += scene.GetSurface(surfaceIndex).InsolationFactors().GetInsolationFactor(*pSun) * Ibn * cosTheta; // fraction of the surface that is light by the sun
                     irradiationBeam[surfaceIndex] = scene.GetSurface(surfaceIndex).InsolationFactors().GetInsolationFactor(*pSun) * Ibn * cosTheta; // fraction of the surface that is light by the sun
-#ifdef DEBUG
                     if (((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()) {
                         float theta = acos(cosTheta);
+#ifdef DEBUG
                         ss_IAM << day << "\t" << hour << "\t" << surfaceIndex << "\t"
                         << scene.GetSurface(surfaceIndex).Normal().Altitude().degrees() << "\t"
                         << scene.GetSurface(surfaceIndex).Normal().Azimuth().degrees() << "\t"
@@ -2762,10 +2762,10 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
                         << theta*180./M_PI << "\t"
                         << scene.GetSurface(surfaceIndex).InsolationFactors().GetInsolationFactor(*pSun) * Ibn * cosTheta << "\t"
                         << ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta) << endl;
+#endif
                         irradiationSW_IAM[surfaceIndex] += scene.GetSurface(surfaceIndex).InsolationFactors().GetInsolationFactor(*pSun) * Ibn * cosTheta
                                                            * ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta);
                     }
-#endif
                 }
             }
         } // end the loop on the surfaces
@@ -2786,7 +2786,6 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
             irradiationSWn = irradiationSWnew;
 
         }
-#ifdef DEBUG
         // adds the inter-reflexions to the irradiance IAM - normal direction efficacy
         float theta = 0.f;
         for (unsigned int surfaceIndex=0; surfaceIndex<scene.SurfaceCount(); ++surfaceIndex) {
@@ -2795,8 +2794,6 @@ void XmlScene::computeShortWave(unsigned int day, unsigned int hour) {
                                                     * ((Surface*)(scene.GetSurface(surfaceIndex).SurfaceDelegate()))->getPVPanel()->getIAM(theta);
             }
         }
-#endif
-
     } // end if sun is up
     else {
         // sets the luminance of the sky and ground to zero

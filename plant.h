@@ -29,7 +29,6 @@ class TemperatureSetpoint;
 class PressureSetpoint;
 class PIDController;
 class PIDControllerValve;
-class EfficiencyPump;
 class MassFlowSetpoint;
 class MCR;
 
@@ -41,6 +40,19 @@ using namespace std;
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Woverloaded-virtual"
 
+class Polynomial {
+
+private:
+    vector<double> a; // coefficients of the polynomial regression
+
+public:
+
+    Polynomial(TiXmlHandle hdl);
+    size_t getSize() { return a.size(); }
+    double get_a(unsigned int i) { return a.at(i); }
+
+};
+
 class PhotoVoltaic {
 
 protected:
@@ -48,6 +60,7 @@ protected:
     double etampref, tref, tcnoct, muvoc, vmp;
     double toutsoc = 20.;
     double gtsoc = 800.;
+    Polynomial* iam_polynomial = nullptr;
     string name = "No name";
 
 #ifdef DEBUG
@@ -642,13 +655,38 @@ public:
     float getThermalPowerMax(double sourceTemp) override {return coGenThermalPower;}
 };
 
+// Added by Max
+class EfficiencyPump{
+public:
+    static EfficiencyPump* createNewEfficiencyPump(TiXmlHandle hdl);
+    EfficiencyPump() {}
+    virtual ~EfficiencyPump() {}
+    virtual float computeEfficiency(float const& massFlow) = 0;
+};
 
+class ConstantEfficiencyPump: public EfficiencyPump {
+private:
+    float efficiencyPump; // must be in between 0 and 1.
+public:
+    ConstantEfficiencyPump(TiXmlHandle hdl);
+    ConstantEfficiencyPump(float efficiencyPump):efficiencyPump(efficiencyPump) {}
+    virtual float computeEfficiency(float const& massFlow) override { return efficiencyPump; }
+};
 
+class AffineEfficiencyPump : public EfficiencyPump {
+protected:
+    // The setpoint function of the pressure difference is a function of mass flow, affine by parts.
+    vector<float> massFlows; // [kg/s]
+    vector<float> efficiencyPumps; // [Pa]
+public:
+    AffineEfficiencyPump(TiXmlHandle hdl);
+    virtual float computeEfficiency(float const& massFlow) override;
+}; // end of Added by Max
 
 class Pump {
 private:
     // Stays constant, define the Pump.
-    EfficiencyPump* efficiencyPump;
+    EfficiencyPump* efficiencyPump = nullptr;
     float n0; // Nominal rotational speed [rotations/min].
     float a0; // Coefficient of polynomial for flow/pressure curve [Pa] (eg. 1247180.f).
     float a1; // Coefficient of polynomial for flow/pressure curve [Pa*s/kg] (eg. -1640.236f).
@@ -661,6 +699,7 @@ private:
 
 public:
     Pump(TiXmlHandle hdl);
+    ~Pump() { if (efficiencyPump) delete efficiencyPump; }
     float getn() { return n; }
 
     /**
@@ -846,7 +885,7 @@ protected:
 public:
     static Substation* createNewSubstation(TiXmlHandle hdl,  Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
     Substation(TiXmlHandle hdl,  Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
-    virtual ~Substation() { delete valve; /*logStream << "Destructor of Substation" << endl;*/ }
+    ~Substation() override { delete valve; /*logStream << "Destructor of Substation" << endl;*/ }
 
     void writeXML(ofstream& file, string tab){ file << tab << "Substation saving not supported yet" << endl; }
     string getLabel() { return "Substation"; }
@@ -992,7 +1031,7 @@ private:
     HeatPump* heatPump;
 public:
     SubstationHeatPump(TiXmlHandle hdl, Building* pBui, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
-    virtual ~SubstationHeatPump() { /*logStream << "Destructor of SubstationHP" << endl;*/ }
+    ~SubstationHeatPump() override { /*logStream << "Destructor of SubstationHP" << endl;*/ }
     void writeXML(ofstream& file, string tab) override{ file << tab << "SubstationHeatPump saving not supported yet" << endl; }
     string getLabel() override{ return "SubstationHeatPump"; }
     virtual double getThermalPower(double sourceTemp) override;
@@ -1037,7 +1076,7 @@ private:
     float targetSupplyTemp;
 public:
     ConstantTemperatureSetpoint(TiXmlHandle hdl);
-    virtual ~ConstantTemperatureSetpoint() override { }
+    ~ConstantTemperatureSetpoint() override { }
     virtual float computeTargetTemperature(Climate* pClimate, unsigned int day, unsigned int hour) override { return targetSupplyTemp; }
     virtual float getInitTemp() override { return targetSupplyTemp; }
 };
@@ -1047,7 +1086,7 @@ protected:
     float lowExtTemp, highExtTemp, lowExtTempSupplyTemp, highExtTempSupplyTemp;
 public:
     AffineTemperatureSetpoint(TiXmlHandle hdl);
-    virtual ~AffineTemperatureSetpoint() override { }
+    ~AffineTemperatureSetpoint() override { }
     virtual float computeTargetTemperature(Climate* pClimate, unsigned int day, unsigned int hour) override;
     virtual float getInitTemp() override { return highExtTempSupplyTemp; }
     float avgExtTempLast24Hours(Climate* pClimate, unsigned int day, unsigned int hour);
@@ -1060,7 +1099,7 @@ private:
     float startSummerTempThreshold, endSummerTempThreshold;
 public:
     AffineWinterConstantSummerSetpoint(TiXmlHandle hdl);
-    virtual ~AffineWinterConstantSummerSetpoint() override { }
+    ~AffineWinterConstantSummerSetpoint() override { }
     virtual float computeTargetTemperature(Climate* pClimate, unsigned int day, unsigned int hour) override;
 };
 
@@ -1072,7 +1111,7 @@ private:
     bool hasImposedValue(unsigned int day, unsigned int hour, float& retValue);
 public:
     ImposedValuesOrConstantSetpoint(TiXmlHandle hdl);
-    virtual ~ImposedValuesOrConstantSetpoint() { }
+    ~ImposedValuesOrConstantSetpoint() override { }
     virtual float computeTargetTemperature(Climate* pClimate, unsigned int day, unsigned int hour);
     virtual float getInitTemp() { return constantTempIfNoImposed; }
 };
@@ -1094,7 +1133,7 @@ private:
     float targetPressureDiff; // Usually negative for pumps.
 public:
     ConstantPressureSetpoint(TiXmlHandle hdl);
-    virtual ~ConstantPressureSetpoint() override { }
+    ~ConstantPressureSetpoint() override { }
     virtual float computeTargetPressureDiff(float const& massFlow) override { return targetPressureDiff; }
 };
 
@@ -1105,37 +1144,8 @@ protected:
     vector<float> pressureDiffs; // [Pa]
 public:
     AffinePressureSetpoint(TiXmlHandle hdl);
-    virtual ~AffinePressureSetpoint() override { }
+    ~AffinePressureSetpoint() override { }
     virtual float computeTargetPressureDiff(float const& massFlow) override;
-};
-
-// Added by Max
-class EfficiencyPump{
-public:
-    static EfficiencyPump* createNewEfficiencyPump(TiXmlHandle hdl);
-    EfficiencyPump() { }
-    virtual ~EfficiencyPump() { }
-    virtual float computeEfficiency(float const& massFlow) = 0;
-};
-
-class ConstantEfficiencyPump: public EfficiencyPump {
-private:
-    float efficiencyPump; // must be in between 0 and 1.
-public:
-    ConstantEfficiencyPump(TiXmlHandle hdl);
-    virtual ~ConstantEfficiencyPump() override { }
-    virtual float computeEfficiency(float const& massFlow) override { return efficiencyPump; }
-};
-
-class AffineEfficiencyPump : public EfficiencyPump {
-protected:
-    // The setpoint function of the pressure difference is a function of mass flow, affine by parts.
-    vector<float> massFlows; // [kg/s]
-    vector<float> efficiencyPumps; // [Pa]
-public:
-    AffineEfficiencyPump(TiXmlHandle hdl);
-    virtual ~AffineEfficiencyPump() override { }
-    virtual float computeEfficiency(float const& massFlow) override;
 };
 
 //Added by Max
@@ -1152,7 +1162,7 @@ private:
     double massFlow; // must be positive.
 public:
     ConstantMassFlowSetPoint(TiXmlHandle hdl);
-    virtual ~ConstantMassFlowSetPoint() override { }
+    ~ConstantMassFlowSetPoint() override { }
     virtual double computeTargetMassFlow() override { return massFlow; }
 };
 
@@ -1188,7 +1198,7 @@ private:
 
 public:
     SimpleStorage(TiXmlHandle hdl);
-    virtual ~SimpleStorage() { }
+    ~SimpleStorage() override { }
     virtual float computeOutputTemperature(bool storageHeatsUp, float const& inputTemp, float const& m, float const& cp) override;
     virtual void confirmStoredHeat(float const& tempDiff, float const& m, float const& cp) override;
 
@@ -1325,8 +1335,12 @@ private:
     unsigned int latency; // [hour]
     unsigned int timeClock; //hour
 
+    void deleteDynAllocated() { if (valve) delete valve; }
+
 public:
     ThermalStationSlave(TiXmlHandle hdl, Network* net, ostream* pLogStr);
+    ~ThermalStationSlave() override { deleteDynAllocated(); }
+
     void computePressureDiff(float const& massFlow, float const& rho, float& deltaP, float& dDeltaP_dm);
     void setDesiredMassFlow(float rho, float cp, double sourceTemp, Climate* pClimate, unsigned int day, unsigned int hour);
     void updateControlVariable(float const& massFlow, float const& deltaP, float const& rho, float& sumDeltaRpm, float& sumRpm, float& sumDeltaKv, float& sumKv, float const& learningRate);
@@ -1357,7 +1371,7 @@ private:
 
 public:
     SeasonalStorageHeatingThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr);
-    ~SeasonalStorageHeatingThermalStation() { deleteDynAllocated(); }
+    ~SeasonalStorageHeatingThermalStation() override { deleteDynAllocated(); }
 
     void computePressureDiff(float const& massFlow, float const& rho, float& deltaP, float& dDeltaP_dm) override;
 
@@ -1380,10 +1394,9 @@ public:
     void eraseRecords_back() override { ThermalStation::eraseRecords_back(); storage->eraseRecords_back(); }
 };
 
-
 class MCR{
 protected:
-    vector<ThermalStation*> thermalstations;
+    vector<ThermalStation*> thermalstations; // vector of external references to ThermalStation objects created elsewhere
 
 public:
     static MCR* createNewMCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations);
@@ -1889,28 +1902,20 @@ public:
     float avgPressureDiffSupplyReturn(Substation* apartFromMe);
 };
 
-ostream& operator<<(ostream& stream, vector<unsigned int> const& v);
-ostream& operator<<(ostream& stream, vector<double> const& v);
-ostream& operator<<(ostream& stream, Network* net);
-
-
-
-
-
 class DistrictEnergyCenter {
 private:
-    District* pDistrict;
+    District* pDistrict; // pointer back to the district it belongs to
 
     unsigned int id;
 
     double cp, rho;
     static vector<string> muPossibilities; string mu = "0.0004"; // Dynamic viscocity of water [Pa*s]
     vector<ThermalStation*> thermalStations;
-    Network* pipelineNetwork;
+    Network* pipelineNetwork = nullptr;
 
     vector<float> totalThermalLossRecord; // Useful ? It can be computed just by summing up all the losses in the output file.
 
-    MCR* mcr;
+    MCR* mcr = nullptr;
 
 public:
     ostream logStream;

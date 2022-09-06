@@ -6,6 +6,18 @@
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+Polynomial::Polynomial(TiXmlHandle hdl) {
+
+    //cout << "Polynomial coefficients: (";
+    unsigned int index=0;
+    do {
+        string attrib = *(hdl.ToElement()->Attribute("c"+toString(index)));
+        //cout << " " << attrib;
+        a.push_back(to<float>(attrib));
+    } while ( hdl.ToElement()->Attribute("c"+toString(++index)) );
+    //cout << ")" << endl;
+
+}
 
 PhotoVoltaic::PhotoVoltaic(TiXmlHandle hdl, ostream* pLogStr):logStream(std::cout.rdbuf()) {
 
@@ -35,14 +47,24 @@ PhotoVoltaic::PhotoVoltaic(TiXmlHandle hdl, ostream* pLogStr):logStream(std::cou
 
     if (hdl.ToElement()->Attribute("name")){ hdl.ToElement()->QueryStringAttribute("name",&name);}
 
-    //if (hdl.ToElement()->Attribute("IAM")) iam = to<float>(hdl.ToElement()->Attribute("IAM"));
+    if (hdl.FirstChildElement("IAM").ToElement()) iam_polynomial = new Polynomial(hdl.FirstChild("IAM"));
 
 }
 
 void PhotoVoltaic::writeXML(ofstream& file, float ratio, string tab){
+
     file << tab << "<PV pvRatio=\"" << ratio << "\" name=\"" << name <<
             "\" Etampref=\"" << etampref << "\" Vmp=\"" << vmp << "\" muVoc=\"" << muvoc <<
-            "\" Tcnoct=\"" << tcnoct << "\" Tref=\"" << tref << "\"/>" << endl;
+            "\" Tcnoct=\"" << tcnoct << "\" Tref=\"" << tref << "\"";
+    if (iam_polynomial) {
+        file << ">" << endl;
+        file << tab << "\t<IAM";
+        for (size_t i=0;i<iam_polynomial->getSize();++i) file << " c" << i << "=\"" << iam_polynomial->get_a(i) << "\"";
+        file << "/>" << endl;
+        file << tab << "</PV>" << endl;
+    }
+    else file << "/>" << endl;
+
 }
 
 double PhotoVoltaic::getMaxPowerEfficiency(double gt, double tout) {
@@ -51,6 +73,8 @@ double PhotoVoltaic::getMaxPowerEfficiency(double gt, double tout) {
 }
 
 PhotoVoltaic::~PhotoVoltaic() {
+
+    if (iam_polynomial) delete iam_polynomial;
 
 #ifdef DEBUG
     fstream output ("iam.txt", ios::out | ios::trunc);
@@ -61,11 +85,19 @@ PhotoVoltaic::~PhotoVoltaic() {
 
 }
 
-double PhotoVoltaic::getIAM(float elevation) {
-    // the reference function
-    double iam_value_ref = -1.0410*pow(elevation,6) + 4.0590*pow(elevation,5) - 6.3050*pow(elevation,4) + 4.5308*pow(elevation,3) - 1.4386*pow(elevation,2) + 1.5515e-01*elevation + 9.5204e-01;
-    double iam_value_mod = -9.7256E-02*pow(elevation,6) + 2.5487E-01*pow(elevation,5) - 4.0788E-01*pow(elevation,4) + 3.8687E-01*pow(elevation,3) - 1.6502E-01*pow(elevation,2) + 2.2950E-02*elevation + 9.2368E-01;
-    double iam_value = iam_value_ref;
+double PhotoVoltaic::getIAM(float elevation) { // elevation is in radians
+    double iam_value = 1.; // without IAM the value of always 1
+    if (iam_polynomial) {
+        iam_value = 0.;
+        for (size_t i=0;i<iam_polynomial->getSize();++i) {
+            iam_value += iam_polynomial->get_a(i)*pow(elevation,i);
+        }
+    }
+    else {
+        // the reference function
+        iam_value = -1.0410*pow(elevation,6) + 4.0590*pow(elevation,5) - 6.3050*pow(elevation,4) + 4.5308*pow(elevation,3) - 1.4386*pow(elevation,2) + 1.5515e-01*elevation + 9.5204e-01;
+        //double iam_value_mod = -9.7256E-02*pow(elevation,6) + 2.5487E-01*pow(elevation,5) - 4.0788E-01*pow(elevation,4) + 3.8687E-01*pow(elevation,3) - 1.6502E-01*pow(elevation,2) + 2.2950E-02*elevation + 9.2368E-01;
+    }
 #ifdef DEBUG
     iam.push_back(pair<float,double>(elevation,iam_value));
 #endif // DEBUG
@@ -1385,9 +1417,20 @@ double CoGenerationHeatPump::getFuelConsumption(double time, double thermalPower
 Pump::Pump(TiXmlHandle hdl) {
 
     string name = "efficiencyPump";
-    if (hdl.FirstChildElement("EfficiencyPump").ToElement()) {// Changed by Max
-        efficiencyPump = EfficiencyPump::createNewEfficiencyPump(hdl.FirstChildElement("EfficiencyPump")); // Dynamical allocation.
-    }else{throw string("Error in the XML file: a Pump does not have a child element 'EfficiencyPump'.");}
+    float effPump=0.f;
+    if ( hdl.ToElement()->QueryFloatAttribute(name.c_str(), &effPump) ) {
+        // no efficiency in the attributes, check if a child exists
+        if (hdl.FirstChildElement("EfficiencyPump").ToElement()) {// Changed by Max
+            efficiencyPump = EfficiencyPump::createNewEfficiencyPump(hdl.FirstChildElement("EfficiencyPump")); // Dynamical allocation.
+        }
+        else throw string("Error in the XML file: a Pump is missing attribute or child element: '"+name+"'.");
+    }
+    else { // efficiency is defined in the attributes, check its value
+        if ( effPump<=0 ) { throw string("Error in the XML file: a Pump has "+name+"<=0."); }
+        else { // create the pump with given efficiency
+            efficiencyPump = new ConstantEfficiencyPump(effPump);
+        }
+    }
 
     name = "n0";
     if ( hdl.ToElement()->QueryFloatAttribute(name.c_str(), &n0) ) { throw string("Error in the XML file: a Pump doesn't have attribute: '"+name+"'."); }
@@ -2821,9 +2864,10 @@ ThermalStation* ThermalStation::createNewThermalStation(TiXmlHandle hdl, Network
     ThermalStation* newThermalStation;
 
     string type;
-    if ( hdl.ToElement()->QueryStringAttribute("type", &type) )   { throw string("Error in the XML file: a ThermalStation doesn't have attribute: 'type'."); }
-
-    if (type=="simple") {
+    if ( hdl.ToElement()->QueryStringAttribute("type", &type) ) { // the attribute type does not exist
+        newThermalStation = new ThermalStation(hdl, net, pLogStr);
+    }
+    else if (type=="simple") {
         newThermalStation = new ThermalStation(hdl, net, pLogStr);
     } else if (type=="seasonalStorageHeating") {
         newThermalStation = new SeasonalStorageHeatingThermalStation(hdl, net, pLogStr);
@@ -2845,11 +2889,9 @@ ThermalStation::ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr) 
     try {
         logStream.rdbuf(pLogStr->rdbuf()); // Add the logStream
 
-        unsigned int beginDay, endDay;
-        if ( hdl.ToElement()->Attribute("beginDay") == NULL ) beginDay = 1;
-        else beginDay = to<unsigned int>(hdl.ToElement()->Attribute("beginDay"));
-        if ( hdl.ToElement()->Attribute("endDay") == NULL )   endDay   = 365;
-        else endDay   = to<unsigned int>(hdl.ToElement()->Attribute("endDay"));
+        unsigned int beginDay=1, endDay=365;
+        if ( hdl.ToElement()->Attribute("beginDay") ) beginDay = to<unsigned int>(hdl.ToElement()->Attribute("beginDay"));
+        if ( hdl.ToElement()->Attribute("endDay")   ) endDay   = to<unsigned int>(hdl.ToElement()->Attribute("endDay"));
 
         string name = "linkedNodeId";
         if ( hdl.ToElement()->QueryUnsignedAttribute(name.c_str(), &linkedNodeId) ) { throw string("Error in the XML file: a ThermalStation doesn't have attribute: '"+name+"'."); }
@@ -3328,6 +3370,10 @@ MCR* MCR::createNewMCR(TiXmlHandle hdl,vector<ThermalStation*> thermalStations){
 MCR::MCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations){
 
     // We look first to the ThermalStationMaster
+    if (thermalStations.size() == 1) { // only one thermal station so of course the master
+        thermalstations.push_back(thermalStations.back());
+        return;
+    }
     string name("master");
     unsigned int linkedNodeIdMaster;
     if(hdl.ToElement()->QueryUnsignedAttribute(name.c_str(), &linkedNodeIdMaster)){throw string("Error in the XML file: A MCR does not have an attribute master with the id of the thermalStation.");}
@@ -3577,6 +3623,7 @@ DistrictEnergyCenter::DistrictEnergyCenter(TiXmlHandle hdl, District* pDistrict,
                 }
             }
             if(hdl.FirstChildElement("MCR").ToElement()){mcr = MCR::createNewMCR(hdl.FirstChildElement("MCR"),thermalStations);}
+            else if (thermalStations.size() == 1) { mcr = new SingleMCR(hdl,thermalStations); }
             else{throw string("Error in the XML file: a DistrictEnergyCenter doesn't have any 'MCR' child element.");}
         } catch (...) {
             deleteDynAllocated();
