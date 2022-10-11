@@ -4354,11 +4354,13 @@ void XmlScene::writeTHHeaderText(string fileOut) {
             textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(k)->getId() << ":Qs(Wh)" << "\t";
             textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(k)->getId() << ":VdotVent(m³/h)" << "\t";
         }
-        textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):HeatStockTemperature(celsius)" << "\t";
-        if (pDistrict->getBuilding(j)->getDHWHeatStock() != NULL)
+        if (pDistrict->getBuilding(j)->getHeatStock())
+            textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):HeatStockTemperature(celsius)" << "\t";
+        if (pDistrict->getBuilding(j)->getDHWHeatStock())
             textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):DHWStockTemperature(celsius)" << "\t";
-        textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):ColdStockTemperature(celsius)" << "\t"
-                 << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):MachinePower(W)" << "\t"
+        if (pDistrict->getBuilding(j)->getColdStock())
+            textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):ColdStockTemperature(celsius)" << "\t";
+        textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):MachinePower(W)" << "\t"
                  << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):FuelConsumption(MJ)" << "\t"
                  << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):ElectricConsumption(kWh)" << "\t"
                  << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):SolarPVProduction(kWh)" << "\t"
@@ -4417,11 +4419,13 @@ void XmlScene::writeTHResultsText(string fileOut) {
                 textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getQs(i-preTimeStepsSimulated) << "\t";
                 textFile << fixed << setprecision(1) << 3600.f*pDistrict->getBuilding(j)->getZone(k)->getVdotVent(i) << "\t";
             }
-            textFile << fixed << setprecision(1) << pDistrict->getBuilding(j)->getHeatStockTemperature(i) << "\t";
-            if (pDistrict->getBuilding(j)->getDHWHeatStock() != NULL)
+            if (pDistrict->getBuilding(j)->getHeatStock())
+                textFile << fixed << setprecision(1) << pDistrict->getBuilding(j)->getHeatStockTemperature(i) << "\t";
+            if (pDistrict->getBuilding(j)->getDHWHeatStock())
                 textFile << fixed << setprecision(1) << pDistrict->getBuilding(j)->getDHWStockT(i) << "\t";
-            textFile << fixed << setprecision(1) << pDistrict->getBuilding(j)->getColdStockTemperature(i) << "\t"
-                     << fixed << setprecision(0) << pDistrict->getBuilding(j)->getMachinePower(i+simulationIndex) << "\t"
+            if (pDistrict->getBuilding(j)->getColdStock())
+                textFile << fixed << setprecision(1) << pDistrict->getBuilding(j)->getColdStockTemperature(i) << "\t";
+            textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getMachinePower(i+simulationIndex) << "\t"
                      << fixed << setprecision(3) << pDistrict->getBuilding(j)->getFuelConsumption(i-preTimeStepsSimulated+simulationIndex)/1.e6 << "\t"
                      << fixed << setprecision(3) << pDistrict->getBuilding(j)->getElectricConsumption(i-preTimeStepsSimulated+simulationIndex)/3.6e6 << "\t"
                      << fixed << setprecision(0) << pDistrict->getBuilding(j)->getSolarPVProduction(i-preTimeStepsSimulated+simulationIndex)/3.6e6 << "\t"

@@ -1749,16 +1749,24 @@ void Substation::setThermalPowerNeeded(double tPN) {
     // Set secondarySideInputTemp.
     if( thermalPowerNeeded>0. ) {
         // TODO, improve this block ! These formulas make too big approximations.
-        float T_HS = getBuilding()->getHeatStockTemperature();
-        if (getBuilding()->getDHWHeatStock()!=NULL) {
-            float T_DHW = getBuilding()->getDHWStockT(), Pow_DHW = getBuilding()->getDHW_needs(), Pow_HS = getBuilding()->getHS_needs();
-            if (Pow_HS+Pow_DHW==0.f) {
-                secondarySideInputTemp = (T_HS+T_DHW)*0.5; // This may happen if imposed heat demands are used.
+        if (getBuilding()->getHeatStock()) {
+            float T_HS = getBuilding()->getHeatStockTemperature();
+            if (getBuilding()->getDHWHeatStock()!=NULL) {
+                float T_DHW = getBuilding()->getDHWStockT(), Pow_DHW = getBuilding()->getDHW_needs(), Pow_HS = getBuilding()->getHS_needs();
+                if (Pow_HS+Pow_DHW==0.f) {
+                    secondarySideInputTemp = (T_HS+T_DHW)*0.5; // This may happen if imposed heat demands are used.
+                } else {
+                    secondarySideInputTemp = (T_HS*Pow_HS+T_DHW*Pow_DHW)/(Pow_HS+Pow_DHW); // The temperature entering the heat exchanger secondary side, weighted average.
+                }
             } else {
-                secondarySideInputTemp = (T_HS*Pow_HS+T_DHW*Pow_DHW)/(Pow_HS+Pow_DHW); // The temperature entering the heat exchanger secondary side, weighted average.
+                secondarySideInputTemp = T_HS;
             }
-        } else {
-            secondarySideInputTemp = T_HS;
+        }
+        else if (getBuilding()->getDHWHeatStock()) {
+            secondarySideInputTemp = getBuilding()->getDHWStockT();
+        }
+        else { // no Tank at all, put a NaN
+            secondarySideInputTemp = numeric_limits<float>::quiet_NaN();
         }
     }
     else if ( thermalPowerNeeded<0. ) {
@@ -1809,45 +1817,50 @@ double Substation::mc(double thermalPowerNeeded, double designThermalPower, doub
 void Substation::computeHeatExchanged(float const& primarySideCp, float const& primarySideRho, float const& primarySideInputTemp, float const& primarySideMassFlow, float const& primarySidePressureDiff, Climate* pClim, unsigned int day, unsigned int hour) {
 
     if (primarySideMassFlow>0.f) {
+        if (getBuilding()->getHeatStock() || getBuilding()->getDHWHeatStock()) { // if we have some temperature information
+            float secondarySideMassFlow = primarySideMassFlow; // TODO improve this ?
+            float secondarySideCp = primarySideCp; // TODO: Improve this ? Make possibility to set in xml ?
 
-        float secondarySideMassFlow = primarySideMassFlow; // TODO improve this ?
-        float secondarySideCp = primarySideCp; // TODO: Improve this ? Make possibility to set in xml ?
+            float sgnNeeds;
+            if( thermalPowerNeeded>0. ) {
+                sgnNeeds = 1.;
+            }
+            else if ( thermalPowerNeeded<0. ) {
+                sgnNeeds = -1.;
+            }
+            else {
+                sgnNeeds = 0.;
+            }
 
-        float sgnNeeds;
-        if( thermalPowerNeeded>0. ) {
-            sgnNeeds = 1.;
-        }
-        else if ( thermalPowerNeeded<0. ) {
-            sgnNeeds = -1.;
+
+            if (  (primarySideInputTemp-secondarySideInputTemp)*sgnNeeds<=0. ) { // If the temperature difference has opposite sign to the needs, then the heat tranfer cannot take place in the correct direction.
+                thermalPowerExchanged = 0.f;
+
+            } else { // In the normal case.
+                double C_min = min(secondarySideCp * secondarySideMassFlow  , primarySideCp * primarySideMassFlow);
+                double C_max = max(secondarySideCp * secondarySideMassFlow  , primarySideCp * primarySideMassFlow);
+                double UA = 2 * designEpsilon * designThermalPower / ((1 - designEpsilon) * designTempDifference)
+                        / (pow(designThermalPower / (designTempDifference*secondarySideCp*secondarySideMassFlow)  , 0.583) +
+                           pow(designThermalPower / (designTempDifference*primarySideCp*primarySideMassFlow)  , 0.583));
+
+                double HXEpsilon;
+                if (C_min > 0.9999*C_max) { HXEpsilon = UA/C_min / (1 + UA/C_min); }
+                else { HXEpsilon = (1 - exp(-(UA/C_min) * (1 - C_min/C_max))) /(1 - (C_min/C_max) * exp(-(UA/C_min) * (1 - C_min/C_max)) ); }
+
+                thermalPowerExchanged = HXEpsilon  * C_min  * (primarySideInputTemp - secondarySideInputTemp ); // Positive for heating, negative for cooling.
+
+                if ( thermalPowerExchanged*thermalPowerNeeded<0. ) { thermalPowerExchanged = 0.f; } // If the thermal power computed has opposite sign to the needs, set to zero (corresponds to closing the valve on secondary network).
+                if ( abs(thermalPowerExchanged)>abs(designThermalPower) ) { thermalPowerExchanged = sgnNeeds*designThermalPower; } // Don't exceed design thermal power.
+                if ( abs(thermalPowerExchanged)>abs(thermalPowerNeeded) ) { thermalPowerExchanged = thermalPowerNeeded; } // Don't exceed the thermal power demanded by consumer.
+            }
+
+            setPrimarySideOutputTemp(computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp));
         }
         else {
-            sgnNeeds = 0.;
+            // no temperature information, then assume a deltaT of the designTempDifference from the XML file
+            thermalPowerExchanged = thermalPowerNeeded;
+            setPrimarySideOutputTemp(computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp));
         }
-
-
-        if (  (primarySideInputTemp-secondarySideInputTemp)*sgnNeeds<=0. ) { // If the temperature difference has opposite sign to the needs, then the heat tranfer cannot take place in the correct direction.
-            thermalPowerExchanged = 0.f;
-
-        } else { // In the normal case.
-            double C_min = min(secondarySideCp * secondarySideMassFlow  , primarySideCp * primarySideMassFlow);
-            double C_max = max(secondarySideCp * secondarySideMassFlow  , primarySideCp * primarySideMassFlow);
-            double UA = 2 * designEpsilon * designThermalPower / ((1 - designEpsilon) * designTempDifference)
-                    / (pow(designThermalPower / (designTempDifference*secondarySideCp*secondarySideMassFlow)  , 0.583) +
-                       pow(designThermalPower / (designTempDifference*primarySideCp*primarySideMassFlow)  , 0.583));
-
-            double HXEpsilon;
-            if (C_min > 0.9999*C_max) { HXEpsilon = UA/C_min / (1 + UA/C_min); }
-            else { HXEpsilon = (1 - exp(-(UA/C_min) * (1 - C_min/C_max))) /(1 - (C_min/C_max) * exp(-(UA/C_min) * (1 - C_min/C_max)) ); }
-
-            thermalPowerExchanged = HXEpsilon  * C_min  * (primarySideInputTemp - secondarySideInputTemp ); // Positive for heating, negative for cooling.
-
-            if ( thermalPowerExchanged*thermalPowerNeeded<0. ) { thermalPowerExchanged = 0.f; } // If the thermal power computed has opposite sign to the needs, set to zero (corresponds to closing the valve on secondary network).
-            if ( abs(thermalPowerExchanged)>abs(designThermalPower) ) { thermalPowerExchanged = sgnNeeds*designThermalPower; } // Don't exceed design thermal power.
-            if ( abs(thermalPowerExchanged)>abs(thermalPowerNeeded) ) { thermalPowerExchanged = thermalPowerNeeded; } // Don't exceed the thermal power demanded by consumer.
-        }
-
-        setPrimarySideOutputTemp(computeOutputTemp(primarySideInputTemp, thermalPowerExchanged, primarySideMassFlow, primarySidePressureDiff, primarySideRho, primarySideCp));
-
     }
     else if (primarySideMassFlow<0.f) {
         thermalPowerExchanged = 0.f;

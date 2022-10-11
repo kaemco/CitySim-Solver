@@ -66,8 +66,6 @@ public :
     static double Thermal_KiCibse(const double& dt, const std::vector<double> &surface, const double& ceiling, const double& floor);
     static double Thermal_KiFixed(const double& surfaceWalls);
 
-    static void ThermalAllAvailable(Building *pBuilding);
-
     static void HVAC_Needs(Building *pBuilding,Climate* pClimate,unsigned int day,unsigned int hour);
     static void HVAC_Available(Building *pBuilding,Climate* pClimate,unsigned int day,unsigned int hour);
     static double HVAC_saturatedSteamPressure(double T);
@@ -120,12 +118,6 @@ public :
      * @param hour = hour at which to compute the electric production
      */
     static void computeAndAddPhotovoltaicAndWindElectricProduction(Building* pBuilding, Climate* pClimate, unsigned int day, unsigned int hour);
-
-    /**
-     * Stores in memory the heat/cooling needs summed over all the building's zones.
-     * @param pBuilding Pointer to building
-     */
-    static void computeAndSetBuildingHeatingCoolingNeeds(Building* pBuilding);
 
     /**
      * Stores in memory the DHW usage summed over all the building's zones.

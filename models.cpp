@@ -1022,23 +1022,6 @@ void Model::Thermal_Kgrounds(Climate* pClimate, Ground* pGround, unsigned int da
         return Ke;
     }
 
-
-void Model::ThermalAllAvailable(Building *pBuilding) {
-
-    for (unsigned int i=0;i<pBuilding->getnZones();i++) {
-
-        pBuilding->getZone(i)->setQs(pBuilding->getZone(i)->getHeating() + pBuilding->getZone(i)->getCooling());
-
-    }
-
-    pBuilding->setMachinePower(0.0);
-    pBuilding->setFuelConsumption(0.0);
-    pBuilding->addElectricConsumption(0.f);
-    /// TODO: check here the consistency with addElectricConsumption and SolarPVProduction
-    pBuilding->setSolarThermalProduction(0.f);
-
-}
-
 void Model::HVAC_Needs(Building *pBuilding,Climate* pClimate,unsigned int day,unsigned int hour) {
 
     // gets the needed information for this timestep in the climate file and in the building
@@ -1723,98 +1706,29 @@ void Model::noHVAC_Control(Building* pBuilding, Climate* pClimate, unsigned int 
  */
 void Model::noHVAC_Control_EnergyHub(District* pDistrict, Climate* pClimate, unsigned int day, unsigned int hour) {
 
-    // compute the Qs, electricalConsumption, fuelConsumption, tanks temperatures for building that are not connected
-
-    bool useOldAlgo = false; // Cognet: Added this, harcoded, to chose whether to use the old algorithm or not (which doesn't work for DECs).
-    if ( useOldAlgo ) { // Cognet: Added this.
-
-        for (size_t i=0; i<pDistrict->getnBuildings(); ++i) {
-// Cognet: Start deleted content not used anymore.
-//            //beginning of contents added by Dapeng
-//            if( (pDistrict->getBuilding(i)->getHeatingUnit()!=NULL && pDistrict->getBuilding(i)->getHeatingUnit()->getLabel() == "Substation") || // Cognet: Changed from small s to capital S in substation
-//                (pDistrict->getBuilding(i)->getCoolingUnit()!=NULL && pDistrict->getBuilding(i)->getCoolingUnit()->getLabel() == "Substation") ) {
-//    //                    logStream <<"substation is simulating."<<endl << flush;
-
-//            }
-//            else {
-//            //ending of contents added by Dapeng
-// Cognet: End deleted content not used anymore.
-            if (pDistrict->getBuilding(i)->getHeatStock() == NULL && pDistrict->getBuilding(i)->getColdStock() == NULL) {
-                // no heat/cold tank, only the demands are calculated
-                Model::ThermalAllAvailable(pDistrict->getBuilding(i)); // Cognet: Maybe this was for an older version of the code. It seems now Buildings must have tanks when initialized.
-            }
-            else {
-                // controls the machines to produce the demand
-                if (pDistrict->getBuilding(i)->getHVACpresence()) {
-                    Model::HVAC_Needs(pDistrict->getBuilding(i),pClimate,day,hour);
-                    Model::HVAC_Control(pDistrict->getBuilding(i),pClimate,day,hour);
-                    Model::HVAC_Available(pDistrict->getBuilding(i),pClimate,day,hour);
-                }
-                else Model::noHVAC_Control(pDistrict->getBuilding(i),pClimate,day,hour);
-            }
-        }
-    }
-
-// Cognet: Start deleted content, not used anymore.
-//        //beginning of contents added by Dapeng
-//        //calculate distric energy center
-//        for(unsigned int i=0; i<pDistrict->getnDECs(); ++i) {
-//            pDistrict->getDEC(i)->setSubInletTemp(day);
-//            for(unsigned int j=0; j<pDistrict->getDEC(i)->getnBuildingsLinkedDEC(); ++j) {
-//                if (pDistrict->getBuilding(j)->getHVACpresence() &&
-//                    ( pDistrict->getDEC(i)->getHeatingUnit()->isWorking(day) ||
-//                      pDistrict->getDEC(i)->getCoolingUnit()->isWorking(day) ) ) {
-//                    Model::HVAC_Needs(pDistrict->getBuilding(j),pClimate,day,hour);
-//                    Model::HVAC_Control_ForDEC(pDistrict->getDEC(i), pDistrict->getBuilding(j), pClimate,day,hour);
-//                    Model::HVAC_Available(pDistrict->getBuilding(j),pClimate,day,hour);
-//                }
-//                else Model::noHVAC_Control_ForDEC(pDistrict->getDEC(i), pDistrict->getDEC(i)->getBuildingLinkedDEC(j), pClimate,day,hour);
-//            }
-//        }
-//        //ending of contents added by Dapeng
-// Cognet: End deleted content, not used anymore.
-
 // Cognet: Start added content.
-    else { // Use new algorithm
 
-        for (size_t i=0; i<pDistrict->getnBuildings(); ++i) {
-            Building* pBui = pDistrict->getBuilding(i);
+    // convenience pointer to the current building
+    Building* pBui=nullptr;
 
-            if (pBui->getHVACpresence()) {
-                throw string("Model::noHVAC_Control_EnergyHub, a building has HVACpresence, but this was not implemented.");
-            }
-            else if (pBui->getHeatStock()==NULL && pBui->getColdStock()==NULL) {  // No heat/cold tank, only the demands are calculated. Although it seems Buildings must have tanks when initialized.
-                Model::ThermalAllAvailable(pBui);
-            }
-            else {
-                Model::noHVAC_Control_Init(pBui,pClimate,day,hour); // Initialization, computes solar and wind electric productions and more.
-                Model::noHVAC_Control_Needs(pBui, pClimate, day, hour); // Computes heating and cooling needs for the buildings tanks.
-            }
+    for (size_t i=0; i<pDistrict->getnBuildings(); ++i) {
+        pBui = pDistrict->getBuilding(i);
+        if (pBui->getHVACpresence()) {
+            throw string("Model::noHVAC_Control_EnergyHub, a building has HVACpresence, but this was not implemented.");
         }
-        // All buildings must have their needs computed before determining the thermal power that can be provided by the heating/cooling units (simulates the DistrictEnergyCenters).
-        Model::noHVAC_Control_ThermalPower(pDistrict,pClimate,day,hour);
-
-        for (size_t i=0; i<pDistrict->getnBuildings(); ++i) {
-            Building* pBui = pDistrict->getBuilding(i);
-            if (pBui->getHeatStock()!=NULL or pBui->getColdStock()!=NULL) {
-                Model::noHVAC_Control_Finish(pBui,pClimate,day,hour); // Computes and sets new tank temperatures, consumptions, etc.
-            }
+        else {
+            Model::noHVAC_Control_Init(pBui,pClimate,day,hour); // Initialization, computes solar and wind electric productions and more.
+            Model::noHVAC_Control_Needs(pBui, pClimate, day, hour); // Computes heating and cooling needs for the buildings tanks.
         }
     }
+    // All buildings must have their needs computed before determining the thermal power that can be provided by the heating/cooling units (simulates the DistrictEnergyCenters).
+    Model::noHVAC_Control_ThermalPower(pDistrict,pClimate,day,hour);
+
+    for (size_t i=0; i<pDistrict->getnBuildings(); ++i) {
+        Model::noHVAC_Control_Finish(pDistrict->getBuilding(i),pClimate,day,hour); // Computes and sets new tank temperatures, consumptions, etc.
+    }
+
 // Cognet: End added content.
-
-
-    // compute Qs for your network
-    /*
-    code here
-
-    1) get the values of the tempratures
-    2) choose a temperature for each tank of the buildings connected
-    3) get electricity consumption
-    4) compute Qvalues
-    5) decide actions for the next time step
-
-    */
 
 }
 
@@ -1874,18 +1788,6 @@ void Model::computeAndAddPhotovoltaicAndWindElectricProduction(Building* pBuildi
     }
 }
 
-void Model::computeAndSetBuildingHeatingCoolingNeeds(Building* pBuilding) {
-    // Computation of the total demand in heat and cold for the building (double precision required for a precise repartition of the energy)
-    double heatingNeeds = 0.;
-    double coolingNeeds = 0.;
-    for (size_t i=0; i<pBuilding->getnZones(); ++i) {
-        heatingNeeds += pBuilding->getZone(i)->getHeating();
-        coolingNeeds += pBuilding->getZone(i)->getCooling();
-    }
-    pBuilding->setHeatingNeeds(heatingNeeds);
-    pBuilding->setCoolingNeeds(coolingNeeds);
-}
-
 void Model::computeAndSetDHWUsage(Building* pBuilding, unsigned int day, unsigned int hour) {
     // Domestic hot water (DHW) usage in the zones
     double VdotUsed = 0.; // in m^3/s
@@ -1902,182 +1804,220 @@ void Model::noHVAC_Control_Init(Building* pBuilding, Climate* pClimate, unsigned
     pBuilding->setMachinePower(0.);
     pBuilding->setFuelConsumption(0.);
 
-    // Sum up needs over the zones.
-    computeAndSetBuildingHeatingCoolingNeeds(pBuilding);
-
     // Solar and wind electricity.
     computeAndAddPhotovoltaicAndWindElectricProduction(pBuilding, pClimate, day, hour);
 
     // Sum up domestic hot water (DHW) usage over the zones.
     computeAndSetDHWUsage(pBuilding, day, hour);
+
+    // Initially, 100% of the solar thermal is available.
+    pBuilding->setSolTherFracLeft(1.);
 }
 
+/**
+ * @param[in]  pBui->getHeating(), pBui->getCooling(), pBui->getVdotUsed() respectively the needs for space heating, space cooling and domestic hot water
+ * @param[out] pBui->setHS_needs( HS_needs ), pBui->setDHW_needs( DHW_needs ), pBui->setCS_needs( CS_needs ) respectively the power needs for space heating, space cooling and domestic hot water
+ */
 void Model::noHVAC_Control_Needs(Building* pBui, Climate* pClim, unsigned int day, unsigned int hour) {
     // TODO Implement cooling solar panels, and the critical temperature cases.
 
-    double HS_needs, DHW_needs, CS_needs; // Powers needed by the tanks (not counting solar), that will be asked the the heat/cooling units.
-    double HS_SolPp, DHW_SolPp, CS_SolPp; // Solar power provided to the tanks.
-    double HS_T1, DHW_T1, CS_T1; // Tank temperatures at next time step.
+    // add the evaluation of the heatdemand
+    if (pBui->hasImposedHeatDemand(day,hour)) { // If an imposed heat demand value exists, use the imposed value.
 
-    // Local variables to simplify code reading.
-    float Tamb = pBui->getTamb(); // Temperature of room where tanks are.
-    // Power needed to heat the zones.
-    double heatingNeeds = pBui->getHeatingNeeds();
-    double coolingNeeds = pBui->getCoolingNeeds();
+        // sets the solar production to zero
+        pBui->setHS_SolPp( 0. );
+        pBui->setDHW_SolPp( 0. );
+        pBui->setCS_SolPp( 0. );
+        pBui->setSolarThermalProduction(0.f);
 
-    // Hot storage tank.
-    double HS_T0 = pBui->getHeatStockTemperature();
-    double HS_Tmin = pBui->getHeatStock()->getTmin();
-    double HS_Tmax = pBui->getHeatStock()->getTmax();
-    double HS_Pup = computeSolarThermalPower(pBui, pClim, day, hour, HS_T0, true); // Solar thermal power available. Approximation, uses the initial temperature T0 during the whole time step.
-    // Domestic hot water tank.
-    double DHW_T0 = numeric_limits<double>::signaling_NaN();
-    double DHW_Tmin = numeric_limits<double>::signaling_NaN();
-    double DHW_Tmax = numeric_limits<double>::signaling_NaN();
-    double DHW_Tinlet = numeric_limits<double>::signaling_NaN();
-    double DHW_Pup = numeric_limits<double>::signaling_NaN();
-    double VdotUsed = pBui->getVdotUsed();
-    if (pBui->getDHWHeatStock()) {
-        DHW_T0 = pBui->getDHWStockT();
-        DHW_Tmin = pBui->getDHWHeatStock()->getTmin();
-        DHW_Tmax = pBui->getDHWHeatStock()->getTmax();
-        DHW_Tinlet = pBui->getDHWHeatStock()->getTinlet();
-        DHW_Pup = computeSolarThermalPower(pBui, pClim, day, hour, DHW_T0, false); // Solar thermal power available. Approximation, uses the initial temperature T0 during the whole time step.
-    }
-    pBui->setSolTherFracLeft(1.); // Initially, 100% of the solar thermal is available.
-    // Cold storage tank.
-    double CS_T0 = pBui->getColdStockTemperature();
-    double CS_Tmin = pBui->getColdStock()->getTmin();
-    double CS_Tmax = pBui->getColdStock()->getTmax();
-    double CS_Pup = 0.; // TODO, improve this.
-
-    // Allocate solar thermal power to Heat Stock (HS), Domestic Hot Water (DHW) and Cold Stock (CS).
-    if ( ! pBui->getDHWHeatStock() ) { // Without DHW tank.
-        // Give all solar thermal to HS.
-        HS_SolPp = pBui->getHeatStock()->maxSolPowerToNotExceedTcrit(dt, 0., -heatingNeeds, HS_Pup, HS_T0, 0., Tamb); // Check for Tcritical in HS.
-        DHW_SolPp = 0.;
-        if (HS_Pup!=0.) { pBui->multSolTherFracLeft(1-HS_SolPp/HS_Pup); } // If not all solar thermal power is used (eg 60%), save what fraction is left (in this case 40%).
-    }
-    else { // With DHW tank.
-        // Heat HS and DHW tanks. (try to give HS priority on solar thermal because lower temperature more efficient)
-        bool prioritizeDHWorHS;
-        if (  heatingNeeds<=0.  or  ( pBui->getHeatingUnit()!=NULL and (!pBui->getHeatingUnit()->isWorking(day)) )  ) { // If no space heating needed, or if it is not a working day for heating unit.
-            prioritizeDHWorHS = true;
-        }
-        else { // If working day and space heating needs are > 0.
-            // Compute temperatures without solar power, to decide which tank to prioritize.
-            HS_T1 = pBui->getHeatStock()->temperature(dt, 0., 0., -heatingNeeds, HS_T0, 0., Tamb);
-            DHW_T1 = pBui->getDHWHeatStock()->temperature(dt, VdotUsed, 0., 0., DHW_T0, DHW_Tinlet, Tamb);
-
-            if ( HS_T1>HS_Tmin and DHW_T1<DHW_Tmin ) { // If HS stays above Tmin and DHW goes below Tmin, give solar thermal in priority to DHW.
-                prioritizeDHWorHS = true;
-            }
-            else { // If HS goes below Tmin or if both HS and DHW stay above Tmin, give solar thermal in priority to HS.
-                prioritizeDHWorHS = false;
-            }
-        }
-
-        // Give solar thermal according to priority.
-        if ( prioritizeDHWorHS ) {
-            DHW_SolPp = pBui->getDHWHeatStock()->maxSolPowerToNotExceedTcrit(dt, VdotUsed, 0., DHW_Pup, DHW_T0, DHW_Tinlet, Tamb); // DHW takes max solar thermal to stay below Tcritical.
-            // Approximation, the solar power left is proportional to what was not used.
-            if (DHW_Pup!=0.) { pBui->multSolTherFracLeft(1-DHW_SolPp/DHW_Pup); }
-            double HS_solPowerLeft = HS_Pup*pBui->getSolTherFracLeft(); // Eg: if DHW consumed 80% of what was available to him, then HS gets 20% of what is available.
-            HS_SolPp = pBui->getHeatStock()->maxSolPowerToNotExceedTcrit(dt, 0., -heatingNeeds, HS_solPowerLeft, HS_T0, 0., Tamb); // HS takes max solar thermal to stay below Tcritical.
-            if (HS_Pup!=0.) { pBui->multSolTherFracLeft(1-HS_SolPp/HS_Pup); }
-        }
-        else {
-            HS_SolPp = pBui->getHeatStock()->maxSolPowerToNotExceedTcrit(dt, 0., -heatingNeeds, HS_Pup, HS_T0, 0., Tamb); // HS takes max solar thermal to stay below Tcritical.
-            // Approximation, the solar power left is proportional to what was not used.
-            if (HS_Pup!=0.) { pBui->multSolTherFracLeft(1-HS_SolPp/HS_Pup); }
-            double DHW_solPowerLeft = DHW_Pup*pBui->getSolTherFracLeft();
-            DHW_SolPp = pBui->getDHWHeatStock()->maxSolPowerToNotExceedTcrit(dt, VdotUsed, 0., DHW_solPowerLeft, DHW_T0, DHW_Tinlet, Tamb); // DHW takes max solar thermal to stay below Tcritical.
-            if (DHW_Pup!=0.) { pBui->multSolTherFracLeft(1-DHW_SolPp/DHW_Pup); }
-        }
-
-    }
-
-
-
-//    WARNING, the Tcritical default value is 90 C, so the "CS_T1>CS_Tcritical" may cause problems if no value of Tcritical given
-//    if (  (pBui->getCoolingUnit()!=NULL and pBui->getCoolingUnit()->isWorking(day))  or  pBui->getCoolingUnit()==NULL  ) { // If working day or no cooling unit, use solar thermal.
-//        // Compute CS temperature with solar thermal.
-//        CS_T1 = pBui->getColdStock()->temperature(dt, 0., 0., CS_Pup-coolingNeeds, CS_T0, 0., Tamb);
-//        if (CS_T1 > CS_Tcritical) { // If CS stays above Tcritical.
-//            CS_SolPp = CS_Pup;
-//        }
-//        else { // If DHW reaches Tcritical.
-//            double timeToTcrit = pBui->getColdStock()->time(CS_Tcritical, 0., 0., CS_Pup-coolingNeeds, CS_T0, 0., Tamb);
-//            // Approximation : instead of CS receiving 'CS_Pup' for 'timeToTcrit', then 'zero' for 'dt-timeToTcrit', it receives 'CS_Pup*timeToTcrit/dt' for 'dt' time.
-//            CS_SolPp = CS_Pup*timeToTcrit/dt;
-//        }
-//    }
-//    else {
-        CS_SolPp = 0.; // Use this for now.
-//    }
-    pBui->setHS_SolPp( HS_SolPp );
-    pBui->setDHW_SolPp( DHW_SolPp );
-    pBui->setCS_SolPp( CS_SolPp );
-    pBui->setSolarThermalProduction(float(dt)*(HS_SolPp+DHW_SolPp+CS_SolPp));
-
-
-    // Power needs, that are asked to the heating/cooling units.
-    HS_needs = 0.;
-    DHW_needs = 0.;
-    if ( pBui->getHeatingUnit() ) { // If heating unit exists.
-        if ( pBui->getHeatingUnit()->isWorking(day) and heatingNeeds>0. ) {  // If it is a working day and space heating is needed, heat HS.
-            HS_T1 = pBui->getHeatStock()->temperature(dt, 0., HS_SolPp, -heatingNeeds, HS_T0, 0., Tamb);
-            if (HS_T1 < HS_Tmin) { // If HS goes below Tmin, heat to Tmax.
-                HS_needs = pBui->getHeatStock()->power(dt, HS_Tmax, 0., HS_SolPp-heatingNeeds, HS_T0, 0.0, Tamb);
-            }
-        } // Otherwise HS_needs=0
-
+        // Domestic hot water tank.
+        double DHW_needs = 0.;
         if ( pBui->getDHWHeatStock() ) { // Heat DHW.
-            DHW_T1 = pBui->getDHWHeatStock()->temperature(dt, VdotUsed, 0., DHW_SolPp, DHW_T0, DHW_Tinlet, Tamb);
+            float Tamb = pBui->getTamb(); // Temperature of room where tanks are.
+            double VdotUsed = pBui->getVdotUsed();
+            double DHW_T0 = pBui->getDHWStockT();
+            double DHW_Tmin = pBui->getDHWHeatStock()->getTmin();
+            double DHW_Tmax = pBui->getDHWHeatStock()->getTmax();
+            double DHW_Tinlet = pBui->getDHWHeatStock()->getTinlet();
+            double DHW_SolPp = 0.; // we assume no solar production
+            double DHW_T1 = pBui->getDHWHeatStock()->temperature(dt, VdotUsed, 0., DHW_SolPp, DHW_T0, DHW_Tinlet, Tamb);
             if (DHW_T1 < DHW_Tmin) { // If DHW temperature goes below Tmin, heat to Tmax.
                 DHW_needs = pBui->getDHWHeatStock()->power(dt, DHW_Tmax, VdotUsed, DHW_SolPp, DHW_T0, DHW_Tinlet, Tamb);
                 if (isnan(DHW_needs)) throw string("Domestic hot water usage " + toString(VdotUsed) + " m3/s is too high for the tank volume " + toString(pBui->getDHWHeatStock()->getVolume()) + " m3.");
             }
         } // Otherwise DHW_needs=0
-    }
 
-    CS_needs = 0.;
-    if ( pBui->getCoolingUnit()!=NULL and pBui->getCoolingUnit()->isWorking(day) and coolingNeeds<0  ) { // If cooling unit is working and space cooling is needed.
-        CS_T1 = pBui->getColdStock()->temperature(dt, 0., 0., CS_SolPp-coolingNeeds, CS_T0, 0., Tamb);
-        if (CS_T1 > CS_Tmax) { // If CS temperature goes above Tmax, cool to Tmin.
-            CS_needs = pBui->getColdStock()->power(dt, CS_Tmin, 0., CS_Pup-coolingNeeds, CS_T0, 0., Tamb);
-        }
+        double heatDemanded=pBui->getImposedHeatDemand(day,hour);
+        DHW_needs = min(heatDemanded,DHW_needs);
+        pBui->setHS_needs(heatDemanded-DHW_needs); // Added by Max. 0.8 and 0.2 are arbitrary
+        pBui->setDHW_needs(DHW_needs); // Added by Max. Needed to distinguish DHW from HS from a single value of imposedHeatDemand in the XML file -> for the two stage heat pump only
+        pBui->setCS_needs(0.);
     }
-    pBui->setHS_needs( HS_needs );
-    pBui->setDHW_needs( DHW_needs );
-    pBui->setCS_needs( CS_needs );
+    else {
+
+        double HS_SolPp=0., DHW_SolPp=0., CS_SolPp=0.; // Solar power provided to the tanks.
+        double HS_T1, DHW_T1, CS_T1; // Tank temperatures at next time step.
+
+        // Local variables to simplify code reading.
+        float Tamb = pBui->getTamb(); // Temperature of room where tanks are.
+        // Power needed to heat the zones.
+        double heatingNeeds = pBui->getHeating();
+        double coolingNeeds = pBui->getCooling();
+        // Hot water consumption
+        double VdotUsed = pBui->getVdotUsed();
+
+        // Allocate solar thermal power to Heat Stock (HS), Domestic Hot Water (DHW) and Cold Stock (CS).
+        if (pBui->getHeatStock()) { // With Heat tank.
+            // Hot storage tank.
+            double HS_T0 = pBui->getHeatStockTemperature();
+            double HS_Tmin = pBui->getHeatStock()->getTmin();
+            double HS_Tmax = pBui->getHeatStock()->getTmax();
+            double HS_Pup = computeSolarThermalPower(pBui, pClim, day, hour, HS_T0, true); // Solar thermal power available. Approximation, uses the initial temperature T0 during the whole time step.
+
+            if ( ! pBui->getDHWHeatStock() ) { // But without DHW tank.
+                // Give all solar thermal to HS.
+                HS_SolPp = pBui->getHeatStock()->maxSolPowerToNotExceedTcrit(dt, 0., -heatingNeeds, HS_Pup, HS_T0, 0., Tamb); // Check for Tcritical in HS.
+                DHW_SolPp = 0.;
+                if (HS_Pup!=0.) { pBui->multSolTherFracLeft(1-HS_SolPp/HS_Pup); } // If not all solar thermal power is used (eg 60%), save what fraction is left (in this case 40%).
+            }
+            else {
+                // Domestic hot water tank.
+                double DHW_T0 = pBui->getDHWStockT();
+                double DHW_Tmin = pBui->getDHWHeatStock()->getTmin();
+                double DHW_Tmax = pBui->getDHWHeatStock()->getTmax();
+                double DHW_Tinlet = pBui->getDHWHeatStock()->getTinlet();
+                double DHW_Pup = computeSolarThermalPower(pBui, pClim, day, hour, DHW_T0, false); // Solar thermal power available. Approximation, uses the initial temperature T0 during the whole time step.
+
+                // Heat HS and DHW tanks. (try to give HS priority on solar thermal because lower temperature more efficient)
+                bool prioritizeDHWorHS;
+                if (  heatingNeeds<=0.  or  ( pBui->getHeatingUnit()!=NULL and (!pBui->getHeatingUnit()->isWorking(day)) )  ) { // If no space heating needed, or if it is not a working day for heating unit.
+                    prioritizeDHWorHS = true;
+                }
+                else { // If working day and space heating needs are > 0.
+                    // Compute temperatures without solar power, to decide which tank to prioritize.
+                    HS_T1 = pBui->getHeatStock()->temperature(dt, 0., 0., -heatingNeeds, HS_T0, 0., Tamb);
+                    DHW_T1 = pBui->getDHWHeatStock()->temperature(dt, VdotUsed, 0., 0., DHW_T0, DHW_Tinlet, Tamb);
+
+                    if ( HS_T1>HS_Tmin and DHW_T1<DHW_Tmin ) { // If HS stays above Tmin and DHW goes below Tmin, give solar thermal in priority to DHW.
+                        prioritizeDHWorHS = true;
+                    }
+                    else { // If HS goes below Tmin or if both HS and DHW stay above Tmin, give solar thermal in priority to HS.
+                        prioritizeDHWorHS = false;
+                    }
+                }
+
+                // Give solar thermal according to priority.
+                if ( prioritizeDHWorHS ) {
+                    DHW_SolPp = pBui->getDHWHeatStock()->maxSolPowerToNotExceedTcrit(dt, VdotUsed, 0., DHW_Pup, DHW_T0, DHW_Tinlet, Tamb); // DHW takes max solar thermal to stay below Tcritical.
+                    // Approximation, the solar power left is proportional to what was not used.
+                    if (DHW_Pup!=0.) { pBui->multSolTherFracLeft(1-DHW_SolPp/DHW_Pup); }
+                    double HS_solPowerLeft = HS_Pup*pBui->getSolTherFracLeft(); // Eg: if DHW consumed 80% of what was available to him, then HS gets 20% of what is available.
+                    HS_SolPp = pBui->getHeatStock()->maxSolPowerToNotExceedTcrit(dt, 0., -heatingNeeds, HS_solPowerLeft, HS_T0, 0., Tamb); // HS takes max solar thermal to stay below Tcritical.
+                    if (HS_Pup!=0.) { pBui->multSolTherFracLeft(1-HS_SolPp/HS_Pup); }
+                }
+                else {
+                    HS_SolPp = pBui->getHeatStock()->maxSolPowerToNotExceedTcrit(dt, 0., -heatingNeeds, HS_Pup, HS_T0, 0., Tamb); // HS takes max solar thermal to stay below Tcritical.
+                    // Approximation, the solar power left is proportional to what was not used.
+                    if (HS_Pup!=0.) { pBui->multSolTherFracLeft(1-HS_SolPp/HS_Pup); }
+                    double DHW_solPowerLeft = DHW_Pup*pBui->getSolTherFracLeft();
+                    DHW_SolPp = pBui->getDHWHeatStock()->maxSolPowerToNotExceedTcrit(dt, VdotUsed, 0., DHW_solPowerLeft, DHW_T0, DHW_Tinlet, Tamb); // DHW takes max solar thermal to stay below Tcritical.
+                    if (DHW_Pup!=0.) { pBui->multSolTherFracLeft(1-DHW_SolPp/DHW_Pup); }
+                }
+            }
+
+        } // otherwise stays at zero
+    //    WARNING, the Tcritical default value is 90 C, so the "CS_T1>CS_Tcritical" may cause problems if no value of Tcritical given
+    //    if (  (pBui->getCoolingUnit()!=NULL and pBui->getCoolingUnit()->isWorking(day))  or  pBui->getCoolingUnit()==NULL  ) { // If working day or no cooling unit, use solar thermal.
+    //        // Compute CS temperature with solar thermal.
+    //        CS_T1 = pBui->getColdStock()->temperature(dt, 0., 0., CS_Pup-coolingNeeds, CS_T0, 0., Tamb);
+    //        if (CS_T1 > CS_Tcritical) { // If CS stays above Tcritical.
+    //            CS_SolPp = CS_Pup;
+    //        }
+    //        else { // If DHW reaches Tcritical.
+    //            double timeToTcrit = pBui->getColdStock()->time(CS_Tcritical, 0., 0., CS_Pup-coolingNeeds, CS_T0, 0., Tamb);
+    //            // Approximation : instead of CS receiving 'CS_Pup' for 'timeToTcrit', then 'zero' for 'dt-timeToTcrit', it receives 'CS_Pup*timeToTcrit/dt' for 'dt' time.
+    //            CS_SolPp = CS_Pup*timeToTcrit/dt;
+    //        }
+    //    }
+    //    else {
+            CS_SolPp = 0.; // Use this for now.
+    //    }
+        pBui->setHS_SolPp( HS_SolPp );
+        pBui->setDHW_SolPp( DHW_SolPp );
+        pBui->setCS_SolPp( CS_SolPp );
+        pBui->setSolarThermalProduction(float(dt)*(HS_SolPp+DHW_SolPp+CS_SolPp));
+
+        // Powers needed by the tanks (not counting solar), that will be asked the the heat/cooling units.
+        double HS_needs=0., DHW_needs=0., CS_needs=0.;
+        // Power needs, that are asked to the heating/cooling units.
+        if ( pBui->getHeatingUnit() ) { // If heating unit exists.
+            if ( pBui->getHeatingUnit()->isWorking(day) and heatingNeeds>0. ) {  // If it is a working day and space heating is needed, heat HS.
+                if (pBui->getHeatStock()) { // heatStock is present then compute the temperature and the corresponding additional needs
+                    double HS_T0 = pBui->getHeatStockTemperature();
+                    double HS_Tmin = pBui->getHeatStock()->getTmin();
+                    double HS_Tmax = pBui->getHeatStock()->getTmax();
+                    HS_T1 = pBui->getHeatStock()->temperature(dt, 0., HS_SolPp, -heatingNeeds, HS_T0, 0., Tamb);
+                    if (HS_T1 < HS_Tmin) { // If HS goes below Tmin, heat to Tmax.
+                        HS_needs = pBui->getHeatStock()->power(dt, HS_Tmax, 0., HS_SolPp-heatingNeeds, HS_T0, 0.0, Tamb);
+                    }
+                }
+                else { // no heatStock
+                    HS_needs = heatingNeeds;
+                }
+            } // Otherwise HS_needs=0
+
+            if ( pBui->getDHWHeatStock() ) { // Heat DHW.
+                double DHW_T0 = pBui->getDHWStockT();
+                double DHW_Tmin = pBui->getDHWHeatStock()->getTmin();
+                double DHW_Tmax = pBui->getDHWHeatStock()->getTmax();
+                double DHW_Tinlet = pBui->getDHWHeatStock()->getTinlet();
+                DHW_T1 = pBui->getDHWHeatStock()->temperature(dt, VdotUsed, 0., DHW_SolPp, DHW_T0, DHW_Tinlet, Tamb);
+                if (DHW_T1 < DHW_Tmin) { // If DHW temperature goes below Tmin, heat to Tmax.
+                    DHW_needs = pBui->getDHWHeatStock()->power(dt, DHW_Tmax, VdotUsed, DHW_SolPp, DHW_T0, DHW_Tinlet, Tamb);
+                    if (isnan(DHW_needs)) throw string("Domestic hot water usage " + toString(VdotUsed) + " m3/s is too high for the tank volume " + toString(pBui->getDHWHeatStock()->getVolume()) + " m3.");
+                }
+            } // Otherwise DHW_needs=0
+        }
+        if ( pBui->getCoolingUnit()!=NULL and pBui->getCoolingUnit()->isWorking(day) and coolingNeeds<0  ) { // If cooling unit is working and space cooling is needed.
+            if (pBui->getColdStock()) {
+                // Cold storage tank.
+                double CS_T0 = pBui->getColdStockTemperature();
+                double CS_Tmin = pBui->getColdStock()->getTmin();
+                double CS_Tmax = pBui->getColdStock()->getTmax();
+                CS_T1 = pBui->getColdStock()->temperature(dt, 0., 0., CS_SolPp-coolingNeeds, CS_T0, 0., Tamb);
+                if (CS_T1 > CS_Tmax) { // If CS temperature goes above Tmax, cool to Tmin.
+                    CS_needs = pBui->getColdStock()->power(dt, CS_Tmin, 0., CS_SolPp-coolingNeeds, CS_T0, 0., Tamb);
+                }
+            }
+            else {
+                CS_needs = coolingNeeds;
+            }
+        }
+        pBui->setHS_needs( HS_needs );
+        pBui->setDHW_needs( DHW_needs );
+        pBui->setCS_needs( CS_needs );
+    }
 }
 
+/**
+ * @param[in]  pBui->getHS_needs(), pBui->getCS_needs(), pBui->getDHW_needs() respectively the needs for space heating, space cooling and domestic hot water
+ * @param[out] pBui->setHS_Pp( HS_Pp ), pBui->setCS_Pp( CS_Pp ), pBui->setDHW_Pp( DHW_Pp ) respectively the power available from the machine for space heating, space cooling and domestic hot water
+ */
 void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned int day, unsigned int hour) {
+
+    // convienience pointer to refer to a specific building
+    Building* pBui = nullptr;
 
     // Give heating/cooling units the thermal power needs information.
     for (size_t i=0 ; i<pDis->getnBuildings() ; ++i) {
-        Building* pBui = pDis->getBuilding(i);
-        float heatDemanded;
-        if (pBui->hasImposedHeatDemand(day, hour, heatDemanded) ) { // If an imposed heat demand value exists, use the imposed value.
-            if (pBui->getHeatingUnit()) {
-                pBui->getHeatingUnit()->setThermalPowerNeeded( heatDemanded );
-                pBui->getHeatingUnit()->setThermalPowerNeededHS( 0.8*heatDemanded ); // Added by Max. 0.8 and 0.2 are arbitrary
-                pBui->getHeatingUnit()->setThermalPowerNeededDHW( 0.2*heatDemanded ); // Added by Max. Needed to distinguish DHW from HS from a single value of imposedHeatDemand in the XML file
-            }
-            if (pBui->getCoolingUnit()) {
-                pBui->getCoolingUnit()->setThermalPowerNeeded(0.);
-            }
+        pBui = pDis->getBuilding(i);
+        if (pBui->getHeatingUnit()) {
+            pBui->getHeatingUnit()->setThermalPowerNeeded( pBui->getHS_needs()+pBui->getDHW_needs() );
+            pBui->getHeatingUnit()->setThermalPowerNeededHS( pBui->getHS_needs() ); // Added by Max
+            pBui->getHeatingUnit()->setThermalPowerNeededDHW( pBui->getDHW_needs() ); // Added by Max
         }
-        else {
-            if (pBui->getHeatingUnit()) {
-                pBui->getHeatingUnit()->setThermalPowerNeeded( pBui->getHS_needs()+pBui->getDHW_needs() );
-                pBui->getHeatingUnit()->setThermalPowerNeededHS( pBui->getHS_needs() ); // Added by Max
-                pBui->getHeatingUnit()->setThermalPowerNeededDHW( pBui->getDHW_needs() ); // Added by Max
-            }
-            if (pBui->getCoolingUnit()) {
-                pBui->getCoolingUnit()->setThermalPowerNeeded( pBui->getCS_needs() );
-            }
+        if (pBui->getCoolingUnit()) {
+            pBui->getCoolingUnit()->setThermalPowerNeeded( pBui->getCS_needs() );
         }
     }
 
@@ -2088,7 +2028,7 @@ void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned
 
     // Compute the thermal power that heating/cooling units can provide.
     for (size_t i=0 ; i<pDis->getnBuildings() ; ++i) {
-        Building* pBui = pDis->getBuilding(i);
+        pBui = pDis->getBuilding(i);
         double HS_Pp, DHW_Pp, CS_Pp;
         // Heating Unit
         if (pBui->getHeatingUnit()) {
@@ -2114,37 +2054,47 @@ void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned
     }
 }
 
+/**
+ * @param[out] pBui->setHeatStockTemperature(HS_T1), pBui->setColdStockTemperature(CS_T1), pBui->setDHWStockT(DHW_T1) respectively the stock temperature for space heating, space cooling and domestic hot water
+ */
 void Model::noHVAC_Control_Finish(Building* pBui, Climate* pClim, unsigned int day, unsigned int hour) {
 
     // Temporary variables to simplify code reading.
-    double heatingNeeds = pBui->getHeatingNeeds(); // Power needs to heat zones of the building.
-    double coolingNeeds = pBui->getCoolingNeeds(); // Power needs to cool zones of the building.
-    double HS_Tmin = pBui->getHeatStock()->getTmin();
-    double CS_Tmax = pBui->getColdStock()->getTmax();
-    double HS_Pp = pBui->getHS_Pp();
-    double CS_Pp = pBui->getCS_Pp();
-    double HS_SolPp = pBui->getHS_SolPp();
-    double CS_SolPp = pBui->getCS_SolPp();
-    double HS_T0 = pBui->getHeatStockTemperature();
-    double CS_T0 = pBui->getColdStockTemperature();
     float Tamb = pBui->getTamb();
-
-    // Thermal power that is effectively be used for space heating/cooling.
-    double heatingUsed = min(heatingNeeds, max(-pBui->getHeatStock()->power(dt, HS_Tmin, 0., HS_SolPp+HS_Pp, HS_T0, 0., Tamb), 0.));
-    double coolingUsed = max(coolingNeeds, min(-pBui->getColdStock()->power(dt, CS_Tmax, 0., CS_SolPp+CS_Pp, CS_T0, 0., Tamb), 0.));
-
-    // Compute new temperatures.
-    double HS_T1 = pBui->getHeatStock()->temperature(dt, 0., HS_SolPp+HS_Pp, -heatingUsed, HS_T0, 0., Tamb);
-    double CS_T1 = pBui->getColdStock()->temperature(dt, 0., CS_SolPp+CS_Pp, -coolingUsed, CS_T0, 0., Tamb);
 
 // The Tcritical check is done in noHVAC_Control_Needs
 //    // checks that the temperature of the main tank does not exceed Tcritical
 //    HS_T1 = min(HS_T1,pBuilding->getHeatStock()->getTcritical());
 
-    pBui->setHeatStockTemperature(HS_T1);
-    pBui->setColdStockTemperature(CS_T1);
+    // Compute the new temperature of the HS if it exists
+    double HS_Pp = pBui->getHS_Pp();
+    double heatingUsed = HS_Pp;
+    if (pBui->getHeatStock()) {
+        double heatingNeeds = pBui->getHeating(); // Power needs to heat zones of the building.
+        double HS_Tmin = pBui->getHeatStock()->getTmin();
+        double HS_SolPp = pBui->getHS_SolPp();
+        double HS_T0 = pBui->getHeatStockTemperature();
+        // Thermal power that is effectively be used for space heating.
+        heatingUsed = min(heatingNeeds, max(-pBui->getHeatStock()->power(dt, HS_Tmin, 0., HS_SolPp+HS_Pp, HS_T0, 0., Tamb), 0.));
+        double HS_T1 = pBui->getHeatStock()->temperature(dt, 0., HS_SolPp+HS_Pp, -heatingUsed, HS_T0, 0., Tamb);
+        pBui->setHeatStockTemperature(HS_T1);
+    }
 
+    // Compute the new temperature of the CS if it exists
+    double CS_Pp = pBui->getCS_Pp();
+    double coolingUsed = CS_Pp; // direct value without the Tank
+    if (pBui->getColdStock()) {
+        double coolingNeeds = pBui->getCooling(); // Power needs to cool zones of the building.
+        double CS_Tmax = pBui->getColdStock()->getTmax();
+        double CS_SolPp = pBui->getCS_SolPp();
+        double CS_T0 = pBui->getColdStockTemperature();
+        // Thermal power that is effectively be used for space cooling.
+        coolingUsed = max(coolingNeeds, min(-pBui->getColdStock()->power(dt, CS_Tmax, 0., CS_SolPp+CS_Pp, CS_T0, 0., Tamb), 0.));
+        double CS_T1 = pBui->getColdStock()->temperature(dt, 0., CS_SolPp+CS_Pp, -coolingUsed, CS_T0, 0., Tamb);
+        pBui->setColdStockTemperature(CS_T1);
+    }
 
+    // Compute the new temperature of the DHW if it exists
     double DHW_Pp = pBui->getDHW_Pp();
     if (pBui->getDHWHeatStock()) {
         double DHW_Tinlet = pBui->getDHWHeatStock()->getTinlet();
@@ -2156,36 +2106,29 @@ void Model::noHVAC_Control_Finish(Building* pBui, Climate* pClim, unsigned int d
     }
 
     // Energy consumption in primary resource.
-    float heatdemanded; // Added by Max
-    if (pBui->hasImposedHeatDemand(day,hour,heatdemanded)){ // (To get rid of imposed value code, remove this line.)
-        double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getHeatingUnit(), pClim, day, hour); // (To get rid of imposed value code, remove this line.)
-        double machineThermalPower = pBui->getHeatingUnit()->getThermalPower(heatPumpSrcTemp); // (To get rid of imposed value code, remove this line.)
-        pBui->addMachinePower(machineThermalPower); // (To get rid of imposed value code, remove this line.)
-        // Added by Max. In order to impose the heat demand to the Fuel and electricConsumption if it's the case.
-        pBui->addFuelConsumption(pBui->getHeatingUnit()->getFuelConsumption(double(dt), heatdemanded, heatPumpSrcTemp));
-        pBui->addElectricConsumption(pBui->getHeatingUnit()->getElectricConsumption(double(dt), heatdemanded, heatPumpSrcTemp)); //TODO, what if we impose the heat demand? It doesn't seem to get the electricity consumption with the imposed heat demand (Max).
-    } else { // (To get rid of imposed value code, remove this line.)
-        pBui->addMachinePower(HS_Pp+DHW_Pp);
-        if (pBui->getHeatingUnit()) {
-            double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getHeatingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
-            pBui->addFuelConsumption(pBui->getHeatingUnit()->getFuelConsumption(double(dt), HS_Pp+DHW_Pp, heatPumpSrcTemp));
-            pBui->addElectricConsumption(pBui->getHeatingUnit()->getElectricConsumption(double(dt), HS_Pp+DHW_Pp, heatPumpSrcTemp)); //TODO, what if we impose the heat demand? It doesn't seem to get the electricity consumption with the imposed heat demand (Max).
-        }
-        // Energy consumption in primary resource (machine power is always positive, unlike CS_Pp which is always negative).
-        pBui->addMachinePower(-CS_Pp);
-        if (pBui->getCoolingUnit()) {
-            double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getCoolingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
-            pBui->addFuelConsumption(pBui->getCoolingUnit()->getFuelConsumption(double(dt),CS_Pp,heatPumpSrcTemp));
-            pBui->addElectricConsumption(pBui->getCoolingUnit()->getElectricConsumption(double(dt),CS_Pp,heatPumpSrcTemp));
-        }
-    } // (To get rid of imposed value code, remove this line.)
+    pBui->addMachinePower(HS_Pp+DHW_Pp);
+    if (pBui->getHeatingUnit()) {
+        double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getHeatingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
+        pBui->addFuelConsumption(pBui->getHeatingUnit()->getFuelConsumption(double(dt), HS_Pp+DHW_Pp, heatPumpSrcTemp));
+        pBui->addElectricConsumption(pBui->getHeatingUnit()->getElectricConsumption(double(dt), HS_Pp+DHW_Pp, heatPumpSrcTemp)); //TODO, what if we impose the heat demand? It doesn't seem to get the electricity consumption with the imposed heat demand (Max).
+    }
+    // Energy consumption in primary resource (machine power is always positive, unlike CS_Pp which is always negative).
+    pBui->addMachinePower(-CS_Pp);
+    if (pBui->getCoolingUnit()) {
+        double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getCoolingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
+        pBui->addFuelConsumption(pBui->getCoolingUnit()->getFuelConsumption(double(dt),CS_Pp,heatPumpSrcTemp));
+        pBui->addElectricConsumption(pBui->getCoolingUnit()->getElectricConsumption(double(dt),CS_Pp,heatPumpSrcTemp));
+    }
+
+    // Saves the unsatisfied demands
+    pBui->setHeatingDemandUnsatisfied(pBui->getHS_needs()-HS_Pp+pBui->getDHW_needs()-DHW_Pp);
+    pBui->setCoolingDemandUnsatisfied(pBui->getCS_needs()-CS_Pp);
 
     // Distribution of the energy in the zones.
     for (size_t i=0 ; i<pBui->getnZones() ; ++i) {
         double zoneHeatingNeeds = pBui->getZone(i)->getHeating();
         double zoneCoolingNeeds = pBui->getZone(i)->getCooling();
-        double heatingUnsatisfied(0.0); //Added by Max
-        double coolingUnsatisfied(0.0); //Added by Max
+
         // Heating
         if (zoneHeatingNeeds > 0) {
             if ( heatingUsed > zoneHeatingNeeds ) { // Demand satisfied.
@@ -2195,7 +2138,6 @@ void Model::noHVAC_Control_Finish(Building* pBui, Climate* pClim, unsigned int d
             else { // Not enough heat available.
                 pBui->getZone(i)->setQs(heatingUsed);
                 heatingUsed -= heatingUsed;
-                heatingUnsatisfied += zoneHeatingNeeds - heatingUsed; //Added by Max
             }
         }
         // Cooling
@@ -2207,18 +2149,12 @@ void Model::noHVAC_Control_Finish(Building* pBui, Climate* pClim, unsigned int d
             else { // Not enough cold available.
                 pBui->getZone(i)->setQs(coolingUsed);
                 coolingUsed -= coolingUsed;
-                coolingUnsatisfied += zoneCoolingNeeds - coolingUsed; // Added by Max
             }
         }
         else {
             pBui->getZone(i)->setQs(0.); // No heating or cooling needed.
         }
-        pBui->setHeatingDemandUnsatisfied(heatingUnsatisfied);
-        pBui->setCoolingDemandUnsatisfied(coolingUnsatisfied);
      }
-    // Check that all the energy has been distributed.
-     if (heatingUsed > 1.) { throw(string("Error in the repartition of the heating energy - in the control model (noHVAC): ") + toString(heatingUsed)); }
-     if (coolingUsed < -1.) { throw(string("Error in the repartition of the cooling energy - in the control model (noHVAC): " + toString(coolingUsed))); }
 
 }
 // Cognet: End of added content.

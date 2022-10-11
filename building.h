@@ -81,7 +81,7 @@ private:
     double SolTherFracLeft; // Solar thermal power is used by different applications : HS tank, DHW tank or feed-in substation. Since the temperatures change, the power available changes. When one uses a portion of the available power (only 40%), then it sets this variable to the fraction that is still available (here 60%).
     double HS_Pp, DHW_Pp, CS_Pp; // Thermal power provided for the tanks (power that the heating/cooling unit will provide).
     double VdotUsed; // Domestic hot water consumption summed over zones [m^3/s].
-    float Tamb; // "Ambiant teperature", where the water tanks are located.
+    float Tamb = 18.f; // "Ambient temperature", where the water tanks are located.
     // Cognet: End of added code.
     // Added by Max
     float heatingDemandUnsatisfied = 0.f;
@@ -179,8 +179,10 @@ public:
     }
 
     // get the heating and cooling in Wh
-    float getHeating(unsigned int step) { float watthour = 0.f;   for (size_t i=0;i<zones.size();++i)  { watthour += zones.at(i)->getHeating(step); } return watthour; }
+    double getHeating() { double watthour = 0.; for (size_t i=0; i<zones.size(); ++i) { watthour += zones.at(i)->getHeating(); } return watthour; }
+    double getHeating(unsigned int step) { float watthour = 0.f;   for (size_t i=0;i<zones.size();++i)  { watthour += zones.at(i)->getHeating(step); } return watthour; }
     double getHeating(unsigned int day, unsigned int hour) { double watthour = 0.;   for (unsigned int i=0;i<zones.size();++i)  { watthour += zones[i]->getHeating(day, hour); } return watthour; }
+    double getCooling() { double watthour = 0.; for (size_t i=0; i<zones.size(); ++i) { watthour += zones.at(i)->getCooling(); } return watthour; }
     double getCooling(unsigned int step) { double watthour = 0.;   for (unsigned int i=0;i<zones.size();++i)  { watthour += zones[i]->getCooling(step); } return watthour; }
     double getCooling(unsigned int day, unsigned int hour) { double watthour = 0.;   for (unsigned int i=0;i<zones.size();++i)  { watthour += zones[i]->getCooling(day, hour); } return watthour; }
     // occupants number is the number of people maximum in the building
@@ -317,12 +319,6 @@ public:
     void deterministicShadingAction(/*unsigned int day*/);
 
     // Cognet: Start of added code.
-    // Variables for computations at each time step.
-    void setHeatingNeeds(double hN) { heatingNeeds = hN; }
-    double getHeatingNeeds() { return heatingNeeds; }
-    void setCoolingNeeds(double cN) { coolingNeeds = cN; }
-    double getCoolingNeeds() { return coolingNeeds; }
-
     void setHS_needs(double needs) { HS_needs = needs; }
     double getHS_needs() { return HS_needs; }
     void setDHW_needs(double needs) { DHW_needs= needs; }
@@ -354,7 +350,7 @@ public:
     void setTamb(float tamb) { Tamb = tamb; }
     float getTamb() { return Tamb; }
 
-    bool hasImposedHeatDemand(unsigned int day, unsigned int hour, float &retValue);
+    float getImposedHeatDemand(unsigned int day, unsigned int hour);
     bool hasImposedHeatDemand(unsigned int day, unsigned int hour);
     // Cognet: End of added code.
 

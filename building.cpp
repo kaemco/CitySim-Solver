@@ -49,12 +49,12 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
     // loading and creating the tanks
     if(hdl.ChildElement("HeatTank", 0).ToElement())
         heatStock = new Tank(hdl.ChildElement("HeatTank", 0));
-    else throw(string("Error in the XML file: no HeatTank tag."));
+
     if(hdl.ChildElement("DHWTank", 0).ToElement())
         dhwStock = new Tank(hdl.ChildElement("DHWTank", 0));
+
     if(hdl.ChildElement("CoolTank", 0).ToElement())
         coldStock = new Tank(hdl.ChildElement("CoolTank", 0));
-    else throw(string("Error in the XML file: no CoolTank tag."));
 
     // Cognet: Start of added code.
     heatingNeeds = 1.0; coolingNeeds = 1.0;
@@ -63,7 +63,6 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
     SolTherFracLeft = 1.0;
     HS_Pp = 1.0; DHW_Pp = 1.0; CS_Pp = 1.0;
     VdotUsed = 0.01;
-    Tamb = 10.0;
     // Cognet: End of added code.
 
 
@@ -1774,13 +1773,12 @@ double Building::getMachinePower(unsigned int day, unsigned int hour) {
 }
 
 
-bool Building::hasImposedHeatDemand(unsigned int day, unsigned int hour, float& retValue) {
+float Building::getImposedHeatDemand(unsigned int day, unsigned int hour) {
     string dayHour = "d"+toString(day)+"h"+toString(hour);
     if (imposedHeatDemand.count(dayHour.c_str())==0) {
-        return false;
+        throw string("Impossible to get the ImposedHeatDemand for Building id " + toString(id) + " on Day " + toString(day) + " and Hour " + toString(hour) + ".");
     } else {
-        retValue = imposedHeatDemand[dayHour];
-        return true;
+        return imposedHeatDemand[dayHour];
     }
 }
 
