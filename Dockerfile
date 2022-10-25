@@ -34,10 +34,12 @@ ENV PATH "$PATH:/root/bin"
 # copy the build solver from the builder image
 COPY --from=builder /root/bin /root/bin
 
-# execute the Solver by default in the data directory
-# the data directory can point to the location where you store your CitySim XML files
+# execute the Solver with the xml file in the mounted directory
+# it will also save a log.txt file
 # for instance:
-# docker build . -t citysim
-# docker run -v /mnt/c/myXMLFiles:/data -it citysim myFile.xml
+# docker build . -f Dockerfile.ubuntu -t citysim
+# docker run --rm -v /mnt/c/mySimulationDir/:/data citysim
+# As an alternative, it is possible to override the CMD:
+# docker run --rm -v /mnt/c/mySimulationDir/:/data citysim CitySim myxml.xml
 WORKDIR /data
-CMD ["/root/bin/CitySim"]
+CMD ["sh", "-c", "CitySim *.xml | tee log.txt"]
