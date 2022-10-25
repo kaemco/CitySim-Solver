@@ -1,8 +1,8 @@
-FROM ubuntu:latest AS builder
+FROM alpine:latest AS builder
 
 # get the necessary libraries
-RUN apt-get update &&\
-	apt-get install --yes git make g++ gfortran libglu1-mesa-dev
+RUN apk add --no-cache \
+	--update make g++ gfortran mesa-dev glu-dev
 
 # prepare the directory for the executables
 RUN mkdir ~/bin
@@ -15,6 +15,7 @@ RUN mkdir ~/lib/CitySim
 WORKDIR /src
 
 # get the open-source code
+# RUN apk add --no-cache --update git
 # RUN git clone https://github.com/kaemco/CitySim-Solver.git
 # or copy it from the current directory
 COPY . /src/CitySim-Solver
@@ -39,4 +40,4 @@ COPY --from=builder /root/bin /root/bin
 # docker build . -t citysim
 # docker run -v /mnt/c/myXMLFiles:/data -it citysim myFile.xml
 WORKDIR /data
-ENTRYPOINT ["CitySim"]
+CMD ["/root/bin/CitySim"]
