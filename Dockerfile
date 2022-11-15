@@ -1,8 +1,8 @@
-FROM ubuntu:latest AS builder
+FROM alpine:latest AS builder
 
 # get the necessary libraries
-RUN apt-get update &&\
-	apt-get install --yes git make g++ gfortran libglu1-mesa-dev
+RUN apk add --no-cache \
+	--update make g++ gfortran mesa-dev glu-dev
 
 # prepare the directory for the executables
 RUN mkdir ~/bin
@@ -15,6 +15,7 @@ RUN mkdir ~/lib/CitySim
 WORKDIR /src
 
 # get the open-source code
+# RUN apk add --no-cache --update git
 # RUN git clone https://github.com/kaemco/CitySim-Solver.git
 # or copy it from the current directory
 COPY . /src/CitySim-Solver
@@ -33,10 +34,12 @@ ENV PATH "$PATH:/root/bin"
 # copy the build solver from the builder image
 COPY --from=builder /root/bin /root/bin
 
-# execute the Solver by default in the data directory
-# the data directory can point to the location where you store your CitySim XML files
+# execute the Solver with the xml file in the mounted directory
+# it will also save a log.txt file
 # for instance:
-# docker build . -t citysim
-# docker run -v /mnt/c/myXMLFiles:/data -it citysim myFile.xml
+# docker build . -f Dockerfile.ubuntu -t citysim
+# docker run --rm -v /mnt/c/mySimulationDir/:/data citysim
+# As an alternative, it is possible to override the CMD:
+# docker run --rm -v /mnt/c/mySimulationDir/:/data citysim CitySim myxml.xml
 WORKDIR /data
-ENTRYPOINT ["CitySim"]
+CMD ["sh", "-c", "CitySim *.xml | tee log.txt"]
