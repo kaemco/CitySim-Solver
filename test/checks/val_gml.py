@@ -15,7 +15,7 @@ import requests
 SIMULATIONS_DIR = "../simulations"
 case = "600_profiles"
 
-schema = requests.get("https://git.rwth-aachen.de/energyade/citygml-energy/-/raw/v1.0/xsd/energy.xsd").content
+schema = requests.get("http://www.sig3d.org/citygml/2.0/energy/1.0/EnergyADE.xsd").content
 
 doc = etree.parse(os.path.join(SIMULATIONS_DIR,case,case+".gml"))
 
