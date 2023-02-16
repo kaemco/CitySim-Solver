@@ -2,7 +2,8 @@ FROM ubuntu:latest AS builder
 
 # get the necessary libraries
 RUN apt-get update &&\
-	apt-get install --yes git make g++ gfortran libglu1-mesa-dev
+    # apt-get install --yes git &&\
+	apt-get install --yes make g++ gfortran libglu1-mesa-dev
 
 # prepare the directory for the executables
 RUN mkdir ~/bin
@@ -34,10 +35,9 @@ ENV PATH "$PATH:/root/bin"
 # copy the build solver from the builder image
 COPY --from=builder /root/bin /root/bin
 
-# prepare the testibng
+# prepare the testing
 RUN apt-get update &&\
     apt-get --yes install python3 python3-pip
-
 
 COPY test test
 WORKDIR test

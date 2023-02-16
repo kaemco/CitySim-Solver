@@ -1799,7 +1799,7 @@ void XmlScene::exportGML(string fileName, const vector<double>& origin) {
     // write .xml file header
     file << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << endl;
     file << "<core:CityModel xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
-         << " xsi:schemaLocation=\"http://www.opengis.net/citygml/2.0 http://www.citygmlwiki.org/images/a/ac/EnergyADE.xsd\"\n"
+         << " xsi:schemaLocation=\"http://www.opengis.net/citygml/2.0\"\n"
          << " xmlns:xAL=\"urn:oasis:names:tc:ciq:xsdschema:xAL:2.0\"\n"
          << " xmlns:app=\"http://www.opengis.net/citygml/appearance/2.0\" xmlns:wfs=\"http://www.opengis.net/wfs\"\n"
          << " xmlns:genobj=\"http://www.opengis.net/citygml/generics/2.0\"\n"
