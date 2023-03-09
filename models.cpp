@@ -2027,6 +2027,9 @@ void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned
     }
 
     // Compute the thermal power that heating/cooling units can provide.
+#ifdef DEBUG
+    fstream textFile("tanksEnergyFlows.dat",ios::out|ios::binary|ios::app);
+#endif // DEBUG
     for (size_t i=0 ; i<pDis->getnBuildings() ; ++i) {
         pBui = pDis->getBuilding(i);
         double HS_Pp, DHW_Pp, CS_Pp;
@@ -2051,7 +2054,35 @@ void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned
             CS_Pp = 0.;
         }
         pBui->setCS_Pp( CS_Pp );
+
+#ifdef DEBUG
+        textFile << "day:" << day << "\thour:" << hour << "\t"
+                 << pBui->getId() << ":Heating:" << pBui->getHeating() << "\t"
+                 << pBui->getId() << ":VdotUsed:" << pBui->getVdotUsed() << "\t"
+                 << pBui->getId() << ":Cooling:" << pBui->getCooling() << "\t"
+                 << pBui->getId() << ":HS_SolPp:" << pBui->getHS_SolPp() << "\t"
+                 << pBui->getId() << ":DHW_SolPp:" << pBui->getDHW_SolPp() << "\t"
+                 << pBui->getId() << ":CS_SolPp: " << pBui->getCS_SolPp() << "\t"
+                 << pBui->getId() << ":HS_needs:" << pBui->getHS_needs() << "\t"
+                 << pBui->getId() << ":HS_Pp:" << HS_Pp << "\t"
+                 << pBui->getId() << ":DHW_needs:" << pBui->getDHW_needs() << "\t"
+                 << pBui->getId() << ":DHW_Pp:" << DHW_Pp << "\t"
+                 << pBui->getId() << ":CS_needs:" << pBui->getCS_needs() << "\t"
+                 << pBui->getId() << ":CS_Pp:" << CS_Pp << "\t"
+                 << pBui->getId() << ":Heating_electricity:" << toString((pBui->getHeatingUnit())?
+                                                                         (pBui->getHeatingUnit()->getElectricConsumption(double(dt),HS_Pp+DHW_Pp,computeHeatPumpSrcTemp(pBui->getHeatingUnit(), pClim, day, hour))):
+                                                                         0.) << "\t"
+                 << pBui->getId() << ":Cooling_electricity:" << toString((pBui->getCoolingUnit())?
+                                                                         (pBui->getCoolingUnit()->getElectricConsumption(double(dt),CS_Pp,computeHeatPumpSrcTemp(pBui->getCoolingUnit(), pClim, day, hour))):
+                                                                         0.) << "\t";
+#endif // DEBUG
     }
+
+#ifdef DEBUG
+    textFile << endl;
+    textFile.close();
+#endif // DEBUG
+
 }
 
 /**
