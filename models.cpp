@@ -120,10 +120,10 @@ void Model::ThermalStepImplicit(Building *pBuilding, Climate *pClimate, unsigned
 
         //cerr << "After definition of T." << endl;
 
-        TnInf[i]=pBuilding->getZone(i)->getTmin()*pBuilding->getZone(i)->getC(0);
+        TnInf[i]=pBuilding->getZone(i)->getTmin(day,hour)*pBuilding->getZone(i)->getC(0);
  //        cerr<<"TnInf " << TnInf[i]<<endl;
 
-        TnSup[i]=pBuilding->getZone(i)->getTmax()*pBuilding->getZone(i)->getC(0);
+        TnSup[i]=pBuilding->getZone(i)->getTmax(day,hour)*pBuilding->getZone(i)->getC(0);
 //        cerr<<"TnSup " << TnSup[i]<<endl;
 
         // convectiveKe calculated with WindSpeed and WindDirection
@@ -192,7 +192,7 @@ void Model::ThermalStepImplicit(Building *pBuilding, Climate *pClimate, unsigned
 	for (int i=0;i<np;i++) {
 	  heating[i]=TnInf[i]-T[Thermal_getMatrixPosition(pBuilding,i)]-dt*b[Thermal_getMatrixPosition(pBuilding,i)];
 	  for (int j=0;j<np;j++) {
-	    heating[i]-=dt*G[Thermal_getMatrixPosition(pBuilding,i)][Thermal_getMatrixPosition(pBuilding,j)]*pBuilding->getZone(j)->getTmin();
+	    heating[i]-=dt*G[Thermal_getMatrixPosition(pBuilding,i)][Thermal_getMatrixPosition(pBuilding,j)]*pBuilding->getZone(j)->getTmin(day,hour);
 	  }
 	}
 
@@ -201,7 +201,7 @@ void Model::ThermalStepImplicit(Building *pBuilding, Climate *pClimate, unsigned
 
             phi[Thermal_getSubMatrixPosition(pBuilding ,i)+j-1]=T[Thermal_getMatrixPosition(pBuilding,i)+j] + dt*b[Thermal_getMatrixPosition(pBuilding,i)+j];
             for (int k=0;k<np;k++) {
-                phi[Thermal_getSubMatrixPosition(pBuilding ,i)+j-1]+=dt*G[Thermal_getMatrixPosition(pBuilding,i)+j][Thermal_getMatrixPosition(pBuilding,k)]*pBuilding->getZone(k)->getTmin();
+                phi[Thermal_getSubMatrixPosition(pBuilding ,i)+j-1]+=dt*G[Thermal_getMatrixPosition(pBuilding,i)+j][Thermal_getMatrixPosition(pBuilding,k)]*pBuilding->getZone(k)->getTmin(day,hour);
                 for (unsigned int l=1; l< pBuilding->getZonenNodes(k); l++) {
                     Asecond[Thermal_getSubMatrixPosition(pBuilding ,i)+j-1 + mp*(Thermal_getSubMatrixPosition(pBuilding,k)+l-1)]=dt*G[Thermal_getMatrixPosition(pBuilding,i)+j][Thermal_getMatrixPosition(pBuilding,k)+l]-pBuilding->getC(Thermal_getMatrixPosition(pBuilding,i)+j,Thermal_getMatrixPosition(pBuilding,k)+l);
                 }
@@ -234,7 +234,7 @@ void Model::ThermalStepImplicit(Building *pBuilding, Climate *pClimate, unsigned
 	for (int i=0;i<np;i++) {
 	  cooling[i]=TnSup[i]-T[Thermal_getMatrixPosition(pBuilding,i)]-dt*b[Thermal_getMatrixPosition(pBuilding,i)];
 	  for (int j=0;j<np;++j) {
-	    cooling[i]-=dt*G[Thermal_getMatrixPosition(pBuilding,i)][Thermal_getMatrixPosition(pBuilding,j)]*pBuilding->getZone(j)->getTmax();
+	    cooling[i]-=dt*G[Thermal_getMatrixPosition(pBuilding,i)][Thermal_getMatrixPosition(pBuilding,j)]*pBuilding->getZone(j)->getTmax(day,hour);
 	  }
 	}
 
@@ -244,7 +244,7 @@ void Model::ThermalStepImplicit(Building *pBuilding, Climate *pClimate, unsigned
             phi[Thermal_getSubMatrixPosition(pBuilding ,i)+j-1]=T[Thermal_getMatrixPosition(pBuilding,i)+j] + dt*b[Thermal_getMatrixPosition(pBuilding,i)+j];
 
             for (int k=0;k<np;k++) {
-                phi[Thermal_getSubMatrixPosition(pBuilding ,i)+j-1]+=dt*G[Thermal_getMatrixPosition(pBuilding,i)+j][Thermal_getMatrixPosition(pBuilding,k)]*pBuilding->getZone(k)->getTmax();
+                phi[Thermal_getSubMatrixPosition(pBuilding ,i)+j-1]+=dt*G[Thermal_getMatrixPosition(pBuilding,i)+j][Thermal_getMatrixPosition(pBuilding,k)]*pBuilding->getZone(k)->getTmax(day,hour);
             }
         }
     }
@@ -351,7 +351,7 @@ void Model::ThermalStepImplicitTemperature(Building *pBuilding, Climate* pClimat
 //    textFile.close();
 
         // *** windows opening model in a deterministic fashion *** //
-        if (pBuilding->getZone(i)->getTaForeseen() > (pBuilding->getZone(i)->getTmin()+1.0) && (pBuilding->getZone(i)->getTaForeseen()-Tout) > 1.0) {
+        if (pBuilding->getZone(i)->getTaForeseen() > (pBuilding->getZone(i)->getTmin(day,hour)+1.0) && (pBuilding->getZone(i)->getTaForeseen()-Tout) > 1.0) {
             // people present && temperature in the non-controlled zone => open the windows
             //cerr << "hour: " << hour << "\tTi: " << pBuilding->getZone(i)->getTa() << "\tTout: " << Tout << "\tNvent: " << Model::deterministicWindowsNvent(2.0,pBuilding->getZone(i)->getTa(),Tout) << endl;
             //pBuilding->getZone(i)->setNvent(Model::deterministicWindowsNvent(2.0,pBuilding->getZone(i)->getTa(),Tout));
@@ -368,7 +368,7 @@ void Model::ThermalStepImplicitTemperature(Building *pBuilding, Climate* pClimat
                     // linear approximation
                     //depletionTime = (pBuilding->getZone(i)->getVi()/VdotVent)*((pBuilding->getZone(i)->getTaForeseen()-max(pBuilding->getTmin(),Tout+temperaturePrecision))/(pBuilding->getZone(i)->getTaForeseen()-Tout));
                     // log approximation
-                    depletionTime = (pBuilding->getZone(i)->getVi()/VdotVent)*log((Tout-pBuilding->getZone(i)->getTaForeseen())/(Tout-max(pBuilding->getZone(i)->getTmin(),Tout+temperaturePrecision)));
+                    depletionTime = (pBuilding->getZone(i)->getVi()/VdotVent)*log((Tout-pBuilding->getZone(i)->getTaForeseen())/(Tout-max(pBuilding->getZone(i)->getTmin(day,hour),Tout+temperaturePrecision)));
                     //cerr << "depletion time: " << depletionTime << endl;
                     depletionTime = min(depletionTime,static_cast<float>(Model::dt));
                 }
@@ -1039,7 +1039,7 @@ void Model::HVAC_Needs(Building *pBuilding,Climate* pClimate,unsigned int day,un
 
         double t5 = pBuilding->getZone(i)->getTaForeseen();
         bool mControl = true;
-        if (t5 > pBuilding->getZone(i)->getTmax() || t5 < pBuilding->getZone(i)->getTmin()) mControl = false;
+        if (t5 > pBuilding->getZone(i)->getTmax(day,hour) || t5 < pBuilding->getZone(i)->getTmin(day,hour)) mControl = false;
 
         double t5prev = pBuilding->getZone(i)->getTa();
 
@@ -1091,7 +1091,7 @@ void Model::HVAC_Needs(Building *pBuilding,Climate* pClimate,unsigned int day,un
         double deltatHVAC = 0.0;
         double evl = 0.0;
         double w3;
-        if (mControl) w3 = HVAC_moistureControl(pBuilding->getZone(i)->getTmax(), t2, t3, deltatHVAC, HVAC_temperatureChange(deltat, t2, t3), t5, w2, w5prime, patm, evl, evaporativeCooling);
+        if (mControl) w3 = HVAC_moistureControl(pBuilding->getZone(i)->getTmax(day,hour), t2, t3, deltatHVAC, HVAC_temperatureChange(deltat, t2, t3), t5, w2, w5prime, patm, evl, evaporativeCooling);
         else w3 = w2;
 
         double tSupplyHVAC = t3 + deltatHVAC + HVAC_temperatureChange(deltat, t2, t3);

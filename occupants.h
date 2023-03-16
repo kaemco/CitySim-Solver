@@ -566,6 +566,221 @@ public:
 
 };
 
+class TemperatureProfiles {
+
+private:
+
+    class DayProfile {
+    private:
+        unsigned int id;
+        string name;
+        vector<float> profile_Tmin;
+        vector<float> profile_Tmax;
+        ostream logStream;
+
+    public:
+        DayProfile(TiXmlHandle hdl, ostream* pLogStr=NULL):logStream(std::cout.rdbuf()) {
+
+            // logStream is directed by default to the "cout" streambuf
+            if(pLogStr!=NULL)  // If a logfile stream is provided, redirect logStream to the file stream.
+                logStream.rdbuf(pLogStr->rdbuf());
+            if (!logStream.good())
+                throw(string("Unable to define correctly the logStream."));
+
+            TiXmlElement* elem = hdl.ToElement();
+
+            id = to<unsigned int>(elem->Attribute("id"));
+            if (elem->Attribute("name")){
+                elem->QueryStringAttribute("name",&name);
+            }
+            else{
+                elem->QueryStringAttribute("id",&name);
+                name = "Day profile "+name;
+            }
+
+            logStream << "Day id= " << id << " - Tmin: ";
+            // reads the Tmin profile
+            elem = hdl.FirstChildElement("Tmin").ToElement();
+            if (elem) {
+                int j=1;
+                do {
+                    string attrib;
+                    elem->QueryStringAttribute(string("h"+toString(j)).c_str(), &attrib);
+                    logStream << attrib << " ";
+                    profile_Tmin.push_back(to<float>(attrib));
+
+                } while ( elem->Attribute("h"+toString(++j)) );
+                logStream << endl;
+            }
+            else logStream << "none." << endl;
+
+            logStream << "Day id= " << id << " - Tmax: ";
+            // reads the Tmax profile
+            elem = hdl.FirstChildElement("Tmax").ToElement();
+            if (elem) {
+                int j=1;
+                do {
+                    string attrib;
+                    elem->QueryStringAttribute(string("h"+toString(j)).c_str(), &attrib);
+                    logStream << attrib << " ";
+                    profile_Tmax.push_back(to<float>(attrib));
+
+                } while ( elem->Attribute("h"+toString(++j)) );
+                logStream << endl;
+            }
+            else logStream << "none." << endl;
+
+        }
+
+        unsigned int getId() { return id; }
+        string getName() { return name; }
+
+        float getHourValue_Tmin(unsigned int h){ return profile_Tmin.at(h-1); }
+        float getHourValue_Tmax(unsigned int h){ return profile_Tmax.at(h-1); }
+
+        void writeXML(ofstream& file, string tab="") {
+            file << tab << "<TemperatureDayProfile id=\""<< id << "\" name=\"" << name << "\" ";
+            if (!profile_Tmin.empty()) {
+                file << tab << "\t" << "<Tmin ";
+                for (unsigned int i=0; i<profile_Tmin.size(); ++i) {
+                    file << "h" << i+1 << "=\"" << profile_Tmin[i] << "\" ";
+                }
+                file << "/>" << endl;
+            }
+            if (!profile_Tmax.empty()) {
+                file << tab << "\t" << "<Tmax ";
+                for (unsigned int i=0; i<profile_Tmax.size(); ++i) {
+                    file << "h" << i+1 << "=\"" << profile_Tmax[i] << "\" ";
+                }
+                file << "/>" << endl;
+            }
+        }
+    };
+    class YearProfile{
+    private:
+        unsigned int id;
+        string name;
+        vector<DayProfile*> profile;
+        ostream logStream;
+
+    public:
+        YearProfile(TiXmlHandle hdl, map<unsigned int, DayProfile*> mapId2DayProfile, ostream* pLogStr=NULL):logStream(std::cout.rdbuf()) {
+
+            // logStream is directed by default to the "cout" streambuf
+            if(pLogStr!=NULL)  // If a logfile stream is provided, redirect logStream to the file stream.
+                logStream.rdbuf(pLogStr->rdbuf());
+            if (!logStream.good())
+                throw(string("Unable to define correctly the logStream."));
+
+            TiXmlElement *elem = hdl.ToElement();
+
+            id = to<unsigned int>(elem->Attribute("id"));
+            if (elem->Attribute("name")){
+                elem->QueryStringAttribute("name",&name);
+            }
+            else{
+                elem->QueryStringAttribute("id",&name);
+                name = "Year profile "+name;
+            }
+
+            logStream << "Year id= " << id << ": ";
+
+            int j=1;
+            do {
+                unsigned int attrib;
+                elem->QueryUnsignedAttribute(("d"+toString(j)).c_str(),&attrib);
+                logStream << attrib << " ";
+                if(mapId2DayProfile.count(attrib)==1){
+                    profile.push_back(mapId2DayProfile.at(attrib));
+                }
+                else{
+                    throw("Year Profile id=" + toString(id) + " at Day d=" + toString(j) + ": Day Profile id=" + toString(attrib) + " does not exist.");
+                }
+
+            } while ( elem->Attribute("d"+toString(++j)) );
+
+            logStream << endl;
+        }
+
+        DayProfile* getDayProfile(unsigned int d) {
+            return profile.at((d-1)%365); // remain within 1-365 for the days, JK - 21.06.2015
+        }
+
+        unsigned int getId() { return id;}
+        string getName(){ return name; }
+
+        void writeXML(ofstream& file, string tab="", string type="Occupancy"){
+            file << tab << "<" << type << "TemperatureYearProfile id=\""<< id << "\" name=\"" << name << "\" ";
+            for (unsigned int i=0; i<profile.size(); ++i){
+                file << "d" << i+1 << "=\"" << profile[i]->getId() << "\" ";
+            }
+            file << "/>" << endl;
+        }
+    };
+    map<unsigned int, DayProfile*> dayProfiles;
+    map<unsigned int, YearProfile*> yearProfiles;
+    ostream logStream;
+
+public:
+
+    TemperatureProfiles(TiXmlHandle hdl):logStream(std::cout.rdbuf()) {
+        int i=0;
+        while (hdl.ChildElement("TemperatureDayProfile",i).ToElement()) {
+            DayProfile* d = new DayProfile(hdl.ChildElement("TemperatureDayProfile",i),&logStream);
+            dayProfiles.insert(pair<unsigned int, DayProfile*>(d->getId(),d));
+            ++i;
+        }
+        logStream << "Temperature DAY profiles: " << dayProfiles.size()-1 << " loaded." << endl;
+
+        logStream << "Loading temperature YEAR profiles" << endl << flush;
+
+        i=0;
+
+        while (hdl.ChildElement("TemperatureYearProfile",i).ToElement()) {
+            YearProfile* y = new YearProfile(hdl.ChildElement("TemperatureYearProfile",i), dayProfiles, &logStream);
+            yearProfiles.insert(pair<unsigned int, YearProfile*>(y->getId(),y));
+            ++i;
+        }
+        logStream << "Occupancy YEAR profiles: " << yearProfiles.size()-1 << " loaded." << endl;
+    }
+
+    ~TemperatureProfiles() {
+        for (map<unsigned int,DayProfile*>::iterator it=dayProfiles.begin();it!=dayProfiles.end();++it) {
+            if (it->second) delete (*it).second;
+        }
+        for (map<unsigned int,YearProfile*>::iterator it=yearProfiles.begin();it!=yearProfiles.end();++it) {
+            if (it->second) delete (*it).second;
+        }
+    }
+
+    YearProfile* getYearProfile(unsigned int id) {
+        if (yearProfiles.find(id)!=yearProfiles.end()) return yearProfiles.at(id);
+        else return nullptr;
+    }
+
+    void print() {
+        logStream << endl << "Temperature profiles" << endl << "Day profiles: " << endl << flush;
+        for (map<unsigned int, DayProfile*>::iterator it = dayProfiles.begin(); it != dayProfiles.end(); ++it) {
+            logStream << it->second->getName() << "(" << it->first <<"), id=" << it->second->getId() << endl;
+        }
+        logStream << endl << "Year profiles: " << endl;
+        for (map<unsigned int, YearProfile*>::iterator it = yearProfiles.begin(); it != yearProfiles.end(); ++it) {
+            logStream << it->second->getName() << "(" << it->first <<"), id=" << it->second->getId() << endl;
+        }
+    }
+
+    void writeXML(ofstream& file, string tab="") {
+        // write the dayProfiles first
+        for (map<unsigned int, DayProfile*>::iterator it = dayProfiles.begin(); it != dayProfiles.end(); ++it) {
+            (it->second)->writeXML(file, tab+"\t");
+        }
+        // write the yearProfiles afterwards
+        for (map<unsigned int, YearProfile*>::iterator it = yearProfiles.begin(); it != yearProfiles.end(); ++it) {
+            (it->second)->writeXML(file, tab+"\t");
+        }
+    }
+};
+
 class DeviceType {
 
 private:

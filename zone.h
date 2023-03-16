@@ -28,6 +28,7 @@ private:
 
     // heating and cooling temperatures
     float Tmin = 20.f, Tmax = 26.f;
+    unsigned int* Tprofile = nullptr;
 
     // Ta Foreseen
     double TaForeseen = 0.f;
@@ -172,11 +173,12 @@ public:
     // gets the parent
     Building* getpBuilding() { return pBuilding; }
 
-    // gets the min and max temperatures
-    float getTmin() { return Tmin; }
+    // gets and sets the min and max temperatures
+    float getTmin(unsigned int day=1, unsigned int hour=1);
     void setTmin(float t) { Tmin=t; }
-    float getTmax() { return Tmax; }
+    float getTmax(unsigned int day=1, unsigned int hour=1);
     void setTmax(float t) { Tmax=t; }
+    void setTprofile(unsigned int value) { if (Tprofile) delete Tprofile; Tprofile = new unsigned int(value); }
 
     unsigned int getId() { return id; }
     unsigned int getnNodes() { return nNodes; }
