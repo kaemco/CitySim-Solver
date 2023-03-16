@@ -899,11 +899,19 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
             if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("Tmin")) {
                 zones.back()->setTmin(to<float>(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("Tmin")));
             }
-            else zones.back()->setTmin(to<float>(hdl.ToElement()->Attribute("Tmin")));
+            else if (hdl.ToElement()->Attribute("Tmin")) {
+                zones.back()->setTmin(to<float>(hdl.ToElement()->Attribute("Tmin")));
+            }
             if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("Tmax")) {
                 zones.back()->setTmax(to<float>(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("Tmax")));
             }
-            else zones.back()->setTmax(to<float>(hdl.ToElement()->Attribute("Tmax")));
+            else if (hdl.ToElement()->Attribute("Tmax")) {
+                zones.back()->setTmax(to<float>(hdl.ToElement()->Attribute("Tmax")));
+            }
+            // adds the Temperature Profile (if it exists)
+            if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("temperatureProfile")) {
+                zones.back()->setTprofile(to<unsigned int>(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("temperatureProfile")));
+            }
 
             // adds the night ventilation
             if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("nightVentilationBegin")) {

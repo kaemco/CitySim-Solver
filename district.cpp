@@ -54,6 +54,9 @@ District::District(TiXmlHandle XMLHandler, XmlScene* pScene):pScene(pScene),occu
         // Domestic Hot Water (DHW) profiles loading in the District
         dhwProfiles.clearIdMap();
         dhwProfiles.readFromXml(XMLHandler.FirstChild("District"));
+        // Temperature profiles loading in the District
+        temperatureProfiles = new TemperatureProfiles(XMLHandler.FirstChild("District"));
+
         // Device type profiles loading in the District
         i=0;
         while (XMLHandler.FirstChild("District").ChildElement("DeviceType",i).ToElement()) {
@@ -378,6 +381,8 @@ void District::writeXML(ofstream& file, string tab){
     occupancyProfiles.writeXML(file, usedProfiles, subtab);
     // write DHW profiles
     dhwProfiles.writeXML(file, usedDHWProfiles, subtab);
+    // write TemperatureProfiles
+    temperatureProfiles->writeXML(file, subtab);
 
     // Device type profiles
     for (vector<DeviceType*>::iterator it=deviceTypes.begin(); it!=deviceTypes.end();++it)
@@ -450,6 +455,8 @@ District::~District() {
     //beginning of contents added by Dapeng
     for (vector<DistrictEnergyCenter*>::iterator it = districtEnergyCenters.begin(); it!=districtEnergyCenters.end(); ++it) delete *it;
     //ending of contents added by Dapeng
+    if (temperatureProfiles) delete temperatureProfiles;
+
 }
 
 void District::deleteDynamicallyAllocated() { // Cognet: Added this, to delete objects that have been created if an exception is thrown from the constructor.
@@ -461,6 +468,7 @@ void District::deleteDynamicallyAllocated() { // Cognet: Added this, to delete o
     while(!surfaces.empty()) { delete surfaces.back(); surfaces.pop_back(); }
     while(!trees.empty()) { delete trees.back(); trees.pop_back(); }
     while(!grounds.empty()) { delete grounds.front(); grounds.pop_front(); }
+    if (temperatureProfiles) delete temperatureProfiles;
 }
 
 void District::readFarField(string fileName){

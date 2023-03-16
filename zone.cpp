@@ -102,6 +102,28 @@ void Zone::computeVolume() {
 
 }
 
+float Zone::getTmin(unsigned int day, unsigned int hour) {
+    try {
+        // if a TemperatureProfile exists then return the temperature in it otherwise Tmin
+        if (Tprofile) return pBuilding->getDistrict()->getTemperatureProfiles()->getYearProfile(*Tprofile)->getDayProfile(day)->getHourValue_Tmin(hour);
+        else return Tmin;
+    }
+    catch(exception& e) {
+        return Tmin;
+    }
+}
+
+float Zone::getTmax(unsigned int day, unsigned int hour) {
+    try {
+        // if a TemperatureProfile exists then return the temperature in it otherwise Tmin
+        if (Tprofile) return pBuilding->getDistrict()->getTemperatureProfiles()->getYearProfile(*Tprofile)->getDayProfile(day)->getHourValue_Tmax(hour);
+        else return Tmax;
+    }
+    catch(exception& e) {
+        return Tmax;
+    }
+}
+
 double Zone::getKappa3() {
 
     double kappa3 = 0.;

@@ -36,6 +36,7 @@ private:
     vector<WindTurbine> windTurbines;
     OccupancyProfiles occupancyProfiles;
     DHWProfiles dhwProfiles;
+    TemperatureProfiles* temperatureProfiles;
     vector<DeviceType*> deviceTypes;
     vector<ActivityType*> activityTypes;
 
@@ -79,6 +80,7 @@ public:
     ActivityType* getActivityType(unsigned int id) { for (size_t i=0; i<activityTypes.size();++i) { if (activityTypes.at(i)->getId()==id) return activityTypes.at(i); } throw(string("ActivityType id not found.")); }
     size_t getnDeviceTypes() { return deviceTypes.size(); }
     DeviceType* getDeviceType(unsigned int id) { for (size_t i=0; i<deviceTypes.size();++i) { if (deviceTypes.at(i)->getId()==id) return deviceTypes.at(i); } throw(string("DeviceType id not found.")); }
+    TemperatureProfiles* getTemperatureProfiles() { return temperatureProfiles; }
 
     unsigned int getnSurfaces() { return surfaces.size(); }
     Surface* getSurface(unsigned int i) { return surfaces.at(i); }
