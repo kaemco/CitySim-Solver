@@ -1489,7 +1489,7 @@ class Pipe {
         float getPressureDiffRecord(unsigned int step)  { return pressureDiffRecord.at(step); }
 
 
-        void computeThermalLoss(float inputTemp, float twinNearInputTemp, float twinNearOutputTemp, float soilTemp, float cp, float length, float interPipeThermalResistance);
+        void computeThermalLoss(float inputTemp, float twinNearInputTemp, float twinNearOutputTemp, float soilTemp, float cp, float length, float interPipeThermalResistance, bool interPipeInteractions);
         void hydraulicConverged(float const& massFlow_, float const& deltaP, float const& rho, float const& length, float const& altitudePressureLoss);
 };
 
@@ -1509,6 +1509,7 @@ class PipePair {
         float length; // [m]
         float innerRadius; // [m]
         float interPipeDistance; // [m]
+        bool interPipeInteractions; 
         array<NodePair*,2> connectedNodes;
         array<string,2> singulars; //Added by Max
 

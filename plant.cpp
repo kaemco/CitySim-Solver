@@ -5502,7 +5502,14 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         if ( hdl.ToElement()->QueryUnsignedAttribute("node2", &node2Id) )           { throw string("Error in the XML file: a PipePair doesn't have attribute: 'node2'."); }
         if ( hdl.ToElement()->QueryFloatAttribute("length", &length) )                          { throw string("Error in the XML file: a PipePair doesn't have attribute: 'length' in meters."); }
         if ( hdl.ToElement()->QueryFloatAttribute("innerRadius", &innerRadius) )                { throw string("Error in the XML file: a PipePair doesn't have attribute: 'innerRadius' in meters."); }
-        if ( hdl.ToElement()->QueryFloatAttribute("interPipeDistance", &interPipeDistance) )    { throw string("Error in the XML file: a PipePair doesn't have attribute: 'interPipeDistance' in meters."); }
+        if ( hdl.ToElement()->QueryFloatAttribute("interPipeDistance", &interPipeDistance) )
+            { cout << "Warning: a PipePair doesn't have attribute: 'interPipeDistance' in meters. Not considering interactions." << endl;
+            interPipeInteractions = false;
+            interPipeDistance = 1; // will not be used
+            }
+        else {
+            interPipeInteractions = true;  
+            }
         if ( hdl.ToElement()->QueryStringAttribute("singular1", &singulars[0]) )    { cout<<"Warning in the XML file: PipePair id=" << this->getId() << " uses default values for singular1." << endl; }
         if ( hdl.ToElement()->QueryStringAttribute("singular2", &singulars[1]) )    { cout<<"Warning in the XML file: PipePair id=" << this->getId() << " uses default values for singular2." << endl; }
 
@@ -5523,7 +5530,7 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         // Sanity check.
         if ( length<=0 )            { throw string("Error in the XML file: PipePair id="+to_string(id)+" has length<=0."); }
         if ( innerRadius<=0 )       { throw string("Error in the XML file: PipePair id="+to_string(id)+" has innerRadius<=0."); }
-        if ( interPipeDistance<=0 ) { throw string("Error in the XML file: PipePair id="+to_string(id)+" has interPipeDistance<=0."); }
+        if ( interPipeDistance<=0 & interPipeInteractions == true) { throw string("Error in the XML file: PipePair id="+to_string(id)+" has interPipeDistance<=0."); }
 
         float initDownstreamTemp = 0.5f*(getHeadNode()->getSupplyTemperature()+getTailNode()->getSupplyTemperature()); // Arbitrarily set downstream temperature to average between the two node temperatures.
         TiXmlElement* supplyPipeHdl = hdl.ToElement()->FirstChildElement( "SupplyPipe" );
@@ -5608,7 +5615,7 @@ void PipePair::computeThermalLoss(float soilTemp, float cp, bool isSupply) {
         twinNearOutputTemp = getOtherNode(inflowingNode)->getTemperature(not isSupply);
     }
 
-    pipeToCompute->computeThermalLoss(inputTemp, twinNearInputTemp, twinNearOutputTemp, soilTemp, cp, length, interPipeThermalResistance);
+    pipeToCompute->computeThermalLoss(inputTemp, twinNearInputTemp, twinNearOutputTemp, soilTemp, cp, length, interPipeThermalResistance, interPipeInteractions);
 }
 
 bool PipePair::massFlowsToMe(NodePair* n, bool isSupply) {
@@ -5673,12 +5680,17 @@ Pipe::Pipe(TiXmlHandle hdl, PipePair* parent, const float& soilThermalConductivi
 
 }
 
-void Pipe::computeThermalLoss(float inputTemp, float twinNearInputTemp, float twinNearOutputTemp, float soilTemp, float cp, float length, float interPipeThermalResistance) {
+void Pipe::computeThermalLoss(float inputTemp, float twinNearInputTemp, float twinNearOutputTemp, float soilTemp, float cp, float length, float interPipeThermalResistance, bool interPipeInteractions) {
     if (massFlow!=0.f) { // To avoid division by zero.
         float mcpInv = 1.f/(abs(massFlow)*cp);
-        float c1 = - mcpInv*(1.f/thermalResistance+1.f/interPipeThermalResistance);
+        float interPipeLoss = 0;
+        float c1  = - mcpInv*(1.f/thermalResistance);
+        if (interPipeInteractions == true) {
+            c1 = - mcpInv*(1.f/thermalResistance+1.f/interPipeThermalResistance);
+            interPipeLoss = twinNearInputTemp/interPipeThermalResistance;
+        }
         float c1InvSq = 1.f/(c1*c1);
-        float c2 = mcpInv*(soilTemp/thermalResistance + twinNearInputTemp/interPipeThermalResistance + pressureLossHeat);
+        float c2 = mcpInv*(soilTemp/thermalResistance + interPipeLoss /*twinNearInputTemp/interPipeThermalResistance */+ pressureLossHeat);
         float c3 = mcpInv/(interPipeThermalResistance*length) * (twinNearOutputTemp-twinNearInputTemp);
         downstreamTemp = - ( c3 + c1*(c2 + c3*length) )*c1InvSq + exp(c1*length)*( inputTemp + (c3 + c1*c2)*c1InvSq );
 
