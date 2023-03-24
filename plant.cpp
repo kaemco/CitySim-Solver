@@ -3617,7 +3617,6 @@ DistrictEnergyCenter::DistrictEnergyCenter(TiXmlHandle hdl, District* pDistrict,
 
         if ( cp<=0 )  { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has Cp<=0."); }
         if ( rho<=0 ) { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has rho<=0."); }
-        if ( mu!=muPossibilities[0] and mu!=muPossibilities[1] ) { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has mu!="+muPossibilities[0]+" and mu!="+muPossibilities[1]+"."); }
 
         logStream << "District energy center: id=" << id << ", Cp=" << cp << ", rho=" << rho << endl;
 
@@ -3657,15 +3656,17 @@ void DistrictEnergyCenter::deleteDynAllocated() {
 }
 
 double DistrictEnergyCenter::getMu(double temp) {
-    float mu_ = 0.0004; // JK - added default value to 0.0004
-    if (mu==muPossibilities[0]){ mu_ = 0.0004; }
-    else if (mu==muPossibilities[1]) {
+
+    if (mu==muPossibilities[1]) {
         if(temp<0.f) {temp = 0.f;} //Added by Max
         else if(temp>100.f) {temp = 100.f;}
 
-        mu_ = 0.00002939*exp( 507.88/(temp-(149.3-273.15)) );
+        return 0.00002939*exp( 507.88/(temp-(149.3-273.15)) );
     }
-    return mu_;
+    else { // fixed value given in the XML file
+        return to<float>(mu);
+    }
+
 }
 
 float DistrictEnergyCenter::getYearlyTotalThermalLoss(){
@@ -4409,7 +4410,8 @@ float Network::computeDarcyFrictionFactor(float const& massFlow, float const& ra
 //    float mu = 0.0004; // Dynamic viscocity of water [Pa*s] TODO improve this formula.
     float mu = pDEC->getMu(temp);
     float reynolds (0.63662*massFlow/(radius*mu)); // 2*massflow/(pi*radius*mu) [ ]
-    float eps_diam = 0.000045f/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
+    // float eps_diam = 0.000045f/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
+    float eps_diam = 0.000007f/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
 
     float darcyFricFact;
 
@@ -4992,8 +4994,8 @@ void NodePair::writeTHHeaderText(fstream& textFile, unsigned int decId) {
 }
 
 void NodePair::writeTHResultsText(fstream& textFile, unsigned int i) {
-    textFile << fixed << setprecision(1) << getSupplyTemperatureRecord(i) <<"\t";
-    textFile << fixed << setprecision(1) << getReturnTemperatureRecord(i) <<"\t";
+    textFile << fixed << setprecision(2) << getSupplyTemperatureRecord(i) <<"\t";
+    textFile << fixed << setprecision(2) << getReturnTemperatureRecord(i) <<"\t";
 }
 
 bool NodePair::propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) { // Modified by Max
