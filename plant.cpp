@@ -3750,6 +3750,10 @@ Network::Network(TiXmlHandle hdl, DistrictEnergyCenter *pDEC, ostream *pLogStr) 
 
         if (soilkValue<=0) { throw string("Error in the XML file: Network of DistrictEnergyCenter id="+to_string(pDEC->getId())+" has soilkValue<=0."); }
 
+        if ( hdl.ToElement()->QueryFloatAttribute("roughness", &roughness) )     {
+            logStream << "Warning: using default roughness" << endl;
+            }
+        logStream << "Absolute roughness: " << roughness << " m" << endl;
         try {
             string name = "NodePair";
             TiXmlElement* xmlEl = hdl.ToElement()->FirstChildElement(name);
@@ -4409,9 +4413,9 @@ float Network::computeDynamicViscosityWater(float const& temp) {
 float Network::computeDarcyFrictionFactor(float const& massFlow, float const& radius, float const& temp) {
 //    float mu = 0.0004; // Dynamic viscocity of water [Pa*s] TODO improve this formula.
     float mu = pDEC->getMu(temp);
+    float roughness = pDEC->getNetwork()->getRoughness();
     float reynolds (0.63662*massFlow/(radius*mu)); // 2*massflow/(pi*radius*mu) [ ]
-    // float eps_diam = 0.000045f/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
-    float eps_diam = 0.000007f/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
+    float eps_diam = roughness/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
 
     float darcyFricFact;
 

@@ -1805,6 +1805,7 @@ private:
     vector<RegulatingElement*> regulatingElements;
 
     float soilkValue;
+    float roughness = 0.000045f; // m
 
     vector<float> loopMassFlows; // Mass flow through the loops. Values stored after convergence, to be used as initial condition in the next iteration [kg/s]
     vector<vector<float>> loopMatrix; // nb of rows=nb of loops, nb of columns=nb of edges. If [i,j]==1, then edge j is in loop i. If [i,j]==-1, then edge j is in loop i, but in the opposite direction. If [i,j]==0, then edge j is not in loop i.
@@ -1829,6 +1830,7 @@ public:
     ~Network() { /*logStream << "Destructor of Network" << endl;*/ deleteNodesAndPipes(); }
 
     float getSoilkValue() { return soilkValue; }
+    float getRoughness() { return roughness; }
 
     DistrictEnergyCenter* getDEC() { return pDEC; }
     void addRegulatingElement(RegulatingElement* re) { regulatingElements.push_back(re); }
