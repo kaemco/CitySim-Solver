@@ -878,15 +878,15 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
             }
 
             // need to check the consistency of this zone, to define its type (1N, 2N, 3N or even 4N)
-            if ((roofUvalueOnly && floorUvalueOnly)||(zoneRoofs.empty() && zoneFloors.empty()))
+            if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")
+                && hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")==string("true"))
+                zones.push_back(new ZoneN(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
+            else if ((roofUvalueOnly && floorUvalueOnly)||(zoneRoofs.empty() && zoneFloors.empty()))
                 zones.push_back(new Zone2N(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
             else if ((roofUvalueOnly)||zoneRoofs.empty())
                 zones.push_back(new Zone3N_floor(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
             else if ((floorUvalueOnly)||zoneFloors.empty())
                 zones.push_back(new Zone3N(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
-            else if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")
-                     && hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")==string("true"))
-                zones.push_back(new ZoneN(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
             else
                 zones.push_back(new Zone4N(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
 
