@@ -3617,7 +3617,6 @@ DistrictEnergyCenter::DistrictEnergyCenter(TiXmlHandle hdl, District* pDistrict,
 
         if ( cp<=0 )  { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has Cp<=0."); }
         if ( rho<=0 ) { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has rho<=0."); }
-        if ( mu!=muPossibilities[0] and mu!=muPossibilities[1] ) { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has mu!="+muPossibilities[0]+" and mu!="+muPossibilities[1]+"."); }
 
         logStream << "District energy center: id=" << id << ", Cp=" << cp << ", rho=" << rho << endl;
 
@@ -3657,15 +3656,17 @@ void DistrictEnergyCenter::deleteDynAllocated() {
 }
 
 double DistrictEnergyCenter::getMu(double temp) {
-    float mu_ = 0.0004; // JK - added default value to 0.0004
-    if (mu==muPossibilities[0]){ mu_ = 0.0004; }
-    else if (mu==muPossibilities[1]) {
+
+    if (mu==muPossibilities[1]) {
         if(temp<0.f) {temp = 0.f;} //Added by Max
         else if(temp>100.f) {temp = 100.f;}
 
-        mu_ = 0.00002939*exp( 507.88/(temp-(149.3-273.15)) );
+        return 0.00002939*exp( 507.88/(temp-(149.3-273.15)) );
     }
-    return mu_;
+    else { // fixed value given in the XML file
+        return to<float>(mu);
+    }
+
 }
 
 float DistrictEnergyCenter::getYearlyTotalThermalLoss(){
@@ -3748,6 +3749,9 @@ Network::Network(TiXmlHandle hdl, DistrictEnergyCenter *pDEC, ostream *pLogStr) 
         if ( hdl.ToElement()->QueryFloatAttribute("soilkValue", &soilkValue) )     { throw string("Error in the XML file: a Network doesn't have attribute: 'soilkValue'."); }
 
         if (soilkValue<=0) { throw string("Error in the XML file: Network of DistrictEnergyCenter id="+to_string(pDEC->getId())+" has soilkValue<=0."); }
+
+        if ( hdl.ToElement()->QueryFloatAttribute("roughness", &roughness) ) { logStream << "Warning: using default roughness." << endl; }
+        logStream << "Absolute roughness: " << roughness << " m" << endl;
 
         try {
             string name = "NodePair";
@@ -4408,8 +4412,9 @@ float Network::computeDynamicViscosityWater(float const& temp) {
 float Network::computeDarcyFrictionFactor(float const& massFlow, float const& radius, float const& temp) {
 //    float mu = 0.0004; // Dynamic viscocity of water [Pa*s] TODO improve this formula.
     float mu = pDEC->getMu(temp);
+    float roughness = pDEC->getNetwork()->getRoughness();
     float reynolds (0.63662*massFlow/(radius*mu)); // 2*massflow/(pi*radius*mu) [ ]
-    float eps_diam = 0.000045f/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
+    float eps_diam = roughness/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
 
     float darcyFricFact;
 
@@ -4992,8 +4997,8 @@ void NodePair::writeTHHeaderText(fstream& textFile, unsigned int decId) {
 }
 
 void NodePair::writeTHResultsText(fstream& textFile, unsigned int i) {
-    textFile << fixed << setprecision(1) << getSupplyTemperatureRecord(i) <<"\t";
-    textFile << fixed << setprecision(1) << getReturnTemperatureRecord(i) <<"\t";
+    textFile << fixed << setprecision(2) << getSupplyTemperatureRecord(i) <<"\t";
+    textFile << fixed << setprecision(2) << getReturnTemperatureRecord(i) <<"\t";
 }
 
 bool NodePair::propagateNetwork(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) { // Modified by Max
@@ -5500,7 +5505,10 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         if ( hdl.ToElement()->QueryUnsignedAttribute("node2", &node2Id) )           { throw string("Error in the XML file: a PipePair doesn't have attribute: 'node2'."); }
         if ( hdl.ToElement()->QueryFloatAttribute("length", &length) )                          { throw string("Error in the XML file: a PipePair doesn't have attribute: 'length' in meters."); }
         if ( hdl.ToElement()->QueryFloatAttribute("innerRadius", &innerRadius) )                { throw string("Error in the XML file: a PipePair doesn't have attribute: 'innerRadius' in meters."); }
-        if ( hdl.ToElement()->QueryFloatAttribute("interPipeDistance", &interPipeDistance) )    { throw string("Error in the XML file: a PipePair doesn't have attribute: 'interPipeDistance' in meters."); }
+        if ( hdl.ToElement()->QueryFloatAttribute("interPipeDistance", &interPipeDistance) ) {
+			cout << "Warning: PipePair id=" << id << " doesn't have attribute: 'interPipeDistance' in meters. Not considering interactions." << endl;
+			interPipeDistance = 0; // will not be used
+		}
         if ( hdl.ToElement()->QueryStringAttribute("singular1", &singulars[0]) )    { cout<<"Warning in the XML file: PipePair id=" << this->getId() << " uses default values for singular1." << endl; }
         if ( hdl.ToElement()->QueryStringAttribute("singular2", &singulars[1]) )    { cout<<"Warning in the XML file: PipePair id=" << this->getId() << " uses default values for singular2." << endl; }
 
@@ -5521,7 +5529,7 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         // Sanity check.
         if ( length<=0 )            { throw string("Error in the XML file: PipePair id="+to_string(id)+" has length<=0."); }
         if ( innerRadius<=0 )       { throw string("Error in the XML file: PipePair id="+to_string(id)+" has innerRadius<=0."); }
-        if ( interPipeDistance<=0 ) { throw string("Error in the XML file: PipePair id="+to_string(id)+" has interPipeDistance<=0."); }
+        if ( interPipeDistance<0)   { throw string("Error in the XML file: PipePair id="+to_string(id)+" has interPipeDistance<0."); }
 
         float initDownstreamTemp = 0.5f*(getHeadNode()->getSupplyTemperature()+getTailNode()->getSupplyTemperature()); // Arbitrarily set downstream temperature to average between the two node temperatures.
         TiXmlElement* supplyPipeHdl = hdl.ToElement()->FirstChildElement( "SupplyPipe" );
@@ -5543,7 +5551,7 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
                 throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic insulation resistance in the return pipe."));
             }
             else if (isnan(computeInterPipeSoilThermalResistance(supplyPipe, returnPipe, interPipeDistance, innerRadius, net->getSoilkValue()))) {
-                throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic interpipe soil thermal resistance."));
+                cout << "Warning: PipePair id=" << this->getId() << ", unrealistic inter-pipe soil thermal resistance. Neglecting it." << endl;
             }
             else {
                 throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic physical characteristics."));
@@ -5674,10 +5682,15 @@ Pipe::Pipe(TiXmlHandle hdl, PipePair* parent, const float& soilThermalConductivi
 void Pipe::computeThermalLoss(float inputTemp, float twinNearInputTemp, float twinNearOutputTemp, float soilTemp, float cp, float length, float interPipeThermalResistance) {
     if (massFlow!=0.f) { // To avoid division by zero.
         float mcpInv = 1.f/(abs(massFlow)*cp);
-        float c1 = - mcpInv*(1.f/thermalResistance+1.f/interPipeThermalResistance);
+        float c1 = - mcpInv*(1.f/thermalResistance);
+		float c2 = mcpInv*(soilTemp/thermalResistance + pressureLossHeat);
+		float c3 = 0.f;
+        if (interPipeThermalResistance>0.f) {
+            c1 = - mcpInv*(1.f/thermalResistance+1.f/interPipeThermalResistance);
+            c2 = mcpInv*(soilTemp/thermalResistance + twinNearInputTemp/interPipeThermalResistance + pressureLossHeat);
+            c3 = mcpInv/(interPipeThermalResistance*length) * (twinNearOutputTemp-twinNearInputTemp);
+        }
         float c1InvSq = 1.f/(c1*c1);
-        float c2 = mcpInv*(soilTemp/thermalResistance + twinNearInputTemp/interPipeThermalResistance + pressureLossHeat);
-        float c3 = mcpInv/(interPipeThermalResistance*length) * (twinNearOutputTemp-twinNearInputTemp);
         downstreamTemp = - ( c3 + c1*(c2 + c3*length) )*c1InvSq + exp(c1*length)*( inputTemp + (c3 + c1*c2)*c1InvSq );
 
         thermalLoss = (inputTemp-downstreamTemp)*abs(massFlow)*cp;
