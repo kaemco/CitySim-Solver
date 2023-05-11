@@ -878,15 +878,15 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
             }
 
             // need to check the consistency of this zone, to define its type (1N, 2N, 3N or even 4N)
-            if ((roofUvalueOnly && floorUvalueOnly)||(zoneRoofs.empty() && zoneFloors.empty()))
+            if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")
+                && hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")==string("true"))
+                zones.push_back(new ZoneN(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
+            else if ((roofUvalueOnly && floorUvalueOnly)||(zoneRoofs.empty() && zoneFloors.empty()))
                 zones.push_back(new Zone2N(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
             else if ((roofUvalueOnly)||zoneRoofs.empty())
                 zones.push_back(new Zone3N_floor(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
             else if ((floorUvalueOnly)||zoneFloors.empty())
                 zones.push_back(new Zone3N(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
-            else if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")
-                     && hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")==string("true"))
-                zones.push_back(new ZoneN(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
             else
                 zones.push_back(new Zone4N(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
 
@@ -1550,15 +1550,52 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
         file << subtab << tabs(1) << "<energy:UsageZone gml:id=\"UZ_" << zones.at(i)->getId() << "\">" << endl;
         // cooling schedule
         file << subtab << tabs(2) << "<energy:coolingSchedule>" << endl;
-        file << subtab << tabs(3) << "<energy:ConstantValueSchedule>" << endl;
-        file << subtab << tabs(4) << "<energy:averageValue uom=\"celsius\">" << zones.at(i)->getTmax() << "</energy:averageValue>" << endl;
-        file << subtab << tabs(3) << "</energy:ConstantValueSchedule>" << endl;
+        file << subtab << tabs(3) << "<energy:TimeSeriesSchedule>" << endl;
+        file << subtab << tabs(4) << "<energy:timeDependingValues>" << endl;
+        file << subtab << tabs(5) << "<energy:RegularTimeSeries>" << endl;
+        file << subtab << tabs(6) << "<energy:variableProperties>" << endl;
+        file << subtab << tabs(7) << "<energy:TimeValuesProperties>" << endl;
+        file << subtab << tabs(8) << "<energy:acquisitionMethod>estimation</energy:acquisitionMethod>" << endl;
+        file << subtab << tabs(8) << "<energy:interpolationType>averageInSucceedingInterval</energy:interpolationType>" << endl;
+        file << subtab << tabs(7) << "</energy:TimeValuesProperties>" << endl;
+        file << subtab << tabs(6) << "</energy:variableProperties>" << endl;
+        file << subtab << tabs(5) << "<energy:temporalExtent></energy:temporalExtent>" << endl;
+        file << subtab << tabs(5) << "<energy:timeInterval unit=\"hour\">1</energy:timeInterval>" << endl;
+        file << subtab << tabs(5) << "<energy:values uom=\"celsius\">";
+        for (int d=1; d <= 365; ++d){
+            for (int h=1; h <= 24; ++h){
+                file << zones.at(i)->getTmax(d, h) << " ";
+            }
+        }
+        file << "</energy:values>" << endl;
+        file << subtab << tabs(5) << "</energy:RegularTimeSeries>" << endl;
+        file << subtab << tabs(4) << "</energy:timeDependingValues>" << endl;
+        file << subtab << tabs(3) << "</energy:TimeSeriesSchedule>" << endl;
         file << subtab << tabs(2) << "</energy:coolingSchedule>" << endl;
+
         // heating schedule
         file << subtab << tabs(2) << "<energy:heatingSchedule>" << endl;
-        file << subtab << tabs(3) << "<energy:ConstantValueSchedule>" << endl;
-        file << subtab << tabs(4) << "<energy:averageValue uom=\"celsius\">" << zones.at(i)->getTmin() << "</energy:averageValue>" << endl;
-        file << subtab << tabs(3) << "</energy:ConstantValueSchedule>" << endl;
+        file << subtab << tabs(3) << "<energy:TimeSeriesSchedule>" << endl;
+        file << subtab << tabs(4) << "<energy:timeDependingValues>" << endl;
+        file << subtab << tabs(5) << "<energy:RegularTimeSeries>" << endl;
+        file << subtab << tabs(6) << "<energy:variableProperties>" << endl;
+        file << subtab << tabs(7) << "<energy:TimeValuesProperties>" << endl;
+        file << subtab << tabs(8) << "<energy:acquisitionMethod>estimation</energy:acquisitionMethod>" << endl;
+        file << subtab << tabs(8) << "<energy:interpolationType>averageInSucceedingInterval</energy:interpolationType>" << endl;
+        file << subtab << tabs(7) << "</energy:TimeValuesProperties>" << endl;
+        file << subtab << tabs(6) << "</energy:variableProperties>" << endl;
+        file << subtab << tabs(5) << "<energy:temporalExtent></energy:temporalExtent>" << endl;
+        file << subtab << tabs(5) << "<energy:timeInterval unit=\"hour\">1</energy:timeInterval>" << endl;
+        file << subtab << tabs(5) << "<energy:values uom=\"celsius\">";
+        for (int d=1; d <= 12; ++d){
+            for (int h=1; h <= 24; ++h){
+                file << zones.at(i)->getTmin(d, h) << " ";
+            }
+        }
+        file << "</energy:values>" << endl;
+        file << subtab << tabs(5) << "</energy:RegularTimeSeries>" << endl;
+        file << subtab << tabs(4) << "</energy:timeDependingValues>" << endl;
+        file << subtab << tabs(3) << "</energy:TimeSeriesSchedule>" << endl;
         file << subtab << tabs(2) << "</energy:heatingSchedule>" << endl;
         // specific attributes
         file << subtab << tabs(2) << "<energy:usageZoneType>residential</energy:usageZoneType>" << endl;
