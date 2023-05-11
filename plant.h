@@ -1489,7 +1489,7 @@ class Pipe {
         float getPressureDiffRecord(unsigned int step)  { return pressureDiffRecord.at(step); }
 
 
-        void computeThermalLoss(float inputTemp, float twinNearInputTemp, float twinNearOutputTemp, float soilTemp, float cp, float length, float interPipeThermalResistance, bool interPipeInteractions);
+        void computeThermalLoss(float inputTemp, float twinNearInputTemp, float twinNearOutputTemp, float soilTemp, float cp, float length, float interPipeThermalResistance);
         void hydraulicConverged(float const& massFlow_, float const& deltaP, float const& rho, float const& length, float const& altitudePressureLoss);
 };
 
@@ -1509,7 +1509,6 @@ class PipePair {
         float length; // [m]
         float innerRadius; // [m]
         float interPipeDistance; // [m]
-        bool interPipeInteractions; 
         array<NodePair*,2> connectedNodes;
         array<string,2> singulars; //Added by Max
 
@@ -1805,7 +1804,7 @@ private:
     vector<RegulatingElement*> regulatingElements;
 
     float soilkValue;
-    float roughness = 0.000045f; // m
+    float roughness = 0.000045f; // absolute rougness in (m)
 
     vector<float> loopMassFlows; // Mass flow through the loops. Values stored after convergence, to be used as initial condition in the next iteration [kg/s]
     vector<vector<float>> loopMatrix; // nb of rows=nb of loops, nb of columns=nb of edges. If [i,j]==1, then edge j is in loop i. If [i,j]==-1, then edge j is in loop i, but in the opposite direction. If [i,j]==0, then edge j is not in loop i.
