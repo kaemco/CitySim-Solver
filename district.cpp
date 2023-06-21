@@ -382,7 +382,7 @@ void District::writeXML(ofstream& file, string tab){
     // write DHW profiles
     dhwProfiles.writeXML(file, usedDHWProfiles, subtab);
     // write TemperatureProfiles
-    temperatureProfiles->writeXML(file, subtab);
+    if (temperatureProfiles) temperatureProfiles->writeXML(file, subtab);
 
     // Device type profiles
     for (vector<DeviceType*>::iterator it=deviceTypes.begin(); it!=deviceTypes.end();++it)

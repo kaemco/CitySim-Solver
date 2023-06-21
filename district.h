@@ -36,7 +36,7 @@ private:
     vector<WindTurbine> windTurbines;
     OccupancyProfiles occupancyProfiles;
     DHWProfiles dhwProfiles;
-    TemperatureProfiles* temperatureProfiles;
+    TemperatureProfiles* temperatureProfiles = nullptr;
     vector<DeviceType*> deviceTypes;
     vector<ActivityType*> activityTypes;
 

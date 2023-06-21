@@ -262,6 +262,11 @@ void Zone::setOccupantsCountAndActivity(unsigned int day, unsigned int hour)
 
 float Zone::getDHWConsumption(unsigned int day, unsigned int hour)
 {
+    // do some tests
+    if (!dhwYearProfile) {
+        throw(string("DHWYearProfile not defined for Zone id=")+toString(id)+" in Building id="+toString(this->getpBuilding()->getId())+".");
+    }
+
     if (occupantsStochastic) {
         float DHWconsumption = 0.f;
         for (unsigned int i=0; i<occupantsCount; ++i) {
