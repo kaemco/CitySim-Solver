@@ -28,6 +28,7 @@ private :
     ostream logStream;
 
     // these values are from the climate file
+    string filename;
     string location;
     float altitude, latitudeN, longitudeE;
     int meridianE; // in hours
@@ -37,7 +38,7 @@ private :
     vector<float> cloudiness;
 
     // these values are calculated from the previous values
-    float* Td;                          // dew point temperature in celsius
+    vector<float> Td;                   // dew point temperature in celsius
     vector<float> meanDailyTemperature; // in celsius
     float meanAnnualTemperature;        // in celsius
     unsigned int coolDay, hotDay;       // index of the coldest and hottest days
@@ -52,12 +53,13 @@ private :
 
 public :
 
-    Climate(string filename, ostream* logFileStream=NULL);
-    ~Climate() { delete[] Td; }
+    Climate(ostream* logFileStream=nullptr);
+    Climate(string filename, ostream* logFileStream=nullptr);
     void clear() {
         Igh.clear(); Igh_vis.clear();
     }
-
+    void importPVGIS_TMY_CSV(string filename, int defaultCloudiness);
+    void computeComplementaryValues();
     void exportCliFile(string filename);
 
     string getLocation() { return location; }

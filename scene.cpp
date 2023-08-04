@@ -1599,7 +1599,6 @@ XmlScene::XmlScene(string inputFile, ostream* pLogFileStr, bool climateFileRequi
         beginYear  = to<unsigned int>(citysim->FirstChild("Simulation")->ToElement()->Attribute("beginYear"));
     if (citysim->FirstChild("Simulation")->ToElement()->Attribute("endYear"))
         endYear    = to<unsigned int>(citysim->FirstChild("Simulation")->ToElement()->Attribute("endYear"));
-    int daysPerMonth[] = {31,28,31,30,31,30,31,31,30,31,30,31};
     // the whole system uses months and days (not years)
     for (unsigned int i = 0; i < beginMonth-1; ++i) beginDay += daysPerMonth[i];
     for (unsigned int i = 0; i < endMonth-1; ++i) endDay += daysPerMonth[i];
@@ -1676,12 +1675,16 @@ void XmlScene::addAllSurfacesToScene(){
 void XmlScene::readClimate(string fileName){
 
     logStream << "readClimate: " << fileName << endl;
-    if(pClimate != NULL){
-        delete pClimate;
-        pClimate=NULL;
+
+    if (pClimate) { delete pClimate; }
+    try {
+        pClimate = new Climate(fileName,&logStream);
+    }
+    catch (...) {
+        pClimate = nullptr;
+        throw;
     }
 
-    pClimate = new Climate(fileName,&logStream);
     pClimate->loadCli2(fileName.substr(0,fileName.size()-4) + ".cli2");
     pClimate->loadCli3(fileName.substr(0,fileName.size()-4) + ".cli3");
     climateFile = fileName;
@@ -1699,6 +1702,42 @@ void XmlScene::readClimate(string fileName){
 
     // initilisation of the location for the sun and the scene
     SKYSiteLocation location(GENAngle::Degrees(latN), GENAngle::Degrees(longE), GENAngle::Degrees(merE), GENAngle::Degrees(northW));
+    if (pSun) delete pSun;
+    pSun = new SKYSun(location);
+    scene.SetLocation(location);
+
+}
+
+void XmlScene::importClimatePVGIS(string fileName, int defaultCloudiness) {
+
+    logStream << "importClimate: " << fileName << endl;
+
+    if (pClimate) { delete pClimate; }
+    pClimate = new Climate(&logStream); // create an empty climate
+    try {
+        pClimate->importPVGIS_TMY_CSV(fileName,defaultCloudiness); // import the information available in the PVGIS TMY file
+    }
+    catch(...) {
+        pClimate=nullptr;
+        throw;
+    }
+
+    climateFile = fileName;
+
+    // shows the information about the location
+    logStream << "Location: " << pClimate->getLocation();
+    logStream << "\t(Latitude: " << pClimate->getLatitudeN() << " N, Longitude: " << pClimate->getLongitudeE();
+    logStream << " E, Altitude: " << pClimate->getAltitude() << " m, Meridian: " << pClimate->getMeridian() << " h)" << endl << flush;
+
+    // gets the information from the climate file
+    float latN = pClimate->getLatitudeN();
+    float longE = pClimate->getLongitudeE();
+    float merE = pClimate->getMeridian()*360.f/24.f;
+    float northW = 0.f;
+
+    // initilisation of the location for the sun and the scene
+    SKYSiteLocation location(GENAngle::Degrees(latN), GENAngle::Degrees(longE), GENAngle::Degrees(merE), GENAngle::Degrees(northW));
+    if (pSun) delete pSun;
     pSun = new SKYSun(location);
     scene.SetLocation(location);
 
@@ -1752,7 +1791,6 @@ void XmlScene::exportXMLFile(string fileName){
     file << "<CitySim name=\"test\">" << endl;
 
     // extract day/month version of beginDay and endDay
-    //unsigned int daysPerMonth[] = {31,28,31,30,31,30,31,31,30,31,30,31}; -> const static class attribute
     int bMonth=0,eMonth=0,bDay=beginDay,eDay=endDay;
     while (bDay > daysPerMonth[bMonth]){
         bDay -= daysPerMonth[bMonth];
@@ -4502,11 +4540,11 @@ void XmlScene::writeTSHeaderText(string fileOut) {
             textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getId() << ":Ke(W/(m2K))\t";
             // loop on the walls, added the id of the surface
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnWalls(); ++k) {
-                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getId() << ":Tos(°C)\t";
+                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getWall(k)->getKey() << "):Tos(°C)\t";
             }
             // loop on the roofs
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getZone(zone)->getnRoofs(); ++k) {
-                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getId() << ":Tos(°C)\t";
+                textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getId() << "(" << pDistrict->getBuilding(j)->getZone(zone)->getRoof(k)->getKey() << "):Tos(°C)\t";
             }
         } // end the loop on zones
     }
@@ -4514,11 +4552,11 @@ void XmlScene::writeTSHeaderText(string fileOut) {
     // loop on the tree surfaces in the district itself
     for (size_t j=0; j<pDistrict->getnTrees(); ++j)
         for (size_t k=0;k<pDistrict->getTree(j)->getnSurfaces();++k)
-            textFile << pDistrict->getTree(j)->getId() << "(" << pDistrict->getTree(j)->getKey() << "):" << pDistrict->getTree(j)->getSurface(k)->getId() << "\t";
+            textFile << pDistrict->getTree(j)->getId() << "(" << pDistrict->getTree(j)->getKey() << "):" << pDistrict->getTree(j)->getSurface(k)->getId() << "(" << pDistrict->getTree(j)->getSurface(k)->getKey() << "):Tos(°C)\t";
 
     // loop on the ground surfaces
     for (forward_list<Ground*>::iterator it=pDistrict->getGrounds()->begin();it!=pDistrict->getGrounds()->end();++it) {
-        textFile << "NA(NA):" << (*it)->getId() << ":Tos(°C)\t";
+        textFile << "NA(NA):" << (*it)->getId() << "(" << (*it)->getKey() << "):Tos(°C)\t";
     }
 
     textFile << endl;
@@ -4646,7 +4684,7 @@ void XmlScene::writeETHeaderText(string fileOut) {
     for (forward_list<Ground*>::iterator it=pDistrict->getGrounds()->begin();it!=pDistrict->getGrounds()->end();++it) {
         // loop on the ground surfaces
         if ((*it)->hasET())
-            textFile << "NA(NA):" << (*it)->getId() << ":waterEvapotranspiration(mm/(m²h))\t";
+            textFile << "NA(NA):" << (*it)->getId() << ":waterEvapotranspiration(mm/m²)\t";
     }
     textFile << endl;
     textFile.close();
@@ -4763,7 +4801,6 @@ void XmlScene::writeMonthlyResultsText(string fileOut) {
     // open the binary file
     fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::app);
 
-    int daysPerMonth[] = {31,28,31,30,31,30,31,31,30,31,30,31};
     int cumDays[] = {0,31,59,90,120,151,181,212,243,273,304,334,365};
 
     // loop on the number of buildings, to create the header

@@ -12,7 +12,18 @@ static const float NA=-999.0;
 // *** Climate class, CitySim *** //
 // *** jerome.kaempf@epfl.ch  *** //
 
-Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.rdbuf()) {
+Climate::Climate(ostream* pLogFileStream):logStream(std::cout.rdbuf()) {
+
+    //logStream << "Climate constructor" << endl;
+    // logStream is directed by default to the "cout" streambuf
+    if(pLogFileStream)  // If a logfile stream is provided, redirect logStream to the file stream.
+        logStream.rdbuf(pLogFileStream->rdbuf());
+    if (!logStream.good())
+        throw(string("Unable to define correctly the logStream."));
+
+}
+
+Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.rdbuf()),filename(filename) {
 
     //logStream << "Climate constructor" << endl;
     // logStream is directed by default to the "cout" streambuf
@@ -25,11 +36,9 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
     if (filename.empty()) {
         logStream << "WARNING: Climate file name empty." << endl << flush;
         return;
-
     }
 
-    // variables used to store the elements
-    char cbuffer[200];
+    // variable used to store the elements
     string buffer;
 
     // variables used in case only the global irradiance in the horizontal plane is given
@@ -40,41 +49,39 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
     // Climate filename opening
     //throw(string("Test error"));
     logStream << "Climate file opening" << endl;
-    //try{
-        fstream input;
 
-        input.open(filename.c_str(), ios::in | ios::binary);
+    fstream input(filename.c_str(), ios::in | ios::binary);
+    if (!(input.good())){
+        logStream << "Bad climate file input" << endl;
+        throw(string("Error opening climate file: " + filename));
+    }
+    //cout << "Climate: input is good" << endl;
+    //logStream << "Loading: " << filename << endl << flush;
 
-        if (!(input.good())){
-            logStream << "Bad climate file input" << endl;
-            throw(string("Error opening climate file: " + filename));
-        }
-        //cout << "Climate: input is good" << endl;
-        //logStream << "Loading: " << filename << endl << flush;
-
+    try{
         // start the reading
-        input.getline(cbuffer, 200, '\n');
-        location = cbuffer;
+        getline(input,buffer,'\n');
+        location = buffer;
         //cerr<<"Climate: "<<cbuffer<<endl << flush;
-        input.getline(cbuffer, 200, ',');
-        latitudeN = atof(cbuffer);
+        getline(input,buffer,',');
+        latitudeN = stof(buffer);
         //cerr<<"Latitude: "<<latitude<<"\t";
         if(latitudeN > 90.f || latitudeN < -90.f) throw(string("Climate file : wrong format latitude (degrees North)"));
 
-        input.getline(cbuffer, 200, ',');
-        longitudeE = atof(cbuffer);
+        getline(input,buffer,',');
+        longitudeE = stof(buffer);
         //logStream<<"Longitude: "<<longitudeE<<"\t";
         if(longitudeE > 180.f || longitudeE < -180.f) throw(string("Climate file : wrong format longitude (degrees East)"));
 
-        input.getline(cbuffer, 200, ',');
-        altitude = atof(cbuffer);
+        getline(input,buffer,',');
+        altitude = stof(buffer);
         //cerr<<"Altitude: "<<altitude<<endl << flush;
         if(altitude < 0.f) throw(string("Climate file : wrong format altitude (m above sea level)"));
 
-        input.getline(cbuffer, 200, '\n');
-        meridianE = atoi(cbuffer);
+        getline(input,buffer,'\n');
+        meridianE = stoi(buffer);
         //logStream<<"Meridian: "<<meridianE<<endl << flush;
-        if(meridianE > 12.f || meridianE < -12.f) throw(string("Climate file : wrong format meridian (degrees East)"));
+        if(meridianE > 12 || meridianE < -12) throw(string("Climate file : wrong format meridian (degrees East)"));
 
         // reads the header of the file
         input >> buffer;
@@ -125,64 +132,91 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
         input >> buffer;
         if(buffer != "N") throw(string("Climate file : wrong format N"));     // Cloudiness
 
-        logStream << "reading of the data" << endl;
-        // reading of the data
-        while ( !input.eof() ) {
+        // remove unnecessary spaces
+        do {
+            getline(input,buffer,'\n');
+        } while (buffer.find_first_of("\t") != string::npos);
 
-            input >> buffer;
-            //int i = atoi(buffer.c_str());         //day
-
-            input >> buffer;
-            //int j = atoi(buffer.c_str());         //month
-
-            input >> buffer;
-            //int k = atoi(buffer.c_str());         //hour
-
+        // start reading the data
+        size_t pos1,pos2;
+        getline(input,buffer,'\n');
+        do {
+            pos1 = 0;
+            pos2 = buffer.find_first_of("\t",pos1);
+            // discard reading the day
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            // discard reading the month
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            // discard reading the hour
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            // read the first column related to radiation
             if (G_Dh_present) {
-                input >> buffer;
-                Idh.push_back(atof(buffer.c_str()));
+                Idh.push_back(stof(buffer.substr(pos1,pos2)));
                 if (G_h_present) {
-                    input >> buffer;
-                    Igh.push_back(atof(buffer.c_str()));
+                    pos1 = pos2+1;
+                    pos2 = buffer.find_first_of("\t",pos1);
+                    Igh.push_back(stof(buffer.substr(pos1,pos2)));
                 }
                 else {
-                    input >> buffer;
-                    Ibn.push_back(atof(buffer.c_str()));
+                    pos1 = pos2+1;
+                    pos2 = buffer.find_first_of("\t",pos1);
+                    Ibn.push_back(stof(buffer.substr(pos1,pos2)));
                 }
             }
             else {
-                input >> buffer;
-                Igh.push_back(atof(buffer.c_str()));
+                Igh.push_back(stof(buffer.substr(pos1,pos2)));
             }
 
-            input >> buffer;
-            Tout.push_back(atof(buffer.c_str()));
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            Tout.push_back(stof(buffer.substr(pos1,pos2)));
 
             if (Tg_present) {
-                input >> buffer;
-                Tground.push_back(atof(buffer.c_str()));
+                pos1 = pos2+1;
+                pos2 = buffer.find_first_of("\t",pos1);
+                Tground.push_back(stof(buffer.substr(pos1,pos2)));
             }
 
-            input >> buffer;
-            windSpeed.push_back(atof(buffer.c_str()));
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            windSpeed.push_back(stof(buffer.substr(pos1,pos2)));
 
-            input >> buffer;
-            windDirection.push_back(atof(buffer.c_str()));
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            windDirection.push_back(stof(buffer.substr(pos1,pos2)));
 
-            input >> buffer;
-            relativeHumidity.push_back(atof(buffer.c_str()));
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            relativeHumidity.push_back(stof(buffer.substr(pos1,pos2)));
 
-            input >> buffer;
-            Prec.push_back(atof(buffer.c_str()));
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            Prec.push_back(stof(buffer.substr(pos1,pos2)));
 
-            input >> buffer;
-            cloudiness.push_back(atof(buffer.c_str()));
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            cloudiness.push_back(stof(buffer.substr(pos1,pos2)));
+
+            getline(input,buffer,'\n');
 
         }
+        while (buffer.find_first_of("\t") != string::npos);
 
-        //logStream << "last line: " << endl;
-        //logStream << "Igh: " << Igh.back() << "\tTout: " << Tout.back() << "\twindSpeed: " << windSpeed.back() << "\twindDirection: " << windDirection.back()
-        //     << "\tRH: " << relativeHumidity.back() << "\tprec: " << Prec.back() << "\tcloudiness: " << cloudiness.back() << endl;
+    }
+    catch (exception& e) { throw("Error reading the line: \n" + buffer); }
+    catch (...) { throw; }
+
+    //logStream << "last line: " << endl;
+    //logStream << "Igh: " << Igh.back() << "\tTout: " << Tout.back() << "\twindSpeed: " << windSpeed.back() << "\twindDirection: " << windDirection.back()
+    //     << "\tRH: " << relativeHumidity.back() << "\tprec: " << Prec.back() << "\tcloudiness: " << cloudiness.back() << endl;
+
+    computeComplementaryValues();
+}
+
+void Climate::computeComplementaryValues() {
 
         // calculation of several variables that we use in the radiation model
         meanAnnualTemperature = accumulate(Tout.begin(),Tout.end(),0.f)/float(Tout.size());
@@ -196,9 +230,8 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
         hotDay = distance(meanDailyTemperature.begin(), max_element(meanDailyTemperature.begin(), meanDailyTemperature.end()));
         coolDay = distance(meanDailyTemperature.begin(), min_element(meanDailyTemperature.begin(), meanDailyTemperature.end()));
 
-        // determine dew point temperature
-        Td = new float[Tout.size()];
-        for(unsigned int i=0;i<Tout.size();++i){
+        // determine dew point temperature Td
+        for (size_t i=0;i<Tout.size();++i) {
             //        double a = 17.27;
             //        double b = 237.7;
             //        double gamma = a * Tout[i] /(b+Tout[i])+ log(Hr[i]/100.0);
@@ -206,11 +239,11 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
             //        if(Td[i] < 0 || Tout[i] < 0)
             //            Td[i] = Tout[i];
             // Clausius-Clapeyron equation with L/Rw = (1/1.85e-4)
-            Td[i] = 1.f / ( 1.f/(Tout[i] + 273.15f) - 1.85e-4f * log(relativeHumidity[i]/100.f) ) - 273.15f;
+            Td.push_back(1.f / ( 1.f/(Tout[i] + 273.15f) - 1.85e-4f * log(relativeHumidity[i]/100.f) ) - 273.15f);
         }
 
         // case in which we have G_h and D_h, we need to compute Ibn
-        if (G_Dh_present && G_h_present) {
+        if (!Idh.empty() && !Igh.empty()) {
 
 #ifdef DEBUG
             ofstream file((filename.substr(0,filename.size()-4)+"_SW.out").c_str());
@@ -255,7 +288,7 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
 
         }
         // If only global irradiance available, use model in dirint.c to compute Idh and Ibn
-        else if (!G_Dh_present && G_h_present) {
+        else if (Idh.empty() && !Igh.empty()) {
 
 #ifdef DEBUG
             ofstream file((filename.substr(0,filename.size()-4)+"_SW.out").c_str());
@@ -270,8 +303,8 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
             int dayOfYear = 1;
 
             float Ib = 0.f;
-            float z[3] = {NA, NA, NA};  // previous, current and next data
-            float Ig[3] = {NA, NA, NA}; // previous, current and next data
+            vector<float> z = {NA, NA, NA};  // previous, current and next data
+            vector<float> Ig = {NA, NA, NA}; // previous, current and next data
 
             for (size_t j=0; j<Igh.size()-1; ++j) {
 
@@ -355,8 +388,6 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
 
             // clear the useless Igh vector
             Igh.clear();
-
-            /// TODO: copier dans méthode pour MEU
 
         }
         else {
@@ -1369,27 +1400,111 @@ float Climate::getTgroundCelsius(unsigned int day, unsigned int hour, float dept
 
 }
 
+void Climate::importPVGIS_TMY_CSV(string filename, int defaultCloudiness) {
+
+    // loads a CSV file from the TMY given by PVGIS
+    this->filename = filename;
+
+    // variables used to store the elements
+    string buffer;
+
+    // Climate filename opening
+    logStream << "Climate file opening" << endl;
+
+    fstream input(filename.c_str(), ios::in | ios::binary);
+    if (!(input.good())) throw(string("Error opening climate file: " + filename));
+
+    // location set to PVGIS
+    location = "PVGIS";
+
+    // start the reading of the header
+    getline(input,buffer,'\n');
+    latitudeN = stof(buffer.substr(buffer.find(":")+1));
+    if(latitudeN > 90.f || latitudeN < -90.f) throw(string("Climate file: wrong format latitude (degrees North)"));
+
+    getline(input,buffer,'\n');
+    longitudeE = stof(buffer.substr(buffer.find(":")+1));
+    if(longitudeE > 180.f || longitudeE < -180.f) throw(string("Climate file : wrong format longitude (degrees East)"));
+
+    getline(input,buffer,'\n');
+    altitude = stof(buffer.substr(buffer.find(":")+1));
+    if(altitude < 0.f) throw(string("Climate file : wrong format altitude (m above sea level)"));
+
+    // the time is given by default as UTC
+    meridianE = 0.f;
+
+    // reads the rest of the header until the data
+    do {
+        getline(input,buffer,'\n');
+
+    } while (buffer.substr(0,buffer.find(",")) != "time(UTC)");
+
+    // reads the data until the footer
+    size_t pos1,pos2;
+    getline(input,buffer,'\n');
+    while (buffer.find_first_of(",") != string::npos) {
+        pos1 = buffer.find_first_of(",")+1;
+        pos2 = buffer.find_first_of(",",pos1);
+        Tout.push_back(stof(buffer.substr(pos1,pos2)));
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of(",",pos1);
+        relativeHumidity.push_back(stof(buffer.substr(pos1,pos2)));
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of(",",pos1);
+        // discard G(h)
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of(",",pos1);
+        Ibn.push_back(stof(buffer.substr(pos1,pos2)));
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of(",",pos1);
+        Idh.push_back(stof(buffer.substr(pos1,pos2)));
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of(",",pos1);
+        // discard IR(h)
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of(",",pos1);
+        windSpeed.push_back(stof(buffer.substr(pos1,pos2)));
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of(",",pos1);
+        windDirection.push_back(stof(buffer.substr(pos1,pos2)));
+        // discard the rest of the line which includes SP
+        getline(input,buffer,'\n');
+    }
+    // sets the missing values of the precipitations and cloudiness
+    Prec.assign(Tout.size(), 0.f);
+    cloudiness.assign(Tout.size(), static_cast<float>(defaultCloudiness));
+
+    // compute the complementary value such as statistics in temperature
+    computeComplementaryValues();
+
+    return;
+}
+
 void Climate::exportCliFile(string filename){
+
+    // open the file and checks everything is OK
     ofstream file(filename.c_str());
-    if (!file.is_open()) throw(string("Error creating model .xml file: "+filename));
+    if (!file.is_open()) throw(string("Error creating climate .CLI file: "+filename));
 
     string loc=location;
     loc.erase(loc.find_last_not_of(" \n\r\t")+1);
-    file << loc << "\r\n" ;
-    file << latitudeN << "," << longitudeE << "," << altitude << "," << meridianE << "\r\n" << "\r\n";
+    file << loc << "\n" ;
+    file << latitudeN << "," << longitudeE << "," << altitude << "," << meridianE << "\n\n";
     if(Tground.empty())
-        file << "dm	m	h	G_Dh	G_Bn	Ta	FF	DD	RH	RR	N" << "\r\n";
+        file << "dm	m	h	G_Dh	G_Bn	Ta	FF	DD	RH	RR	N" << "\n";
     else
-        file << "dm	m	h	G_Dh	G_Bn	Ta  Tg	FF	DD	RH	RR	N" << "\r\n";
+        file << "dm	m	h	G_Dh	G_Bn	Ta  Tg	FF	DD	RH	RR	N" << "\n";
 
-    unsigned int month=1, day=1, hour=1;
-    for (int i=0; i<8760; ++i){
+    unsigned int month=1, dayOfYear=1;
+    unsigned int cumDays[] = {0,31,59,90,120,151,181,212,243,273,304,334,365};
+    for (size_t i=0;i<Tout.size();++i) {
+        dayOfYear = i/24+1;
+        while (dayOfYear > cumDays[month]) ++month;
         if(Tground.empty())
-            file << day << "\t" << month << "\t" << hour << "\t" << Idh[i] << "\t" << Ibn[i] << "\t" << Tout[i] << "\t" << windSpeed[i] << "\t" << windDirection[i] << "\t" << relativeHumidity[i] << "\t" << Prec[i] << "\t" << cloudiness[i] << "\r\n";
+            file << dayOfYear-cumDays[month-1] << "\t" << month << "\t" << i%24+1 << "\t" << Idh[i] << "\t" << Ibn[i] << "\t" << Tout[i] << "\t" << windSpeed[i] << "\t" << windDirection[i] << "\t" << relativeHumidity[i] << "\t" << Prec[i] << "\t" << cloudiness[i] << "\n";
         else
-            file << day << "\t" << month << "\t" << hour << "\t" << Idh[i] << "\t" << Ibn[i] << "\t" << Tout[i] << "\t" << Tground[i] << "\t" << windSpeed[i] << "\t" << windDirection[i] << "\t" << relativeHumidity[i] << "\t" << Prec[i] << "\t" << cloudiness[i] << "\r\n";
+            file << dayOfYear-cumDays[month-1] << "\t" << month << "\t" << i%24+1 << "\t" << Idh[i] << "\t" << Ibn[i] << "\t" << Tout[i] << "\t" << Tground[i] << "\t" << windSpeed[i] << "\t" << windDirection[i] << "\t" << relativeHumidity[i] << "\t" << Prec[i] << "\t" << cloudiness[i] << "\n";
     }
-    file << "\r\n";
     file.close();
 }
 
