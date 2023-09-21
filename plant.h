@@ -308,8 +308,6 @@ protected:
     double electricCO2EmissionCoefficient;
     double coGenCO2EmissionCoefficient;
 
-    bool ground;
-
     double thermalPowerNeeded; // Cognet: Added this. Now first setThermalPowerNeeded(), then use getThermalPower() to see thermal power that can be provided.
 
     double thermalPowerNeededHS; // Added by Max
@@ -352,7 +350,6 @@ public:
     virtual float getThermalPowerMax(double sourceTemp){return 0.f;} // Added by Max. Useful for the MCR
 
     // version simplifi�e
-//    virtual string getLabel() { return "EnergyConversionSytem"; } // Cognet: Spelling error, replace with next line.
     virtual string getLabel() { return "EnergyConversionSystem"; } // Cognet: Corrected spelling.
 
     //    virtual double getThermalPower(double thermalPowerNeeded, double sourceTemperature) { return 0.0; } // Cognet: Deleted this.
@@ -371,10 +368,10 @@ public:
     static double epsilonC(double sourceTemp, double outputTemp) { return ((273.15+outputTemp)/(outputTemp - sourceTemp)); }
 
     // special aux heat pumps
-    virtual void setGround(float z0, float z1, float alpha) { ground = true; }
-    virtual bool getGround(float &z0, float &z1, float &alpha) { return ground; }
+    virtual float getSourceTemperature(Climate* pClimate, unsigned int day, unsigned int hour) { return numeric_limits<float>::quiet_NaN(); }
 
     virtual void setThermalPowerNeeded(double tPN) { thermalPowerNeeded=tPN; } // Cognet: Added this.
+    float getThermalPowerNeeded() const { return thermalPowerNeeded; }
 
     virtual void setThermalPowerNeededHS(double tPN) { thermalPowerNeededHS=tPN; } // Added by Max.
     virtual void setThermalPowerNeededDHW(double tPN) { thermalPowerNeededDHW=tPN; } // Added by Max.
@@ -382,127 +379,6 @@ public:
     virtual void writeXML(ofstream& file, string tab)=0;
     virtual void writeGML(ofstream& file, string tab) {}
 };
-
-class CoGenerationAndBoiler: public EnergyConversionSystem {
-
-private:
-
-    double coGenThermalPower, coGenElectricalEfficiency, coGenThermalEfficiency, coGenMinPartLoadCoefficient;
-    double boilerThermalPower, boilerThermalEfficiency;
-
-public:
-
-    CoGenerationAndBoiler(TiXmlHandle hdl, unsigned int beginD, unsigned int endD, ostream* pLogStr = &std::cout);
-    CoGenerationAndBoiler(double coGenThermalPower, double coGenElectricalEfficiency, double coGenThermalEfficiency, double coGenMinPartLoadCoefficient, double boilerThermalPower, double boilerThermalEfficiency);
-
-    void writeXML(ofstream& file, string tab);
-
-    friend ostream& operator<< (ostream& s, CoGenerationAndBoiler& unit){
-        s << "\nCoGeneration:\nThermal Power: \t" << unit.coGenThermalPower << " W(th)\nElectrical efficiency: " << unit.coGenElectricalEfficiency << "\nThermal efficiency: " << unit.coGenThermalEfficiency << "\nMin. part-load coefficient: " << unit.coGenMinPartLoadCoefficient;
-        s << "\n\nBoiler:\nThermal Power: " << unit.boilerThermalPower << " W(th)\nEfficiency: " << unit.boilerThermalEfficiency << endl;
-        return s;
-    }
-
-    void getMaxThermalPower(double thermalPower1Needed, double thermalPower2Needed, double &thermalPower1Available, double &thermalPower2Available, double sourceTemp);
-    double getElectricConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp);
-    double getCO2Production(double time, double thermalPower1, double thermalPower2, double sourceTemp, double outputTemp1, double outputTemp2);
-    double getFuelConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp, double outputTemp1, double outputTemp2);
-
-    // district version with many needs, the needs are the sum of the HS and DHW
-    // if the one need is not satisfied, we have to give priority to HS or DHW... depending on the strategy
-    void getMaxThermalPower(vector<double> thermalPowerNeeded, vector<double> &thermalPowerAvailable);
-    double getElectricProduction(vector<double> thermalPower);
-    double getCO2Production(double time, vector<double> thermalPower);
-};
-
-
-class HeatPumpAndElectricElement : public EnergyConversionSystem {
-
-private:
-
-    double heatPumpElectricPower;
-    double etaTech;
-    double electricElementPower;
-    double targetTemp;
-
-    // for the ground heat pump
-    float z0,z1,alpha;
-
-public:
-
-    HeatPumpAndElectricElement(double heatPumpElectricPower, double heatPumpCOP, double heatPumpSrcTemp, double heatPumpOutputTemp, double electricElementPower);
-
-    HeatPumpAndElectricElement(double heatPumpElectricPower, double heatPumpEtaTech, double targetTemp, double electricElementPower):heatPumpElectricPower(heatPumpElectricPower),etaTech(heatPumpEtaTech),electricElementPower(electricElementPower),targetTemp(targetTemp)
-    { ground = false; }
-
-    void writeXML(ofstream& file, string tab){file << tab << "HeatPumpAndElectricElement saving not supported yet" << endl;}
-
-    friend ostream& operator<< (ostream& s, HeatPumpAndElectricElement& unit) {
-
-        s << "\nHeat Pump:\nElectrical Power: \t" << unit.heatPumpElectricPower << " W(el)\nEta tech: " << unit.etaTech << endl;
-        s << "\n\nElectric Element Power: " << unit.electricElementPower << " W(el)" << endl;
-        return s;
-    }
-
-    void setGround(float z0, float z1, float alpha) { this->z0=z0; this->z1=z1; this->alpha=alpha; ground = true; }
-    bool getGround(float &z0, float &z1, float &alpha) { z0 = this->z0; z1 = this->z1; alpha = this->alpha; return ground; }
-    void getMaxThermalPower(double thermalPower1Needed, double thermalPower2Needed, double &thermalPower1Available, double &thermalPower2Available, double sourceTemp);
-
-    double getCO2Production(double time, double thermalPower1, double thermalPower2, double sourceTemp);
-    double getElectricConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp);
-    // version district... 80�C!!
-    void getMaxThermalPower(vector<double> thermalPowerNeeded, vector<double> &thermalPowerAvailable, double sourceTemp);
-    double getCO2Production(double time, vector<double> thermalPower, double sourceTemp);
-
-    double getHeatProduced(double work, double sourceTemp, double outputTemp) {
-        // as epsilonC follows the sign of the heat/cold demand, so does the heat/cold produced
-        return work*etaTech*epsilonC(sourceTemp, outputTemp);
-    }
-
-    double getWorkNeeded(double thermalPower, double sourceTemp, double outputTemp) {
-        // the work is always positive
-        return std::abs(thermalPower/(etaTech*epsilonC(sourceTemp, outputTemp)));
-    }
-
-};
-
-class CoGenerationHeatPumpAndBoiler : public EnergyConversionSystem {
-
-private:
-
-    double coGenThermalPower, coGenElectricalEfficiency, coGenThermalEfficiency, coGenMinPartLoadCoefficient;
-    double etaTech;
-    double boilerThermalPower, boilerThermalEfficiency;
-    double targetTemp;
-
-    // for the ground heat pump
-    //double z0,z1,alpha;
-
-public:
-
-    CoGenerationHeatPumpAndBoiler(double coGenThermalPower, double coGenElectricalEfficiency, double coGenThermalEfficiency, double coGenMinPartLoadCoefficient, double heatPumpCOP, double heatPumpSrcTemp, double heatPumpOutputTemp, double boilerThermalPower, double boilerThermalEfficiency);
-    CoGenerationHeatPumpAndBoiler(double coGenThermalPower, double coGenElectricalEfficiency, double coGenThermalEfficiency, double coGenMinPartLoadCoefficient, double heatPumpEtaTech, double boilerThermalPower, double boilerThermalEfficiency);
-
-    void writeXML(ofstream& file, string tab){file << tab << "CoGenerationHeatPumpAndBoiler saving not supported yet" << endl;}
-
-    friend ostream& operator<< (ostream& s, CoGenerationHeatPumpAndBoiler& unit) {
-        s << "\nCoGeneration:\nThermal Power: \t" << unit.coGenThermalPower << " W(th)\nElectrical efficiency: " << unit.coGenElectricalEfficiency << "\nThermal efficiency: " << unit.coGenThermalEfficiency << "\nMin. part-load coefficient: " << unit.coGenMinPartLoadCoefficient;
-        s << "\nHeat pump Etatech: " << unit.etaTech << endl;
-        s << "\n\nBoiler:\nThermal Power: " << unit.boilerThermalPower << " W(th)\nEfficiency: " << unit.boilerThermalEfficiency << endl;
-
-        return s;
-    }
-
-    void getMaxThermalPower(double thermalPower1Needed, double thermalPower2Needed, double &thermalPower1Available, double &thermalPower2Available, double sourceTemp);
-
-    double getCO2Production(double time, double thermalPower1, double thermalPower2, double sourceTemp, double outputTemp1, double outputTemp2);
-    double getFuelConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp);
-    // cas � plusieurs demandes, pour le district...
-    void getMaxThermalPower(vector<double> thermalPowerNeeded, vector<double> &thermalPowerAvailable, double sourceTemp);
-    double getCO2Production(double time, vector<double> thermalPower, double sourceTemp, double outputTemp);
-
-};
-
 
 class Boiler : public EnergyConversionSystem {
 
@@ -586,7 +462,11 @@ protected:
     double etaTech;
 
     // for the ground heat pump
+    bool ground;
     float z0,z1,alpha;
+
+    // for the fixed source temperature heat pump
+    float Tsource=numeric_limits<float>::quiet_NaN();
 
 public:
 
@@ -605,7 +485,13 @@ public:
     }
 
     void setGround(float z0, float z1, float alpha) { this->z0=z0; this->z1=z1; this->alpha=alpha; ground = true; }
-    bool getGround(float &z0, float &z1, float &alpha) { z0 = this->z0; z1 = this->z1; alpha = this->alpha; return ground; }
+    float getSourceTemperature(Climate* pClimate, unsigned int day, unsigned int hour) {
+        if (isnan(Tsource)) { // in this case, we compute the temperature based on the Climate
+            if (ground) return pClimate->getTgroundCelsius(day,hour,z0,alpha,z1); // ground temperature
+            else return pClimate->getToutCelsius(day,hour); // air temperature
+        }
+        else return Tsource;
+    }
 
     string getLabel() { return "HeatPump"; }
 
@@ -1215,26 +1101,27 @@ public:
 
 class ThermalStation {
 protected:
-    Pump* pump;
+    Pump* pump=nullptr;
 
-    EnergyConversionSystem* ecs;
-    float thermalPowerProvided;
+    vector<EnergyConversionSystem*> ecs;
+    vector<float> thermalPowerProvided;
     ThermalStationNodePair* node; // Node where in connects to the Network.
 
     // Changes at every time step
     float pumpPower; // Power consumed by pump (usually electric) [W].
     float outputTemperature; // Temperature that exits / is outputed by the thermal station [degree C].
-    TemperatureSetpoint* temperatureSetpoint; // Determines the target temperature.
-    PressureSetpoint* pressureSetpoint; // Determines the target pressure.
+    TemperatureSetpoint* temperatureSetpoint=nullptr; // Determines the target temperature.
+    PressureSetpoint* pressureSetpoint=nullptr; // Determines the target pressure.
 //    PIDControllerPump pid;
 //    PIDControllerCarla pid;
 
     // Stored information about simulation.
-    vector<float> pumpPowerRecord, electricConsumptionRecord, fuelConsumptionRecord, machinePowerRecord;
+    vector<float> pumpPowerRecord;
+    vector<vector<float>> ecs_thermalPowerProvided, ecs_electricConsumption, ecs_fuelConsumption;
 
     //Added by Max
     unsigned int linkedNodeId;
-    float thermalPowerNeeded;
+    float thermalPowerNeeded=0.f;
 
     void deleteDynAllocated();
 
@@ -1244,24 +1131,71 @@ protected:
     void erasePumpPower(unsigned int keepValue) { pumpPowerRecord.erase(pumpPowerRecord.begin(),pumpPowerRecord.end()-min(keepValue,(unsigned int)pumpPowerRecord.size())); }
     void erasePumpPower_back() { pumpPowerRecord.pop_back(); }
 
-    // Electric Consumption
-    void setElectricConsumption(float joules) { electricConsumptionRecord.push_back(joules); }
-    float getElectricConsumption(unsigned int step) { return electricConsumptionRecord.at(step); }
-    void eraseElectricConsumption(unsigned int keepValue) { electricConsumptionRecord.erase(electricConsumptionRecord.begin(),electricConsumptionRecord.end()-min(keepValue,(unsigned int)electricConsumptionRecord.size())); }
-    void eraseElectricConsumption_back() { electricConsumptionRecord.pop_back(); }
+    // Electric Consumption in J
+    float getElectricConsumption_back() {
+        float value = pumpPowerRecord.back()*static_cast<double>(Model::dt); // to convert the W in J
+        for (size_t i=0;i<ecs.size();++i)
+            value += ecs_electricConsumption[i].back();
+        return value;
+    }
+    float getElectricConsumption(unsigned int step) {
+        float value = pumpPowerRecord.at(step)*static_cast<double>(Model::dt); // to convert the W in J
+        for (size_t i=0;i<ecs.size();++i)
+            value += ecs_electricConsumption[i].at(step);
+        return value;
+    }
+    void eraseElectricConsumption(unsigned int keepValue) {
+        for (size_t i=0;i<ecs.size();++i)
+            ecs_electricConsumption[i].erase(ecs_electricConsumption[i].begin(),ecs_electricConsumption[i].end()-min(keepValue,(unsigned int)ecs_electricConsumption[i].size()));
+    }
+    void eraseElectricConsumption_back() {
+        for (size_t i=0;i<ecs.size();++i)
+            ecs_electricConsumption[i].pop_back();
+    }
 
     // Fuel Consumption
-    void setFuelConsumption(float joules) { fuelConsumptionRecord.push_back(joules); }
-    float getFuelConsumption(unsigned int step) { return fuelConsumptionRecord.at(step); }
-    void eraseFuelConsumption(unsigned int keepValue) { fuelConsumptionRecord.erase(fuelConsumptionRecord.begin(),fuelConsumptionRecord.end()-min(keepValue,(unsigned int)fuelConsumptionRecord.size())); }
-    void eraseFuelConsumption_back() { fuelConsumptionRecord.pop_back(); }
+    float getFuelConsumption_back() {
+        float value = 0.f;
+        for (size_t i=0;i<ecs.size();++i)
+            value += ecs_fuelConsumption[i].back();
+        return value;
+    }
+    float getFuelConsumption(unsigned int step) {
+        float value = 0.f;
+        for (size_t i=0;i<ecs.size();++i)
+            value += ecs_fuelConsumption[i].at(step);
+        return value;
+    }
+    void eraseFuelConsumption(unsigned int keepValue) {
+        for (size_t i=0;i<ecs.size();++i)
+            ecs_fuelConsumption[i].erase(ecs_fuelConsumption[i].begin(),ecs_fuelConsumption[i].end()-min(keepValue,(unsigned int)ecs_fuelConsumption[i].size()));
+    }
+    void eraseFuelConsumption_back() {
+        for (size_t i=0;i<ecs.size();++i)
+            ecs_fuelConsumption[i].pop_back();
+    }
 
     // Machine Power
-    void setMachinePower(float watts) { machinePowerRecord.push_back(watts); }
-    float getMachinePower(unsigned int step) { return machinePowerRecord.at(step); }
-    void eraseMachinePower(unsigned int keepValue) { machinePowerRecord.erase(machinePowerRecord.begin(),machinePowerRecord.end()-min(keepValue,(unsigned int)machinePowerRecord.size())); }
-    void eraseMachinePower_back() { machinePowerRecord.pop_back(); }
-
+    float getMachinePower_back() {
+        float value = 0.f;
+        for (size_t i=0;i<ecs.size();++i)
+            value += ecs_thermalPowerProvided[i].back();
+        return value;
+    }
+    float getMachinePower(unsigned int step) {
+        float value = 0.f;
+        for (size_t i=0;i<ecs.size();++i)
+            value += ecs_thermalPowerProvided[i].at(step);
+        return value;
+    }
+    void eraseMachinePower(unsigned int keepValue) {
+        for (size_t i=0;i<ecs.size();++i)
+            ecs_thermalPowerProvided[i].erase(ecs_thermalPowerProvided[i].begin(),ecs_thermalPowerProvided[i].end()-min(keepValue,(unsigned int)ecs_thermalPowerProvided[i].size()));
+    }
+    void eraseMachinePower_back() {
+        for (size_t i=0;i<ecs.size();++i)
+            ecs_thermalPowerProvided[i].pop_back();
+    }
     void setMachinePower_FuelConsumption_ElectricConsumption(Climate* pClim, unsigned int day, unsigned int hour);
 
 
@@ -1275,8 +1209,8 @@ public:
 
     Pump* getPump() { return pump; }
 
-    EnergyConversionSystem* getEcs() { return ecs; }
-    float getThermalPowerProvided() { return thermalPowerProvided; }
+    EnergyConversionSystem* getEcs() { return ecs[0]; } /// NOTE: temporary set to ecs[0]
+    float getThermalPowerProvided() { return accumulate(thermalPowerProvided.begin(), thermalPowerProvided.end(), 0.f); }
     float getOutputTemperature() { return outputTemperature; }
 
     virtual void computeThermal(float pressureDiff, float massFlow, float rho, float cp, float inputTemp, Climate *pClimate, unsigned int day, unsigned int hour);
@@ -1292,7 +1226,7 @@ public:
     virtual float getCurrentStage(){throw string("CitySim is trying to get a current stage from a non slave ThermalStation."); return 0.f;}
     virtual void setCurrentStage(float stage){throw string("CitySim is trying to set a current stage to a non slave ThermalStation.");}
     virtual bool getMaster(){return true;} // Added by Max (by convention, the thermalStation is a master. Test in MCR that forces to have thermalStation master or slave if they are several).
-    float getThermalPowerNeeded(){return thermalPowerNeeded;}
+    float getThermalPowerNeeded() const { return thermalPowerNeeded; }
     virtual unsigned int getTimeClock(){throw string("Error in the code: A timeClock is trying to be accessed in a ThermalStation of different type than 'slave'.");}
     virtual void setTimeClock(unsigned int count){throw string("Error in the code: A timeClock is trying to be fixed in a ThermalStation of different type than 'slave'.");}
     virtual unsigned int getLatency(){throw string("Error in the code: A Latency is trying to be accessed in a ThermalStation of different type than 'slave'.");}
@@ -1306,7 +1240,7 @@ public:
 
 
     virtual void updateOperationMode(float const& sumSubstationDesiredMassFlow, size_t const& nbThermalStations) { }
-    void computeThermalPowerProvided(float const& thermalPowerNeeded, Climate* pClimate, unsigned int day, unsigned int hour);
+    void computeThermalPowerProvided(Climate* pClimate, unsigned int day, unsigned int hour);
 
     virtual void writeTHHeaderText(fstream& textFile, string prefix);
     virtual void writeTHResultsText(fstream& textFile, unsigned int i);

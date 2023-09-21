@@ -537,6 +537,9 @@ Boiler::Boiler(TiXmlHandle hdl, unsigned int beginD, unsigned int endD, ostream*
     boilerThermalPower = to<double>(hdl.ToElement()->Attribute("Pmax"));
     boilerThermalEfficiency = to<double>(hdl.ToElement()->Attribute("eta_th"));
     if (hdl.ToElement()->Attribute("name")){ hdl.ToElement()->QueryStringAttribute("name",&name);}
+    // if the beginDay and endDay are defined at the level of the EnergyConversionSystem then override
+    if (hdl.ToElement()->Attribute("beginDay")){ hdl.ToElement()->QueryUnsignedAttribute("beginDay",&beginDay); }
+    if (hdl.ToElement()->Attribute("endDay")){ hdl.ToElement()->QueryUnsignedAttribute("endDay",&endDay); }
 }
 
 void Boiler::writeXML(ofstream& file, string tab=""){
@@ -552,651 +555,14 @@ void Boiler::writeGML(ofstream& file, string tab="") {
 
 }
 
-CoGenerationAndBoiler::CoGenerationAndBoiler(TiXmlHandle hdl, unsigned int beginD, unsigned int endD, ostream* pLogStr):EnergyConversionSystem(beginD,endD,pLogStr){
-    logStream << "Cogen + HP." << endl << flush;
-
-    coGenThermalPower           = to<double>(hdl.ToElement()->Attribute("Pmax"));
-    coGenElectricalEfficiency   = to<double>(hdl.ToElement()->Attribute("eta_el"));
-    coGenThermalEfficiency      = to<double>(hdl.ToElement()->Attribute("eta_th"));
-    coGenMinPartLoadCoefficient = to<double>(hdl.ToElement()->Attribute("minPartLoadCoeff"));
-
-    boilerThermalPower      = to<double>(hdl.FirstChildElement("Boiler").ToElement()->Attribute("Pmax"));
-    boilerThermalEfficiency = to<double>(hdl.FirstChildElement("Boiler").ToElement()->Attribute("eta_th"));
-}
-
-void CoGenerationAndBoiler::writeXML(ofstream& file, string tab){
-    file << tab << "<CoGenerationAndBoiler Pmax=\"" << coGenThermalPower << "\" eta_el=\"" << coGenElectricalEfficiency
-         << "\" eta_th=\"" << coGenThermalEfficiency << "\" minPartLoadCoeff=\"" << coGenMinPartLoadCoefficient << "\">";
-    file << tab << "<Boiler Pmax=\"" << boilerThermalPower << "\" eta_th=\"" << boilerThermalEfficiency << "\"/>" << endl;
-    file << "</CoGenerationAndBoiler>" << endl;
-}
-
-CoGenerationAndBoiler::CoGenerationAndBoiler(double coGenThermalPower, double coGenElectricalEfficiency, double coGenThermalEfficiency, double coGenMinPartLoadCoefficient, double boilerThermalPower, double boilerThermalEfficiency) {
-
-    this->coGenThermalPower           = coGenThermalPower;
-    this->coGenElectricalEfficiency   = coGenElectricalEfficiency;
-    this->coGenThermalEfficiency      = coGenThermalEfficiency;
-    this->coGenMinPartLoadCoefficient = coGenMinPartLoadCoefficient;
-
-    this->boilerThermalPower        = boilerThermalPower;
-    this->boilerThermalEfficiency   = boilerThermalEfficiency;
-
-}
-
-void CoGenerationAndBoiler::getMaxThermalPower(double thermalPower1Needed, double thermalPower2Needed, double &thermalPower1Available, double &thermalPower2Available, double sourceTemp) {
-
-    if ( (thermalPower1Needed+thermalPower2Needed) < coGenThermalPower*coGenMinPartLoadCoefficient ) {
-
-        thermalPower1Available = 0.0;
-        thermalPower2Available = 0.0;
-
-    }
-    else if ( (thermalPower1Needed+thermalPower2Needed) <= (coGenThermalPower + boilerThermalPower) ) {
-
-        thermalPower1Available = thermalPower1Needed;
-        thermalPower2Available = thermalPower2Needed;
-
-    }
-    else {
-
-        if ( coGenThermalPower + boilerThermalPower >= thermalPower1Needed ) {
-            // th1 satisfait
-            thermalPower1Available = thermalPower1Needed;
-            thermalPower2Available = coGenThermalPower + boilerThermalPower - thermalPower1Needed;
-        }
-        else {
-            // th1 meme pas satisfait, donne le max
-            thermalPower1Available = coGenThermalPower + boilerThermalPower;
-            thermalPower2Available = 0.0;
-        }
-    }
-}
-
-double CoGenerationAndBoiler::getElectricConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp) {
-
-    if (thermalPower1+thermalPower2 < coGenMinPartLoadCoefficient*coGenThermalPower) {
-        return 0.0;
-    }
-    else if (thermalPower1+thermalPower2 > coGenThermalPower) {
-        return -time*(coGenThermalPower/coGenThermalEfficiency)*coGenElectricalEfficiency;
-    }
-    else {
-        return -time*((thermalPower1+thermalPower2)/coGenThermalEfficiency)*coGenElectricalEfficiency;
-    }
-
-}
-
-double CoGenerationAndBoiler::getCO2Production(double time, double thermalPower1, double thermalPower2, double sourceTemp, double outputTemp1, double outputTemp2) {
-
-    if (thermalPower1+thermalPower2 < coGenMinPartLoadCoefficient*coGenThermalPower) {
-        // no operation
-        return 0.0;
-    }
-    else if (thermalPower1+thermalPower2 > coGenThermalPower) {
-        return (time*coGenThermalPower/coGenThermalEfficiency)*coGenCO2EmissionCoefficient + (time*(thermalPower1+thermalPower2-coGenThermalPower)/boilerThermalEfficiency)*boilerCO2EmissionCoefficient;
-    }
-    else {
-        return (time*(thermalPower1+thermalPower2)/coGenThermalEfficiency)*coGenCO2EmissionCoefficient;
-    }
-}
-
-double CoGenerationAndBoiler::getFuelConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp, double outputTemp1, double outputTemp2) {
-
-    if (thermalPower1+thermalPower2 < coGenMinPartLoadCoefficient*coGenThermalPower) {
-        // no operation
-        return 0.0;
-    }
-    else if (thermalPower1+thermalPower2 > coGenThermalPower) {
-        return (time*coGenThermalPower/coGenThermalEfficiency);
-    }
-    else {
-        return (time*(thermalPower1+thermalPower2)/coGenThermalEfficiency);
-    }
-}
-
-void CoGenerationAndBoiler::getMaxThermalPower(vector<double> thermalPowerNeeded, vector<double> &thermalPowerAvailable) {
-
-    // district version with many needs, the needs are the sum of the HS and DHW
-    // if the one need is not satisfied, we have to give priority to HS or DHW... depending on the strategy
-
-    // clear the vector before being filled again
-    thermalPowerAvailable.clear();
-
-    if ( accumulate(thermalPowerNeeded.begin(),thermalPowerNeeded.end(), 0.0) < coGenThermalPower*coGenMinPartLoadCoefficient ) {
-
-        // assign everything to zero
-        thermalPowerAvailable.assign(thermalPowerNeeded.size(), 0.0);
-
-    }
-    else if ( accumulate(thermalPowerNeeded.begin(),thermalPowerNeeded.end(), 0.0) <= (coGenThermalPower + boilerThermalPower) ) {
-
-        // demande enti�rement satisfaite
-        thermalPowerAvailable = thermalPowerNeeded;
-
-    }
-    else {
-
-        double accu = 0.0;
-
-        for (unsigned int i=0; i<thermalPowerNeeded.size(); i++) {
-
-            accu += thermalPowerNeeded[i];
-            if ( coGenThermalPower + boilerThermalPower >= accu) {
-                // ce bout satisfait
-                thermalPowerAvailable.push_back(thermalPowerNeeded[i]);
-            }
-            else {
-                // ce bout pas satisfait
-                thermalPowerAvailable.push_back( max(coGenThermalPower + boilerThermalPower - (accu-thermalPowerNeeded[i]), 0.0) );
-            }
-        }
-    }
-
-    return;
-}
-
-double CoGenerationAndBoiler::getElectricProduction(vector<double> thermalPower) {
-
-    if ( accumulate(thermalPower.begin(),thermalPower.end(), 0.0) < coGenMinPartLoadCoefficient*coGenThermalPower) {
-        return 0.0;
-    }
-    else if ( accumulate(thermalPower.begin(),thermalPower.end(), 0.0) > coGenThermalPower) {
-        return (coGenThermalPower/coGenThermalEfficiency)*coGenElectricalEfficiency;
-    }
-    else {
-        return (accumulate(thermalPower.begin(),thermalPower.end(), 0.0)/coGenThermalEfficiency)*coGenElectricalEfficiency;
-    }
-
-}
-
-double CoGenerationAndBoiler::getCO2Production(double time, vector<double> thermalPower) {
-
-    if ( accumulate(thermalPower.begin(),thermalPower.end(), 0.0) < coGenMinPartLoadCoefficient*coGenThermalPower) {
-        // no operation
-        return 0.0;
-    }
-    else if ( accumulate(thermalPower.begin(),thermalPower.end(), 0.0) > coGenThermalPower) {
-        return (time*coGenThermalPower/coGenThermalEfficiency)*coGenCO2EmissionCoefficient + (time*(accumulate(thermalPower.begin(),thermalPower.end(), 0.0)-coGenThermalPower)/boilerThermalEfficiency)*boilerCO2EmissionCoefficient;
-    }
-    else {
-        return (time*(accumulate(thermalPower.begin(),thermalPower.end(), 0.0))/coGenThermalEfficiency)*coGenCO2EmissionCoefficient;
-    }
-}
-
-HeatPumpAndElectricElement::HeatPumpAndElectricElement(double heatPumpElectricPower, double heatPumpCOP, double heatPumpSrcTemp, double heatPumpOutputTemp, double electricElementPower) {
-
-    ground = false;
-
-    this->heatPumpElectricPower = heatPumpElectricPower;
-    this->electricElementPower = electricElementPower;
-
-    etaTech = heatPumpCOP / epsilonC(heatPumpSrcTemp, heatPumpOutputTemp);
-    targetTemp = heatPumpOutputTemp;
-
-}
-
-void HeatPumpAndElectricElement::getMaxThermalPower(double thermalPower1Needed, double thermalPower2Needed, double &thermalPower1Available, double &thermalPower2Available, double sourceTemp) {
-
-    double outputTemp1 = targetTemp;
-    double outputTemp2 = targetTemp;
-
-    if ( getWorkNeeded(thermalPower1Needed, sourceTemp, outputTemp1) + getWorkNeeded(thermalPower2Needed, sourceTemp, outputTemp2) <= heatPumpElectricPower ) {
-        // HP only operation - everything provided
-        thermalPower1Available = thermalPower1Needed;
-        thermalPower2Available = thermalPower2Needed;
-    }
-    else {
-        // meilleur temps de chauffer la maison d'abord, et en plus meilleur COP!!
-
-        double work1, work2;
-        double thermalPower1Missing, thermalPower2Missing;
-
-        work1 = getWorkNeeded(thermalPower1Needed, sourceTemp, outputTemp1);
-        if (work1 <= heatPumpElectricPower) { // thermalPower1 given...
-            work2 = heatPumpElectricPower-work1;
-            thermalPower1Missing = 0.0;
-            thermalPower2Missing = thermalPower2Needed - getHeatProduced(work2, sourceTemp, outputTemp2);
-        }
-        else {
-            // work1 insufficient for thermalPower1, limited to heatPumpElectricPower
-            work1 = heatPumpElectricPower;
-            work2 = 0.0;
-            thermalPower1Missing = thermalPower1Needed - getHeatProduced(heatPumpElectricPower, sourceTemp, outputTemp1);
-            thermalPower2Missing = thermalPower2Needed;
-        }
-
-        // on utilise l'element electrique pour promouvoir la chaleur dans 1 puis dans 2
-        if (electricElementPower > 0.0) { // mode chauffage
-            if ( electricElementPower >= thermalPower1Missing ) {
-
-                // on a tout pour th1
-                thermalPower1Available = thermalPower1Needed;
-
-                if ( electricElementPower - thermalPower1Missing >= thermalPower2Missing ) thermalPower2Available = thermalPower2Needed;
-                else thermalPower2Available = electricElementPower - thermalPower1Missing;
-            }
-            else {
-                thermalPower1Available = thermalPower1Needed - thermalPower1Missing + electricElementPower;
-                thermalPower2Available = 0.0;
-            }
-        }
-        else {
-            // seulement en mode refroidissement
-            thermalPower1Available = thermalPower1Needed - thermalPower1Missing;
-            thermalPower2Available = thermalPower2Needed - thermalPower2Missing;
-
-        }
-    }
-
-}
-
-
-double HeatPumpAndElectricElement::getCO2Production(double time, double thermalPower1, double thermalPower2, double sourceTemp) {
-
-    double outputTemp1 = targetTemp;
-    double outputTemp2 = targetTemp;
-
-    if ( getWorkNeeded(thermalPower1, sourceTemp, outputTemp1) + getWorkNeeded(thermalPower2, sourceTemp, outputTemp2) <= heatPumpElectricPower ) {
-        // HP only operation - everything provided
-        return time*( thermalPower1/( etaTech*epsilonC(sourceTemp, outputTemp1) ) + thermalPower2/( etaTech*epsilonC(sourceTemp, outputTemp2)))*electricCO2EmissionCoefficient;
-    }
-    else {
-        // meilleur temps de chauffer la maison d'abord, et en plus meilleur COP!!
-
-        double work1, work2;
-        double thermalPower1Missing, thermalPower2Missing;
-
-        work1 = getWorkNeeded(thermalPower1, sourceTemp, outputTemp1);
-        if (work1 <= heatPumpElectricPower) { // thermalPower1 given...
-            work2 = heatPumpElectricPower-work1;
-            thermalPower1Missing = 0.0;
-            thermalPower2Missing = thermalPower2 - getHeatProduced(work2, sourceTemp, outputTemp2);
-        }
-        else {
-            // work1 insufficient for thermalPower1, limited to heatPumpElectricPower
-            work1 = heatPumpElectricPower;
-            work2 = 0.0;
-            thermalPower1Missing = thermalPower1 - getHeatProduced(heatPumpElectricPower, sourceTemp, outputTemp1);
-            thermalPower2Missing = thermalPower2;
-        }
-
-        if ( electricElementPower == 0.0 ) return (time*(work1+work2))*electricCO2EmissionCoefficient;
-        else return (time*(work1+work2))*electricCO2EmissionCoefficient + (time*(std::max(thermalPower1Missing + thermalPower2Missing, electricElementPower)))*electricCO2EmissionCoefficient;
-    }
-}
-
-double HeatPumpAndElectricElement::getElectricConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp) {
-
-    double outputTemp1 = targetTemp;
-    double outputTemp2 = targetTemp;
-
-    if ( getWorkNeeded(thermalPower1, sourceTemp, outputTemp1) + getWorkNeeded(thermalPower2, sourceTemp, outputTemp2) <= heatPumpElectricPower ) {
-        // HP only operation - everything provided
-        return time*( thermalPower1/( etaTech*epsilonC(sourceTemp, outputTemp1) ) + thermalPower2/( etaTech*epsilonC(sourceTemp, outputTemp2)));
-    }
-    else {
-        // meilleur temps de chauffer la maison d'abord, et en plus meilleur COP!!
-
-        double work1, work2;
-        double thermalPower1Missing, thermalPower2Missing;
-
-        work1 = getWorkNeeded(thermalPower1, sourceTemp, outputTemp1);
-        if (work1 <= heatPumpElectricPower) { // thermalPower1 given...
-            work2 = heatPumpElectricPower-work1;
-            thermalPower1Missing = 0.0;
-            thermalPower2Missing = thermalPower2 - getHeatProduced(work2, sourceTemp, outputTemp2);
-        }
-        else {
-            // work1 insufficient for thermalPower1, limited to heatPumpElectricPower
-            work1 = heatPumpElectricPower;
-            work2 = 0.0;
-            thermalPower1Missing = thermalPower1 - getHeatProduced(heatPumpElectricPower, sourceTemp, outputTemp1);
-            thermalPower2Missing = thermalPower2;
-        }
-
-        if ( electricElementPower == 0.0 ) return (time*(work1+work2));
-        else return (time*(work1+work2)) + (time*(std::max(thermalPower1Missing + thermalPower2Missing, electricElementPower)));
-    }
-}
-
-// version district... 80�C!!
-
-void HeatPumpAndElectricElement::getMaxThermalPower(vector<double> thermalPowerNeeded, vector<double> &thermalPowerAvailable, double sourceTemp) {
-
-    double outputTemp = targetTemp;
-
-    if ( getWorkNeeded(accumulate(thermalPowerNeeded.begin(),thermalPowerNeeded.end(), 0.0), sourceTemp, outputTemp) <= heatPumpElectricPower ) {
-        // HP only operation - everything provided
-        thermalPowerAvailable = thermalPowerNeeded;
-    }
-    else {
-        // meilleur temps de chauffer la maison d'abord, et en plus meilleur COP!!
-
-        double accuMissing = 0.0, accuWork = 0.0;
-
-        for (unsigned int i=0; i<thermalPowerNeeded.size(); i++) {
-
-            accuWork += getWorkNeeded(thermalPowerNeeded[i], sourceTemp, outputTemp);
-
-            if ( heatPumpElectricPower >= accuWork) {
-                // ce bout satisfait
-                thermalPowerAvailable.push_back(thermalPowerNeeded[i]);
-            }
-            else {
-
-
-                accuMissing += thermalPowerNeeded[i] - getHeatProduced(max(heatPumpElectricPower-(accuWork-getWorkNeeded(thermalPowerNeeded[i], sourceTemp, outputTemp)),0.0), sourceTemp, outputTemp);
-
-                if ( electricElementPower > 0.0 ) {
-                    if ( electricElementPower >= accuMissing ) {
-                        // on a tout
-                        thermalPowerAvailable.push_back(thermalPowerNeeded[i]);
-                    }
-                    else {
-                        thermalPowerAvailable.push_back( max(electricElementPower - (accuMissing-thermalPowerNeeded[i]), 0.0) );
-                    }
-                }
-                else {
-
-                    thermalPowerAvailable.push_back( min((accuMissing-thermalPowerNeeded[i]), 0.0) );
-                }
-            }
-        }
-    }
-
-}
-
-double HeatPumpAndElectricElement::getCO2Production(double time, vector<double> thermalPower, double sourceTemp) {
-
-    double outputTemp = targetTemp;
-
-    double workHP=0.0, heatEL=0.0;
-
-    if ( getWorkNeeded(accumulate(thermalPower.begin(),thermalPower.end(), 0.0), sourceTemp, outputTemp) <= heatPumpElectricPower ) {
-        // HP only operation - everything provided
-        workHP = getWorkNeeded( accumulate(thermalPower.begin(),thermalPower.end(), 0.0), sourceTemp, outputTemp );
-        heatEL = 0.0;
-        cerr << "Everything provided by HP!" << endl;
-    }
-    else {
-
-        double accuMissing = 0.0, accuWork = 0.0, accu = 0.0;
-
-        for (unsigned int i=0; i<thermalPower.size(); i++) {
-
-            accu     += thermalPower[i];
-            accuWork += getWorkNeeded(thermalPower[i], sourceTemp, outputTemp);
-
-            if ( heatPumpElectricPower >= accuWork) {
-                // ce bout satisfait
-                workHP += getWorkNeeded(thermalPower[i], sourceTemp, outputTemp);
-            }
-            else {
-
-                workHP = heatPumpElectricPower;
-                accuMissing = accu - getHeatProduced(heatPumpElectricPower, sourceTemp, outputTemp);
-
-                if ( electricElementPower > 0.0 ) {
-                    if ( electricElementPower >= accuMissing ) {
-                        // on a tout
-                        heatEL = accuMissing;
-                    }
-                    else {
-                        heatEL += accuMissing - electricElementPower;
-                    }
-                }
-            }
-        }
-    }
-
-    cerr << "Work HP: " << workHP << "\tHeat Electric: " << heatEL << endl;
-
-    if ( accumulate(thermalPower.begin(), thermalPower.end(), 0.0) < 0.0 ) return (time*(workHP))*electricCO2EmissionCoefficient;
-    else return (time*(workHP))*electricCO2EmissionCoefficient + (time*(heatEL))*electricCO2EmissionCoefficient;
-
-}
-
-CoGenerationHeatPumpAndBoiler::CoGenerationHeatPumpAndBoiler(double coGenThermalPower, double coGenElectricalEfficiency, double coGenThermalEfficiency, double coGenMinPartLoadCoefficient, double heatPumpCOP, double heatPumpSrcTemp, double heatPumpOutputTemp, double boilerThermalPower, double boilerThermalEfficiency) {
-
-    this->coGenThermalPower           = coGenThermalPower;
-    this->coGenElectricalEfficiency   = coGenElectricalEfficiency;
-    this->coGenThermalEfficiency      = coGenThermalEfficiency;
-    this->coGenMinPartLoadCoefficient = coGenMinPartLoadCoefficient;
-
-    etaTech = heatPumpCOP / epsilonC(heatPumpSrcTemp, heatPumpOutputTemp);
-
-    this->boilerThermalPower        = boilerThermalPower;
-    this->boilerThermalEfficiency   = boilerThermalEfficiency;
-
-}
-
-CoGenerationHeatPumpAndBoiler::CoGenerationHeatPumpAndBoiler(double coGenThermalPower, double coGenElectricalEfficiency, double coGenThermalEfficiency, double coGenMinPartLoadCoefficient, double heatPumpEtaTech, double boilerThermalPower, double boilerThermalEfficiency) {
-
-    this->coGenThermalPower           = coGenThermalPower;
-    this->coGenElectricalEfficiency   = coGenElectricalEfficiency;
-    this->coGenThermalEfficiency      = coGenThermalEfficiency;
-    this->coGenMinPartLoadCoefficient = coGenMinPartLoadCoefficient;
-
-    this->etaTech = heatPumpEtaTech;
-
-    this->boilerThermalPower        = boilerThermalPower;
-    this->boilerThermalEfficiency   = boilerThermalEfficiency;
-
-}
-
-void CoGenerationHeatPumpAndBoiler::getMaxThermalPower(double thermalPower1Needed, double thermalPower2Needed, double &thermalPower1Available, double &thermalPower2Available, double sourceTemp) {
-
-    double outputTemp1 = targetTemp;
-    double outputTemp2 = targetTemp;
-
-    double COP1 = etaTech*epsilonC(sourceTemp, outputTemp1);
-    double COP2 = etaTech*epsilonC(sourceTemp, outputTemp2);
-
-    double Pgross; // gross energy input
-    double PgrossMax = coGenThermalPower/coGenThermalEfficiency;
-
-    // cas P1*dt >= th1 ou < th1
-    Pgross = (thermalPower1Needed+thermalPower2Needed)/(coGenElectricalEfficiency*COP2+coGenThermalEfficiency);
-    if ( Pgross < thermalPower1Needed ) Pgross = (thermalPower1Needed*(COP2/COP1)+thermalPower2Needed)/(coGenElectricalEfficiency*COP2+coGenThermalEfficiency*(COP2/COP1));
-
-    // voyons les diff�rents cas de travail de notre machine
-    if ( Pgross > PgrossMax ) {
-        // pas assez d'�nergie, regardons ce qu'il manque pour le boiler
-        if (PgrossMax*coGenThermalEfficiency >= thermalPower1Needed) { // d�passe la zone critique, les besoins1 sont satisfaits
-            thermalPower1Available = thermalPower1Needed;
-            thermalPower2Available = PgrossMax*(coGenElectricalEfficiency*COP2+coGenThermalEfficiency) - thermalPower1Needed;
-            if ( (thermalPower2Needed - thermalPower2Available) > boilerThermalPower ) thermalPower2Available += boilerThermalPower;
-            else thermalPower2Available = thermalPower2Needed;
-        }
-        else { // ne d�passe pas th1, formule2
-            thermalPower2Available = PgrossMax*(coGenElectricalEfficiency*COP2+coGenThermalEfficiency*(COP2/COP1)) - thermalPower1Needed*(COP2/COP1);
-            if ( thermalPower2Available < 0.0 ) {
-                thermalPower2Available = 0.0;
-                thermalPower1Available = PgrossMax*(coGenElectricalEfficiency*COP2+coGenThermalEfficiency*(COP2/COP1))*(COP1/COP2);
-                if ( (thermalPower1Needed - thermalPower1Available) > boilerThermalPower ) thermalPower1Available += boilerThermalPower;
-                else {
-                    double boilerThermalPowerLeft = boilerThermalPower - (thermalPower1Needed-thermalPower1Available);
-                    thermalPower1Available = thermalPower1Needed;
-                    thermalPower2Available = std::max(thermalPower2Needed, boilerThermalPowerLeft);
-                }
-            }
-            else { // compl�ter avec du boiler pour thermalPower2
-                if ( (thermalPower2Needed - thermalPower2Available) > boilerThermalPower ) thermalPower2Available += boilerThermalPower;
-                else thermalPower2Available = thermalPower2Needed;
-            }
-        }
-    }
-    else if ( (Pgross/PgrossMax) < coGenMinPartLoadCoefficient ) {
-
-        // ne fonctionne pas en mode SOFC, tout doit etre fourni par le boiler
-        if ( (thermalPower1Needed+thermalPower2Needed) <= boilerThermalPower ) {
-
-            thermalPower1Available = thermalPower1Needed;
-            thermalPower2Available = thermalPower2Needed;
-
-        }
-        else {
-
-            thermalPower2Available = boilerThermalPower - thermalPower1Needed;
-            if ( thermalPower2Available < 0.0 ) {
-                thermalPower1Available = thermalPower1Needed + thermalPower2Available;
-                thermalPower2Available = 0.0;
-            }
-            else {
-                thermalPower1Available = thermalPower1Needed;
-            }
-        }
-
-    }
-    else { // bonne formule, dans la zone de travail id�ale!
-
-        thermalPower1Available = thermalPower1Needed;
-        thermalPower2Available = thermalPower2Needed;
-
-    }
-
-}
-
-double CoGenerationHeatPumpAndBoiler::getCO2Production(double time, double thermalPower1, double thermalPower2, double sourceTemp, double outputTemp1, double outputTemp2) {
-
-    double COP1 = etaTech*epsilonC(sourceTemp, outputTemp1);
-    double COP2 = etaTech*epsilonC(sourceTemp, outputTemp2);
-
-    double Pgross; // gross energy input
-    double PgrossMax = coGenThermalPower/coGenThermalEfficiency;
-
-    // cas P1*dt >= th1 ou < th1
-    Pgross = (thermalPower1+thermalPower2)/(coGenElectricalEfficiency*COP2+coGenThermalEfficiency);
-    if ( Pgross < thermalPower1 ) Pgross = (thermalPower1*(COP2/COP1)+thermalPower2)/(coGenElectricalEfficiency*COP2+coGenThermalEfficiency*(COP2/COP1));
-
-    // voyons les diff�rents cas de travail de notre machine
-    if ( Pgross > PgrossMax ) {
-        // pas assez d'�nergie, tourne au max
-        return time*PgrossMax*coGenCO2EmissionCoefficient;
-    }
-    else if ( (Pgross/PgrossMax) < coGenMinPartLoadCoefficient ) {
-        // ne fonctionne pas en mode SOFC
-        return 0.0;
-    }
-    else { // bonne formule, dans la zone de travail id�ale!
-
-        return time*Pgross*coGenCO2EmissionCoefficient;
-
-    }
-}
-
-double CoGenerationHeatPumpAndBoiler::getFuelConsumption(double time, double thermalPower1, double thermalPower2, double sourceTemp) {
-
-    double outputTemp1 = targetTemp;
-    double outputTemp2 = targetTemp;
-
-    double COP1 = etaTech*epsilonC(sourceTemp, outputTemp1);
-    double COP2 = etaTech*epsilonC(sourceTemp, outputTemp2);
-
-    double Pgross; // gross energy input
-    double PgrossMax = coGenThermalPower/coGenThermalEfficiency;
-
-    // cas P1*dt >= th1 ou < th1
-    Pgross = (thermalPower1+thermalPower2)/(coGenElectricalEfficiency*COP2+coGenThermalEfficiency);
-    if ( Pgross < thermalPower1 ) Pgross = (thermalPower1*(COP2/COP1)+thermalPower2)/(coGenElectricalEfficiency*COP2+coGenThermalEfficiency*(COP2/COP1));
-
-    // voyons les diff�rents cas de travail de notre machine
-    if ( Pgross > PgrossMax ) {
-        // pas assez d'�nergie, tourne au max
-        return time*PgrossMax;
-    }
-    else if ( (Pgross/PgrossMax) < coGenMinPartLoadCoefficient ) {
-        // ne fonctionne pas en mode SOFC
-        return 0.0;
-    }
-    else { // bonne formule, dans la zone de travail id�ale!
-
-        return time*Pgross;
-
-    }
-}
-
-// cas � plusieurs demandes, pour le district...
-void CoGenerationHeatPumpAndBoiler::getMaxThermalPower(vector<double> thermalPowerNeeded, vector<double> &thermalPowerAvailable, double sourceTemp) {
-
-    double outputTemp = targetTemp;
-
-    double COP = etaTech*epsilonC(sourceTemp, outputTemp);
-
-    cerr << "COP: " << COP << endl;
-
-    double Pgross; // gross energy input
-    double PgrossMax = coGenThermalPower/coGenThermalEfficiency;
-
-    // calcul du Pgross
-    Pgross = accumulate(thermalPowerNeeded.begin(), thermalPowerNeeded.end(), 0.0) / (coGenElectricalEfficiency*COP+coGenThermalEfficiency);
-
-    cerr << "Pgross: " << Pgross << "\tPgrossMax: " << PgrossMax << endl;
-
-    // voyons les diff�rents cas de travail de notre machine
-    if ( Pgross > PgrossMax ) {
-
-        // pas assez d'�nergie, regardons ce qu'il manque pour le boiler
-        double accu = 0.0;
-
-        for (unsigned int i=0; i<thermalPowerNeeded.size(); i++) {
-
-            accu += thermalPowerNeeded[i];
-            if ( PgrossMax*(coGenThermalEfficiency + coGenElectricalEfficiency*COP) + boilerThermalPower >= accu) {
-                // ce bout satisfait
-                thermalPowerAvailable.push_back(thermalPowerNeeded[i]);
-            }
-            else {
-                // ce bout pas satisfait
-                thermalPowerAvailable.push_back( max(PgrossMax*(coGenThermalEfficiency + coGenElectricalEfficiency*COP) + boilerThermalPower - (accu-thermalPowerNeeded[i]), 0.0) );
-            }
-
-        }
-    }
-    else if ( (Pgross/PgrossMax) < coGenMinPartLoadCoefficient ) {
-
-        thermalPowerAvailable.assign(thermalPowerNeeded.size(), 0.0);
-
-    }
-    else { // bonne formule, dans la zone de travail id�ale!
-
-        thermalPowerAvailable = thermalPowerNeeded;
-
-    }
-
-}
-
-double CoGenerationHeatPumpAndBoiler::getCO2Production(double time, vector<double> thermalPower, double sourceTemp, double outputTemp) {
-
-    double COP = etaTech*epsilonC(sourceTemp, outputTemp);
-
-    double Pgross; // gross energy input
-    double PgrossMax = coGenThermalPower/coGenThermalEfficiency;
-
-    // calcul de Pgross
-    Pgross = accumulate(thermalPower.begin(), thermalPower.end(), 0.0) / (coGenElectricalEfficiency*COP+coGenThermalEfficiency);
-
-    // voyons les diff�rents cas de travail de notre machine
-    if ( Pgross > PgrossMax ) {
-        // pas assez d'�nergie, tourne au max
-        return time*PgrossMax*coGenCO2EmissionCoefficient;
-    }
-    else if ( (Pgross/PgrossMax) < coGenMinPartLoadCoefficient ) {
-        // ne fonctionne pas en mode SOFC
-        return 0.0;
-    }
-    else { // bonne formule, dans la zone de travail id�ale!
-
-        return time*Pgross*coGenCO2EmissionCoefficient;
-
-    }
-}
-
 CoGeneration::CoGeneration(TiXmlHandle hdl, unsigned int beginD, unsigned int endD, ostream* pLogStr):EnergyConversionSystem(beginD, endD, pLogStr) {
     coGenThermalPower = to<double>(hdl.ToElement()->Attribute("Pmax"));
     coGenElectricalEfficiency = to<double>(hdl.ToElement()->Attribute("eta_el"));
     coGenThermalEfficiency = to<double>(hdl.ToElement()->Attribute("eta_th"));
     coGenMinPartLoadCoefficient = to<double>(hdl.ToElement()->Attribute("minPartLoadCoeff"));
+    // if the beginDay and endDay are defined at the level of the EnergyConversionSystem then override
+    if (hdl.ToElement()->Attribute("beginDay")){ hdl.ToElement()->QueryUnsignedAttribute("beginDay",&beginDay);}
+    if (hdl.ToElement()->Attribute("endDay")){ hdl.ToElement()->QueryUnsignedAttribute("endDay",&endDay);}
 }
 
 CoGeneration::CoGeneration(double coGenThermalPower,double coGenElectricalEfficiency,double coGenThermalEfficiency,double coGenMinPartLoadCoefficient,unsigned int beginDay,unsigned int endDay):
@@ -1261,19 +627,25 @@ HeatPump::HeatPump(TiXmlHandle hdl, unsigned int beginD, unsigned int endD, ostr
             z1 = to<double>(hdl.ToElement()->Attribute("depth"));
         }
     }
-//    else{  // Cognet: Deleted this, to improve the if to verify that it is "air", else throw error
     else if (string(hdl.ToElement()->Attribute("Tsource"))==string("air")) { // Cognet: Added this.
         logStream << "Air source." << endl << flush;
         ground = false;
     }
-    else if (string(hdl.ToElement()->Attribute("Tsource"))==string("water")){
-        logStream << "Water Source." << endl << flush;
-        ground = false;
-    }else if (string(hdl.ToElement()->Attribute("Tsource"))==string("network")){ //Added by Max: For the substationHeatPump
+    else if (string(hdl.ToElement()->Attribute("Tsource"))==string("network")){ //Added by Max: For the substationHeatPump
         logStream << "Network Source." << endl << flush;
         ground = false;
-}
-    else { throw string("Error in the XML file: a HeatPump has a Tsource attribute with neither 'ground' nor 'air' nor 'network'."); } // Cognet: Added this.
+    }
+    else {
+        logStream << "Fixed Temperature Source: ";
+        ground = false;
+        if(hdl.ToElement()->QueryFloatAttribute("Tsource",&Tsource)!=TIXML_SUCCESS)
+            throw string("Error in the XML file: a HeatPump has a Tsource attribute with neither 'ground' nor 'air' nor 'network' nor a numeric value of a fixed temperature.");
+        logStream << Tsource << " celsius" << endl;
+    }
+    // if the beginDay and endDay are defined at the level of the EnergyConversionSystem then override
+    if (hdl.ToElement()->Attribute("beginDay")){ hdl.ToElement()->QueryUnsignedAttribute("beginDay",&beginDay); }
+    if (hdl.ToElement()->Attribute("endDay")){ hdl.ToElement()->QueryUnsignedAttribute("endDay",&endDay); }
+
 }
 
 void HeatPump::writeXML(ofstream& file, string tab){
@@ -1283,7 +655,8 @@ void HeatPump::writeXML(ofstream& file, string tab){
         file << "Tsource=\"ground\" depth=\""<< z0 << "\" alpha=\"" << alpha << "\" ";
         if (z1 != z0) file << "position=\"vertical\" z1=\"" << z1 << "\" ";
     }
-    else file << "Tsource=\"air\"";
+    else if (isnan(Tsource)) file << "Tsource=\"air\"";
+    else file << "Tsource=\"" << Tsource << "\"";
     file << "/>" << endl;
 }
 
@@ -1303,7 +676,8 @@ void HeatPump::writeGML(ofstream& file, string tab) {
         if (z0 == z1) file << "HorizontalGroundCollector";
         else          file << "VerticalGroundCollector";
     }
-    else file << "AmbientAir";
+    else if (isnan(Tsource)) file << "AmbientAir";
+    else file << "Aquifer";
     file << "</energy:heatSource>" << endl;
     file << tab << "</energy:HeatPump>" << endl;
 
@@ -1365,6 +739,9 @@ CoGenerationHeatPump::CoGenerationHeatPump(TiXmlHandle hdl, unsigned int beginD,
     // Ignore heatPumpElectricPower read in xml file ? Or keep line bellow only if no value in xml file ?
     //if(heatPumpElectricPower==0)
     heatPumpElectricPower = coGenThermalPower/coGenThermalEfficiency*coGenElectricalEfficiency;
+    // if the beginDay and endDay are defined at the level of the EnergyConversionSystem then override
+    if (hdl.ToElement()->Attribute("beginDay")){ hdl.ToElement()->QueryUnsignedAttribute("beginDay",&beginDay);}
+    if (hdl.ToElement()->Attribute("endDay")){ hdl.ToElement()->QueryUnsignedAttribute("endDay",&endDay);}
 }
 
 CoGenerationHeatPump::CoGenerationHeatPump(double coGenThermalPower, double coGenElectricalEfficiency, double coGenThermalEfficiency, double coGenMinPartLoadCoefficient,
@@ -2867,10 +2244,10 @@ void SimpleStorage::writeTHResultsText(fstream& textFile, unsigned int i) {
 
 
 void ThermalStation::deleteDynAllocated() {
-    if (pump!=nullptr) { delete pump; }
-    if (ecs!=nullptr) { delete ecs; }
-    if (temperatureSetpoint!=nullptr) { delete temperatureSetpoint; }
-    if (pressureSetpoint!=nullptr) { delete pressureSetpoint; }
+    if (pump) { delete pump; }
+    for (size_t i=0;i<ecs.size();++i) { if (ecs[i]) delete ecs[i]; }
+    if (temperatureSetpoint) { delete temperatureSetpoint; }
+    if (pressureSetpoint) { delete pressureSetpoint; }
 }
 
 ThermalStation* ThermalStation::createNewThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr) {
@@ -2898,7 +2275,7 @@ ThermalStation* ThermalStation::createNewThermalStation(TiXmlHandle hdl, Network
     return newThermalStation;
 }
 
-ThermalStation::ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr) : pump(nullptr), ecs(nullptr), temperatureSetpoint(nullptr), pressureSetpoint(nullptr), logStream(std::cout.rdbuf()){ // pid(200, 100, 0.f, 0.5f),
+ThermalStation::ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr):logStream(std::cout.rdbuf()) {
     try {
         logStream.rdbuf(pLogStr->rdbuf()); // Add the logStream
 
@@ -2912,54 +2289,57 @@ ThermalStation::ThermalStation(TiXmlHandle hdl, Network* net, ostream* pLogStr) 
         if (node==nullptr) { throw string("Error in the XML file: a ThermalStation is trying to link to a ThermalStationNodePair id="+to_string(linkedNodeId)+" that has not been found in the DistrictEnergyCenter id="+to_string(net->getDEC()->getId())+"."); }
         node->setThermalStation(this);
 
-        if (hdl.FirstChildElement("Pump").ToElement()) {
-            pump = new Pump(hdl.FirstChildElement("Pump"));
-        } else {
-            throw string("Error in the XML file: a ThermalStation doesn't contain any Pump child element.");
+        // go through the children elements
+        TiXmlElement* elem = hdl.FirstChildElement().ToElement();
+        while (elem) {
+            // checks the name of the Element
+            cout << "Value: " << elem->ValueStr() << endl;
+            if (elem->ValueStr() == "TemperatureSetpoint") {
+                temperatureSetpoint = TemperatureSetpoint::createNewTemperatureSetpoint(hdl.FirstChildElement("TemperatureSetpoint")); // Dynamical allocation.
+            }
+            if (elem->ValueStr() == "PressureSetpoint") {
+                pressureSetpoint = PressureSetpoint::createNewPressureSetpoint(hdl.FirstChildElement("PressureSetpoint")); // Dynamical allocation.
+            }
+            if (elem->ValueStr() == "Pump") {
+                pump = new Pump(elem);
+            }
+            if (elem->ValueStr() == "Boiler") {
+                ecs.push_back(new Boiler(hdl.FirstChildElement("Boiler"),beginDay,endDay,&(logStream)));
+            }
+            if (elem->ValueStr() == "HeatPump") {
+                ecs.push_back(new HeatPump(hdl.FirstChildElement("HeatPump"),beginDay,endDay,&(logStream)));
+            }
+            if (elem->ValueStr() == "CHP") {
+                ecs.push_back(new CoGeneration(hdl.FirstChildElement("CHP"),beginDay,endDay,&(logStream)));
+            }
+            if (elem->ValueStr() == "CHP-HP") {
+                ecs.push_back(new CoGenerationHeatPump(hdl.FirstChildElement("CHP-HP"),beginDay,endDay,&(logStream)));
+            }
+            elem = elem->NextSiblingElement();
         }
-
-        // Load different possible types of EnergyConversionSystem.
-        bool ecsFound = false;
-        string errorMsg = "Error in the XML file: a DistrictEnergyCenter has a ThermalStation with multiple EnergyConversionSystems, there must be only one (eg only a boiler, not boiler and heat pump).";
-        if (hdl.FirstChildElement("Boiler").ToElement()) {
-            if ( ecsFound ) { delete ecs; throw errorMsg; }
-            ecsFound = true;
-            ecs = new Boiler(hdl.FirstChildElement("Boiler"),beginDay,endDay,&(logStream));
-        }
-        if (hdl.FirstChildElement("HeatPump").ToElement()) {
-            if ( ecsFound ) { delete ecs; throw errorMsg; }
-            ecsFound = true;
-            ecs = new HeatPump(hdl.FirstChildElement("HeatPump"),beginDay,endDay,&(logStream));
-        }
-        if (hdl.FirstChildElement("CHP").ToElement()) {
-            if ( ecsFound ) { delete ecs; throw errorMsg; }
-            ecsFound = true;
-            ecs = new CoGeneration(hdl.FirstChildElement("CHP"),beginDay,endDay,&(logStream));
-        }
-        if (hdl.FirstChildElement("CHP-HP").ToElement()) {
-            if ( ecsFound ) { delete ecs; throw errorMsg; }
-            ecsFound = true;
-            ecs = new CoGenerationHeatPump(hdl.FirstChildElement("CHP-HP"),beginDay,endDay,&(logStream));
-        }
-        if ( not ecsFound ) {
-            throw string("Error in the XML file: in a DistrictEnergyCenter, a ThermalStation, that doesn't contain any EnergyConversionSystem.");
-        }
-
-
-        if (hdl.FirstChildElement("TemperatureSetpoint").ToElement()) {
-            temperatureSetpoint = TemperatureSetpoint::createNewTemperatureSetpoint(hdl.FirstChildElement("TemperatureSetpoint")); // Dynamical allocation.
-        } else {
-            throw string("Error in the XML file: a ThermalStation doesn't contain any TemperatureSetpoint child element.");
-        }
-
-
-        if (hdl.FirstChildElement("PressureSetpoint").ToElement()) {
-            pressureSetpoint = PressureSetpoint::createNewPressureSetpoint(hdl.FirstChildElement("PressureSetpoint")); // Dynamical allocation.
-        } else {
-            throw string("Error in the XML file: a ThermalStation doesn't contain any PressureSetpoint child element.");
-        }
-
-    } catch (...) {
+        // check all elements are OK
+        if (!temperatureSetpoint)
+            throw string("Error in the XML file: a ThermalStation does not contain any TemperatureSetpoint child element.");
+        if (!pressureSetpoint)
+            throw string("Error in the XML file: a ThermalStation does not contain any PressureSetpoint child element.");
+        if (!pump)
+            throw string("Error in the XML file: a ThermalStation does not contain any Pump child element.");
+        if (ecs.empty())
+            throw string("Error in the XML file: in a DistrictEnergyCenter, a ThermalStation, that does not contain any EnergyConversionSystem.");
+#ifdef DEBUG
+    fstream textFile("thermalStationsECS.dat", ios::out|ios::binary|ios::trunc);
+    textFile << "Day\tHour\tLinkedNodeId\tTotalThermalPowerNeeded(W)\tTotalThermalPowerProvided(W)\tPumpPower(W)";
+    for (size_t i=0;i<ecs.size();i++)
+        textFile << "\tThermalPowerProvided(W)[" << i << "]\tFuelConsumption(J)[" << i << "]\tElectricConsumption(J)[" << i << "]";
+    textFile << endl;
+    textFile.close();
+#endif // DEBUG
+        // prepare the records for the thermalStationsECS flows
+        ecs_thermalPowerProvided.assign(ecs.size(),vector<float>());
+        ecs_fuelConsumption.assign(ecs.size(),vector<float>());
+        ecs_electricConsumption.assign(ecs.size(),vector<float>());
+    }
+    catch (...) {
         ThermalStation::deleteDynAllocated();
         throw;
     }
@@ -2971,20 +2351,18 @@ void ThermalStation::computeThermal(float pressureDiff, float massFlow, float rh
     float thermalPowerPump;
     pump->computeElectricAndThermalPower(pressureDiff, massFlow, rho, pumpPower, thermalPowerPump);
 
+    thermalPowerNeeded = 0.f;
     if (massFlow>0.f) {
         // Energy conversion system
         float targetTemp = temperatureSetpoint->computeTargetTemperature(pClimate, day, hour);
         float totalThermalPowerNeeded = cp*massFlow*(targetTemp - inputTemp);
         thermalPowerNeeded = totalThermalPowerNeeded - thermalPowerPump; // Pump preheats the fluid. We can end up in situation where the thermal station usually heats the fluid, but the pump friction heats more than the target temperature, meaning that we ask the boiler for a negative power...
     }
-    else {
-        thermalPowerNeeded = 0.f;
-    }
 
-    computeThermalPowerProvided(thermalPowerNeeded, pClimate, day, hour);
+    computeThermalPowerProvided(pClimate, day, hour);
 
     if (massFlow!=0.f) {
-        float deltaT = (thermalPowerProvided+thermalPowerPump) / (cp * abs(massFlow));
+        float deltaT = (getThermalPowerProvided()+thermalPowerPump) / (cp * abs(massFlow));
         outputTemperature = inputTemp + deltaT;
     } // Else the output temperature is not changed. (this avoids division by zero)
 }
@@ -3018,31 +2396,50 @@ void ThermalStation::errorPressureDiff(float const& massFlow, float const& press
 
 
 void ThermalStation::setMachinePower_FuelConsumption_ElectricConsumption(Climate* pClim, unsigned int day, unsigned int hour) {
-    // TODO, improve this, make the heatpump be able to access the temperature on its own.
-    // the heatPumpSrcTemp depends on the type of heatpump (air or ground vertical/horizontal)
-    double heatPumpSrcTemp = pClim->getToutCelsius(day,hour); // air temperature
-    float z0=0.f,z1=0.f,alpha=0.f;
-    if ( ecs->getGround(z0,z1,alpha) ) {
-        heatPumpSrcTemp = pClim->getTgroundCelsius(day,hour,z0,alpha,z1);
+
+#ifdef DEBUG
+    fstream textFile("thermalStationsECS.dat", ios::out|ios::binary|ios::app);
+    textFile << day << "\t" << hour << "\t" << this->getLinkedNodeId() << "\t" << thermalPowerNeeded << "\t" << getThermalPowerProvided() << "\t" << pumpPower;
+#endif // DEBUG
+
+    // go through all the ECS to add their fuel and electric consumptions
+    float fuelConsumption, electricConsumption;
+    for (size_t i=0;i<ecs.size();++i) {
+        float heatPumpSrcTemp = ecs[i]->getSourceTemperature(pClim,day,hour);
+        fuelConsumption = ecs[i]->getFuelConsumption(double (Model::dt), thermalPowerProvided[i], heatPumpSrcTemp);
+        electricConsumption = ecs[i]->getElectricConsumption(double (Model::dt), thermalPowerProvided[i], heatPumpSrcTemp);
+#ifdef DEBUG
+        textFile << "\t" << thermalPowerProvided[i]
+                         << "\t" << fuelConsumption
+                         << "\t" << electricConsumption;
+#endif // DEBUG
+        // save the flows for the records
+        ecs_thermalPowerProvided[i].push_back(thermalPowerProvided[i]);
+        ecs_fuelConsumption[i].push_back(fuelConsumption);
+        ecs_electricConsumption[i].push_back(electricConsumption);
     }
-    setMachinePower(getThermalPowerProvided());
-    setFuelConsumption( ecs->getFuelConsumption(double (Model::dt), getThermalPowerProvided(), heatPumpSrcTemp) );
-    setElectricConsumption( ecs->getElectricConsumption(double (Model::dt), getThermalPowerProvided(), heatPumpSrcTemp) + pumpPower*double (Model::dt) );
+
+#ifdef DEBUG
+    textFile << endl;
+#endif // DEBUG
+
 }
 
-void ThermalStation::computeThermalPowerProvided(float const& thermalPowerNeeded, Climate* pClimate, unsigned int day, unsigned int hour) {
+void ThermalStation::computeThermalPowerProvided(Climate* pClimate, unsigned int day, unsigned int hour) {
 
-    ecs->setThermalPowerNeeded(thermalPowerNeeded);
-
-    // TODO, improve this, make the heatpump be able to access the temperature on its own.
-    // the heatPumpSrcTemp depends on the type of heatpump (air or ground vertical/horizontal)
-    float heatPumpSrcTemp = pClimate->getToutCelsius(day,hour); // air temperature
-    float z0=0.f,z1=0.f,alpha=0.f;
-    if (ecs->getGround(z0,z1,alpha)) {
-        heatPumpSrcTemp = pClimate->getTgroundCelsius(day,hour,z0,alpha,z1);
+    // evaluate the total thermal power that can be provided by the diverse ECS
+    thermalPowerProvided.assign(ecs.size(),0.f);
+    for (size_t i=0;i<ecs.size();++i) {
+        ecs[i]->setThermalPowerNeeded(thermalPowerNeeded - getThermalPowerProvided());
+        // gets the source temperature for the heatsource
+        float heatPumpSrcTemp = ecs[i]->getSourceTemperature(pClimate,day,hour);
+        // adds the thermal power provided by this ECS to the total thermal power provided by the ThermalStation
+        if (ecs[i]->isWorking(day))
+            thermalPowerProvided[i] = ecs[i]->getThermalPower(heatPumpSrcTemp);
+        else
+            thermalPowerProvided[i] = 0.f;
     }
 
-    thermalPowerProvided = ecs->getThermalPower(heatPumpSrcTemp);
 }
 
 void ThermalStation::writeTHHeaderText(fstream& textFile, string prefix) {
@@ -3050,6 +2447,13 @@ void ThermalStation::writeTHHeaderText(fstream& textFile, string prefix) {
              << prefix <<":PumpPower(W)" <<"\t"
              << prefix <<":FuelConsumption(J)" <<"\t"
              << prefix <<":ElectricConsumption(J)" <<"\t";
+    if (ecs.size() > 1) {
+        for (size_t j=0;j<ecs.size();++j) {
+            textFile << prefix << ":MachinePower[" << j << "](W)" << "\t"
+                     << prefix << ":FuelConsumption[" << j << "](J)" << "\t"
+                     << prefix << ":ElectricConsumption[" << j << "](J)" << "\t";
+        }
+    }
 }
 
 void ThermalStation::writeTHResultsText(fstream& textFile, unsigned int i) {
@@ -3057,6 +2461,13 @@ void ThermalStation::writeTHResultsText(fstream& textFile, unsigned int i) {
     textFile << fixed << setprecision(2) << getPumpPower(i) <<"\t";
     textFile << fixed << setprecision(0) << getFuelConsumption(i)<<"\t";
     textFile << fixed << setprecision(0) << getElectricConsumption(i)<<"\t";
+    if (ecs.size() > 1) {
+        for (size_t j=0;j<ecs.size();++j) {
+            textFile << fixed << setprecision(0) << ecs_thermalPowerProvided[j].at(i) << "\t"
+                     << fixed << setprecision(0) << ecs_fuelConsumption[j].at(i) << "\t"
+                     << fixed << setprecision(0) << ecs_electricConsumption[j].at(i) << "\t";
+        }
+    }
 }
 
 ThermalStationSlave::ThermalStationSlave(TiXmlHandle hdl, Network* net, ostream* pLogStr): ThermalStation(hdl,net,pLogStr), desiredMassFlow(0.f),  valve(nullptr), Targetkv(0.f), ImposedValve(true), currentStage(0.f), timeClock(0){
@@ -3163,7 +2574,8 @@ void ThermalStationSlave::setDesiredMassFlow(float rho, float cp, double sourceT
     float pumpTempIncrease = thermalPow/desiredMassFlow/cp;
     valve->computePressureDiffAndDerivative(desiredMassFlow, rho, pressureDiffValve, dPressureDiffValve);
     float valveTempIncrease = valve->computeTemperatureIncrease(pressureDiffValve, cp, rho);*/
-    desiredMassFlow=currentStage*ecs->getThermalPowerMax(sourceTemp)/(cp*(targetTemp-node->getReturnTemperature()/*-valveTempIncrease-pumpTempIncrease));*/)-pump->cpdT(node->getPressureDiff(), rho, desiredMassFlow))-0.00001; // In order to compute the efficiency of the pump, we take the previous desiredmassflow. Maybe not the best idea.
+    /// NOTE: the thermal station slave can have only one ECS which is ecs[0]
+    desiredMassFlow=currentStage*ecs[0]->getThermalPowerMax(sourceTemp)/(cp*(targetTemp-node->getReturnTemperature()/*-valveTempIncrease-pumpTempIncrease));*/)-pump->cpdT(node->getPressureDiff(), rho, desiredMassFlow))-0.00001; // In order to compute the efficiency of the pump, we take the previous desiredmassflow. Maybe not the best idea.
 }
 
 void ThermalStationSlave::updateStage(float const& totalThermalPowerNeeded, float const& totalThermalPowerMax, float prevCurrentStage, bool prevSlaveShutDown, float rho, float cp, float sourceTemp, Climate* pClimate, unsigned int day, unsigned int hour){ // In reality, it could be defined in the class ThermalStationSlave.
@@ -3175,7 +2587,8 @@ void ThermalStationSlave::updateStage(float const& totalThermalPowerNeeded, floa
             underStage = rampingStages[i-1];
         }
     }
-    float desiredStage = (totalThermalPowerNeeded-totalThermalPowerMax)/ecs->getThermalPowerMax(sourceTemp);
+    /// NOTE: the thermal station slave can have only one ECS which is ecs[0]
+    float desiredStage = (totalThermalPowerNeeded-totalThermalPowerMax)/ecs[0]->getThermalPowerMax(sourceTemp);
     if(desiredStage>currentStage){
         for(size_t i=0;i<rampingStages.size()-1;++i){
             if(rampingStages[i]==prevCurrentStage){
@@ -3269,8 +2682,8 @@ void SeasonalStorageHeatingThermalStation::computeThermal(float pressureDiff, fl
         float temperatureIncreaseValve = abs(valve->computeTemperatureIncrease(-pressureDiff, cp, rho));
         float tempAfterValve = inputTemp + temperatureIncreaseValve;
 
-        float thermalPowerEcsNeeded = 0.f;
-        computeThermalPowerProvided(thermalPowerEcsNeeded, pClimate, day, hour);
+        thermalPowerNeeded = 0.f;
+        computeThermalPowerProvided(pClimate, day, hour);
 
         if (massFlow>=0.f) { // Wrong direction.
             outputTemperature = tempAfterValve;
@@ -3286,7 +2699,6 @@ void SeasonalStorageHeatingThermalStation::computeThermal(float pressureDiff, fl
 
     }
     else { // Not storaging, heat the fluid to target temperature.
-        float thermalPowerEcsNeeded;
 
         float thermalPowerPump;
         pump->computeElectricAndThermalPower(pressureDiff, massFlow, rho, pumpPower, thermalPowerPump);
@@ -3295,31 +2707,31 @@ void SeasonalStorageHeatingThermalStation::computeThermal(float pressureDiff, fl
 
         if (massFlow<=0.f) { // Wrong direction;
             tempAfterStorage = tempAfterPump;
-            thermalPowerEcsNeeded = 0.f;
+            thermalPowerNeeded = 0.f;
         }
         else { // Correct direction.
             float targetTemp = temperatureSetpoint->computeTargetTemperature(pClimate, day, hour);
             if (tempAfterPump>=targetTemp) { // Target temperature already exceeded.
                 tempAfterStorage = tempAfterPump;
-                thermalPowerEcsNeeded = 0.f;
+                thermalPowerNeeded = 0.f;
             } else { // Still need to heat up.
                 bool storageHeatsUp = false; // Here we take heat from storage, so we cool down the storage.
                 tempAfterStorage = storage->computeOutputTemperature(storageHeatsUp, tempAfterPump, massFlow, cp);
                 if (tempAfterStorage>targetTemp) {
                     tempAfterStorage = targetTemp;
-                    thermalPowerEcsNeeded = 0.f;
+                    thermalPowerNeeded = 0.f;
                 } else {
-                    thermalPowerEcsNeeded = cp*massFlow*(targetTemp - tempAfterStorage);
+                    thermalPowerNeeded = cp*massFlow*(targetTemp - tempAfterStorage);
                 }
             }
         }
         tempDiffAroundStorage = tempAfterStorage - tempAfterPump;
 
-        computeThermalPowerProvided(thermalPowerEcsNeeded, pClimate, day, hour);
+        computeThermalPowerProvided(pClimate, day, hour);
 
 
         if (massFlow!=0.f) {
-            outputTemperature = tempAfterStorage + thermalPowerProvided / (cp * abs(massFlow));
+            outputTemperature = tempAfterStorage + getThermalPowerProvided() / (cp * abs(massFlow));
         } // Else don't change the temperature.
     }
 }
@@ -3416,11 +2828,7 @@ MCR::MCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations){
 }
 
 void MCR::getSourceTemp(double& sourceTemp, Climate* pClimate, EnergyConversionSystem* ecs, unsigned int day, unsigned int hour){
-    sourceTemp = pClimate->getToutCelsius(day,hour); // air temperature
-    float z0=0.f,z1=0.f,alpha=0.f;
-    if (ecs->getGround(z0,z1,alpha)) {
-        sourceTemp = pClimate->getTgroundCelsius(day,hour,z0,alpha,z1);
-    }
+    sourceTemp = ecs->getSourceTemperature(pClimate,day,hour);
 }
 
 /*void MCR::setDesiredMassFlowsAtZero(){
@@ -3438,6 +2846,7 @@ SimpleMCR::SimpleMCR(TiXmlHandle hdl, vector<ThermalStation*> thermalStations):M
 void SimpleMCR::MasterControlSlave(float rho, float cp, Climate* pClimate, unsigned int day, unsigned int hour, vector<float> prevCurrentStage){
     for(size_t index(1); index < thermalstations.size(); ++index){
         double heatPumpSrcTempMaster;
+        /// NOTE: the getEcs needs to be refined here
         getSourceTemp(heatPumpSrcTempMaster, pClimate, thermalstations[0]->getEcs(), day, hour);
         double heatPumpSrcTempSlave;
 
