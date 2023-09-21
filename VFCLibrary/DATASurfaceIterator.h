@@ -29,8 +29,8 @@ public:
 	DATASurfaceIterator end() const;
 
 	bool isAtEnd() const;
+
 protected:
-	DATASurfaceIterator& operator=(DATASurfaceIterator &A);
 
 	std::vector< DATASurface* >::const_iterator m_ptr;
 	const std::vector< DATASurface* >::const_iterator m_end;
@@ -44,10 +44,6 @@ public:
 									const std::vector< DATASurface* >::const_iterator &endpoint);
 
 	DATASurfaceBuildingIterator& operator++();
-
-
-private:
-	DATASurfaceBuildingIterator& operator=(DATASurfaceBuildingIterator &A);
 };
 
 #endif //_INC_DATASURFACEBUILDINGITERATOR_INCLUDED

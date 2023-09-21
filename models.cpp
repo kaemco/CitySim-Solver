@@ -1151,13 +1151,10 @@ void Model::HVAC_Control(Building* pBuilding, Climate* pClimate, unsigned int da
         //float DHW_Tmax = 0.f;
 
         // the heatPumpSrcTemp depends on the type of heatpump (air or ground vertical/horizontal)
-        double heatPumpSrcTemp = pClimate->getToutCelsius(day,hour); // air temperature
-        float z0=0.f,z1=0.f,alpha=0.f;
-        if ( pBuilding->getHeatingUnit() != NULL ) {
-            if ( pBuilding->getHeatingUnit()->getGround(z0,z1,alpha) ) {
-                heatPumpSrcTemp = pClimate->getTgroundCelsius(day,hour,z0,alpha,z1);
-                //cerr << "Heat Pump Src Temp: " << heatPumpSrcTemp << endl;
-            }
+        float heatPumpSrcTemp = numeric_limits<float>::quiet_NaN();
+        if (pBuilding->getHeatingUnit()) {
+            pBuilding->getHeatingUnit()->getSourceTemperature(pClimate,day,hour);
+            //cerr << "Heat Pump Src Temp: " << heatPumpSrcTemp << endl;
         }
 
         double HS_Pp = 0.;//, DHW_Pp = 0.;
@@ -1486,13 +1483,10 @@ void Model::noHVAC_Control(Building* pBuilding, Climate* pClimate, unsigned int 
     // heating with heatTank
 
     // the heatPumpSrcTemp depends on the type of heatpump (air or ground vertical/horizontal)
-    double heatPumpSrcTemp = pClimate->getToutCelsius(day,hour); // air temperature
-    float z0=0.f,z1=0.f,alpha=0.f;
-    if ( pBuilding->getHeatingUnit() != NULL ) {
-        if ( pBuilding->getHeatingUnit()->getGround(z0,z1,alpha) ) {
-            heatPumpSrcTemp = pClimate->getTgroundCelsius(day,hour,z0,alpha,z1);
-            //cerr << "Heat Pump Src Temp: " << heatPumpSrcTemp << endl;
-        }
+    float heatPumpSrcTemp = numeric_limits<float>::quiet_NaN();
+    if (pBuilding->getHeatingUnit()) {
+        heatPumpSrcTemp = pBuilding->getHeatingUnit()->getSourceTemperature(pClimate,day,hour);
+        //cerr << "Heat Pump Src Temp: " << heatPumpSrcTemp << endl;
     }
 
     // lets start with the heat stock, we compute the temperature after the time step, no losses of fluid from the tank, solar energy provided, heating needs extracted
@@ -1752,15 +1746,11 @@ double Model::computeSolarThermalPower(Building* pBui, Climate* pClimate, unsign
     return heatingPower;
 }
 
-double Model::computeHeatPumpSrcTemp(EnergyConversionSystem* pECS, Climate* pClimate, unsigned int day, unsigned int hour) {
+float Model::computeHeatPumpSrcTemp(EnergyConversionSystem* pECS, Climate* pClimate, unsigned int day, unsigned int hour) {
     // Temperatures for heatpumps, the heatPumpSrcTemp depends on the type of heatpump (air or ground vertical/horizontal).
-    double heatPumpSrcTemp;
-    float z0=0.f,z1=0.f,alpha=0.f;
-    if ( (pECS != NULL)  &&  pECS->getGround(z0,z1,alpha) ) {
-        heatPumpSrcTemp = pClimate->getTgroundCelsius(day,hour,z0,alpha,z1); // Ground temperature.
-    } else {
-        heatPumpSrcTemp = pClimate->getToutCelsius(day,hour); // Air temperature.
-    }
+    float heatPumpSrcTemp=numeric_limits<float>::quiet_NaN();
+    if (pECS)
+        heatPumpSrcTemp = pECS->getSourceTemperature(pClimate,day,hour);
     return heatPumpSrcTemp;
 }
 

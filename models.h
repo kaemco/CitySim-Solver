@@ -108,7 +108,7 @@ public :
      * @param day Day of the year
      * @param hour Hour of the day
      */
-    static double computeHeatPumpSrcTemp(EnergyConversionSystem* pECS, Climate* pClimate, unsigned int day, unsigned int hour);
+    static float computeHeatPumpSrcTemp(EnergyConversionSystem* pECS, Climate* pClimate, unsigned int day, unsigned int hour);
 
     /**
      * Sums up the electric production of PV panels (from roofs, walls and surfaces), and the wind electric prower (from roofs). Then adds "minus" the produced energy to the electric consumption. (Be careful to setElectricConsumption to zero beforehand (normally done in Model::ThermalStepImplicit).)

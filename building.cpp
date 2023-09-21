@@ -877,6 +877,7 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
                 occupants = new Occupants(0.f);
             }
 
+            try {
             // need to check the consistency of this zone, to define its type (1N, 2N, 3N or even 4N)
             if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")
                 && hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("detailedSimulation")==string("true"))
@@ -889,6 +890,8 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
                 zones.push_back(new Zone3N(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
             else
                 zones.push_back(new Zone4N(zoneId,this,groundFloor,zoneVolume,zoneWalls,zoneRoofs,zoneSurfaces,zoneFloors,occupants));
+            }
+            catch(string msg) { throw(msg); }
 
             // adds the thermal bridges to the zone if they exist
             if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("psi")) {
