@@ -730,7 +730,7 @@ public:
             dayProfiles.insert(pair<unsigned int, DayProfile*>(d->getId(),d));
             ++i;
         }
-        logStream << "Temperature DAY profiles: " << dayProfiles.size()-1 << " loaded." << endl;
+        logStream << "Temperature DAY profiles: " << dayProfiles.size() << " loaded." << endl;
 
         logStream << "Loading temperature YEAR profiles" << endl << flush;
 
@@ -741,7 +741,7 @@ public:
             yearProfiles.insert(pair<unsigned int, YearProfile*>(y->getId(),y));
             ++i;
         }
-        logStream << "Occupancy YEAR profiles: " << yearProfiles.size()-1 << " loaded." << endl;
+        logStream << "Temperature YEAR profiles: " << yearProfiles.size() << " loaded." << endl;
     }
 
     ~TemperatureProfiles() {
