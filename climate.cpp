@@ -76,7 +76,7 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
         getline(input,buffer,',');
         altitude = stof(buffer);
         //cerr<<"Altitude: "<<altitude<<endl << flush;
-        if(altitude < 0.f) throw(string("Climate file : wrong format altitude (m above sea level)"));
+        if(altitude < -420.f) throw(string("Climate file : wrong format altitude (m above sea level)")); // -420 m shores of the Dead Sea
 
         getline(input,buffer,'\n');
         meridianE = stoi(buffer);
