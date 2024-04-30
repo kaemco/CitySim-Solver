@@ -4401,7 +4401,7 @@ void XmlScene::writeTHHeaderText(string fileOut) {
         textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):MachinePower(W)" << "\t"
                  << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):FuelConsumption(MJ)" << "\t"
                  << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):ElectricConsumption(kWh)" << "\t"
-                 << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):SolarPVProduction(kWh)" << "\t"
+                 << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):SolarPVProduction(Wh)" << "\t"
                  << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):SolarThermalProduction(Wh)" << "\t";
     }
     textFile << endl;
@@ -4466,7 +4466,7 @@ void XmlScene::writeTHResultsText(string fileOut) {
             textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getMachinePower(i+simulationIndex) << "\t"
                      << fixed << setprecision(3) << pDistrict->getBuilding(j)->getFuelConsumption(i-preTimeStepsSimulated+simulationIndex)/1.e6 << "\t"
                      << fixed << setprecision(3) << pDistrict->getBuilding(j)->getElectricConsumption(i-preTimeStepsSimulated+simulationIndex)/3.6e6 << "\t"
-                     << fixed << setprecision(0) << pDistrict->getBuilding(j)->getSolarPVProduction(i-preTimeStepsSimulated+simulationIndex)/3.6e6 << "\t"
+                     << fixed << setprecision(0) << pDistrict->getBuilding(j)->getSolarPVProduction(i-preTimeStepsSimulated+simulationIndex)/3.6e3 << "\t"
                      << fixed << setprecision(0) << pDistrict->getBuilding(j)->getSolarThermalProduction(i-preTimeStepsSimulated+simulationIndex)/3.6e3 << "\t";
 
         }
@@ -4853,7 +4853,7 @@ void XmlScene::writeYearlyResultsPerBuildingText(string fileOut) {
     fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::app);
 
     // write the header
-    textFile << "#buildingId(key)\theatingNeeds(Wh)\tcoolingNeeds(Wh)" << endl;
+    textFile << "#buildingId(key)\theatingSatisfied(kWh)\tcoolingSatisfied(kWh)\tsolarPVProduction(kWh)\tsolarThermalProduction(kWh)" << endl;
 
     // loop on the number of buildings
     for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
@@ -4866,7 +4866,9 @@ void XmlScene::writeYearlyResultsPerBuildingText(string fileOut) {
         }
         textFile << pDistrict->getBuilding(j)->getId()
                  << "(" << pDistrict->getBuilding(j)->getKey() << "):"
-                 << "\t" << heating << "\t" << cooling << endl;
+                 << "\t" << heating/1000. << "\t" << cooling/1000.
+                 << "\t" << pDistrict->getBuilding(j)->getTotalSolarPVProduction()/3600./1000.
+                 << "\t" << pDistrict->getBuilding(j)->getTotalSolarThermalProduction()/3600./1000. << endl;
     }
     textFile.close();
 
