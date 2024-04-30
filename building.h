@@ -243,7 +243,7 @@ public:
     float getSolarPVProduction(unsigned int day, unsigned int hour) { return solarPVProduction.at((day-1)*24 + hour -1); }
     void eraseSolarPVProduction() { solarPVProduction.erase(solarPVProduction.begin(),solarPVProduction.end()); }
     void eraseSolarPVProduction_back() { solarPVProduction.pop_back(); }
-    float getTotalSolarPVProduction() { return accumulate(solarPVProduction.begin(),solarPVProduction.end(),0.f); }
+    float getTotalSolarPVProduction() { return accumulate(solarPVProduction.begin(),solarPVProduction.end(),0.f); } // in joules
     // Solar Thermal
     void setSolarThermalProduction(float joules) { solarThermalProduction.push_back(joules); }
     float getSolarThermalProduction(unsigned int step) { return solarThermalProduction.at(step); }
@@ -251,7 +251,7 @@ public:
     float getSolarThermalProduction(unsigned int day, unsigned int hour) { return solarThermalProduction.at((day-1)*24 + hour -1); }
     void eraseSolarThermalProduction() { solarThermalProduction.erase(solarThermalProduction.begin(),solarThermalProduction.end()); }
     void eraseSolarThermalProduction_back() { solarThermalProduction.pop_back(); }
-    float getTotalSolarThermalProduction() { return accumulate(solarThermalProduction.begin(),solarThermalProduction.end(),0.f); }
+    float getTotalSolarThermalProduction() { return accumulate(solarThermalProduction.begin(),solarThermalProduction.end(),0.f); } // in joules
     bool getHasSolarThermal(); // Added by Max
     void computeHasSolarThermal();//Added by Max
     // Fuel Consumption
