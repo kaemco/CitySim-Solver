@@ -12,12 +12,6 @@ import os
 SIMULATIONS_DIR = "../simulations"
 case = "600"
 
-def compare(values1, values2):
-    """Compare different arrays"""
-    results = {}
-    results["sumdiff"] = ((values1.sum()-values2.sum())/values2.sum()) * 100
-    return results
-
 # This is the case we want to test
 results = pd.read_csv(os.path.join(SIMULATIONS_DIR,case,"{}_TH.out".format(case)),
                       delim_whitespace=True,index_col=0)
@@ -50,8 +44,7 @@ if not besttest[case]["peak_heating_min"] < heating.max().values[0] < besttest[c
 if not besttest[case]["peak_cooling_min"] < cooling.max().values[0] < besttest[case]["peak_cooling_max"]:
     raise ValueError("Peak cooling is outside the BESTTEST range")
     
-if not (reference == results).all().all():
-    raise ValueError("Results are different than the reference values")
+pd.testing.assert_frame_equal(reference, results, atol=0.002)
     
 print("All checks passed!")
     

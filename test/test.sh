@@ -1,5 +1,7 @@
 ﻿#!/bin/bash
 
+set -e
+
 echo 'Running simulations...'
 cd simulations
 bash ./run.sh
