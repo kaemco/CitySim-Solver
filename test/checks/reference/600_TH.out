@@ -1,4 +1,4 @@
-#timeStep	16(2):1:Ta(celsius)	16(2):1:Heating(Wh)	16(2):1:Cooling(Wh)	16(2):1:Qi(Wh)	16(2):1:Qs(Wh)	16(2):1:VdotVent(m³/h)	16(2):HeatStockTemperature(celsius)	16(2):ColdStockTemperature(celsius)	16(2):MachinePower(W)	16(2):FuelConsumption(MJ)	16(2):ElectricConsumption(kWh)	16(2):SolarPVProduction(kWh)	16(2):SolarThermalProduction(Wh)	
+#timeStep	16(2):1:Ta(celsius)	16(2):1:Heating(Wh)	16(2):1:Cooling(Wh)	16(2):1:Qi(Wh)	16(2):1:Qs(Wh)	16(2):1:VdotVent(m³/h)	16(2):HeatStockTemperature(celsius)	16(2):ColdStockTemperature(celsius)	16(2):MachinePower(W)	16(2):FuelConsumption(MJ)	16(2):ElectricConsumption(kWh)	16(2):SolarPVProduction(Wh)	16(2):SolarThermalProduction(Wh)	
 1	20.0	1363	0	200	1363	0.0	35.0	18.0	1703	6.131	0.000	0	0	
 2	20.0	1518	0	200	1518	0.0	35.0	18.0	1858	6.689	0.000	0	0	
 3	20.0	1596	0	200	1596	0.0	35.0	18.0	1936	6.969	0.000	0	0	
