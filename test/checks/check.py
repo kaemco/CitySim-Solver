@@ -14,11 +14,11 @@ case = "600"
 
 # This is the case we want to test
 results = pd.read_csv(os.path.join(SIMULATIONS_DIR,case,"{}_TH.out".format(case)),
-                      delim_whitespace=True,index_col=0)
+                      sep='\s+',index_col=0)
 
 # These are pre-computed reference results
 reference = pd.read_csv(os.path.join("reference","{}_TH.out".format(case)),
-                      delim_whitespace=True,index_col=0)
+                      sep='\s+',index_col=0)
 
 
 # These are reference results pre-computed from BESTEST
