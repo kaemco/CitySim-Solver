@@ -3442,6 +3442,19 @@ void XmlScene::terminateThermal_EnergyPlus() {
 }
 #endif
 
+void XmlScene::computeComfort(unsigned int day, unsigned int hour) {
+
+    #pragma omp parallel for schedule(dynamic)
+    for (unsigned int i=0;i<pDistrict->getnBuildings();++i) {
+        // forgets about the buildings that are not MRT (goes at the end of the for statement)
+        if (!pDistrict->getBuilding(i)->isMRT()) continue;
+        // calls the model to compute the comfort indices
+        Model::computeCMIndices(pDistrict->getBuilding(i),pClimate,day,hour);
+    }
+
+    return;
+}
+
 void XmlScene::simulate() {
 
     // initialises the Far Field obstructions vector
@@ -3611,6 +3624,8 @@ void XmlScene::simulateTimeStep(int day, int hour, bool preCond, bool radOnly, b
         //logStream << "computeLongWave" << endl;
         computeLongWave(day,hour);
     }
+
+    computeComfort(day,hour);
 
     if (preCond){
         ++preTimeStepsSimulated;
@@ -3796,12 +3811,18 @@ void XmlScene::eraseResults(unsigned int keepValue, bool eraseAllResults) {
             pDistrict->getBuilding(j)->eraseElectricConsumption(); // DP: Probably not necessary for MEU
             pDistrict->getBuilding(j)->eraseSolarPVProduction();
             pDistrict->getBuilding(j)->eraseSolarThermalProduction();
+            // deleting the results for the CM
+            pDistrict->getBuilding(j)->eraseMRT();
+            pDistrict->getBuilding(j)->eraseCOMFA();
+            pDistrict->getBuilding(j)->eraseITS();
+            pDistrict->getBuilding(j)->eraseUTCI();
         }
 
         for (unsigned int zone=0; zone<pDistrict->getBuilding(j)->getnZones();++zone) {
 
             // deleting the results for the TH
             pDistrict->getBuilding(j)->getZone(zone)->eraseT(keepValue);
+            pDistrict->getBuilding(j)->getZone(zone)->eraseKe(keepValue);
             // the two following elements do not erase the results if not in preSimulation
             if(eraseAllResults){ // && keepValue???
                 pDistrict->getBuilding(j)->getZone(zone)->eraseHeating();
@@ -4730,9 +4751,10 @@ void XmlScene::writeCMHeaderText(string fileOut) {
     textFile << "#";
     for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
             if (!pDistrict->getBuilding(j)->isMRT()) continue; // forgets about the buildings that are not MRT (goes at the end of the for statement)
-            textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":MRT(°C)\t"
+            textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":MRT(celsius)\t"
                      << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":COMFA*(W/m²)\t"
-                     << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":ITS(W)\t";
+                     << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":ITS(W)\t"
+                     << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":UTCI(celsius)\t";
     }
 
     textFile << endl;
@@ -4746,21 +4768,16 @@ void XmlScene::writeCMResultsText(string fileOut) {
     fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::app);
     if (!textFile.is_open()) throw(string("Cannot open file: ")+fileOut);
 
-    // variables used
-    float MRT, COMFA, ITS;
-
     // loop on the number of time steps
-    for (unsigned int i=preTimeStepsSimulated; i<preTimeStepsSimulated+timeStepsSimulated; ++i) {
+    for (unsigned int i=simulationIndex; i<simulationIndex+timeStepsSimulated; ++i) {
         // loop on the number of buildings
         for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
             if (!pDistrict->getBuilding(j)->isMRT()) continue; // forgets about the buildings that are not MRT (goes at the end of the for statement)
 
-            // calls the model to compute the comfort indices
-            Model::computeCMIndices(pClimate,pDistrict->getBuilding(j),i,preTimeStepsSimulated,MRT,COMFA,ITS);
-
-            textFile << MRT << "\t";
-            textFile << COMFA << "\t";
-            textFile << ITS << "\t";
+            textFile << pDistrict->getBuilding(j)->getMRT(i) << "\t";
+            textFile << pDistrict->getBuilding(j)->getCOMFA(i) << "\t";
+            textFile << pDistrict->getBuilding(j)->getITS(i) << "\t";
+            textFile << pDistrict->getBuilding(j)->getUTCI(i) << "\t";
 
         }
         textFile << endl;
@@ -4853,7 +4870,8 @@ void XmlScene::writeYearlyResultsPerBuildingText(string fileOut) {
     fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::app);
 
     // write the header
-    textFile << "#buildingId(key)\theatingSatisfied(kWh)\tcoolingSatisfied(kWh)\tsolarPVProduction(kWh)\tsolarThermalProduction(kWh)" << endl;
+    textFile << "#buildingId(key)\theatingSatisfied(kWh)\tcoolingSatisfied(kWh)\tsolarPVProduction(kWh)\tsolarThermalProduction(kWh)"
+             << "\tMRT(celsius)\tITS(h)\tCOMFA(h)\tUTCI(h)" << endl;
 
     // loop on the number of buildings
     for (unsigned int j=0; j<pDistrict->getnBuildings(); ++j) {
@@ -4868,7 +4886,15 @@ void XmlScene::writeYearlyResultsPerBuildingText(string fileOut) {
                  << "(" << pDistrict->getBuilding(j)->getKey() << "):"
                  << "\t" << heating/1000. << "\t" << cooling/1000.
                  << "\t" << pDistrict->getBuilding(j)->getTotalSolarPVProduction()/3600./1000.
-                 << "\t" << pDistrict->getBuilding(j)->getTotalSolarThermalProduction()/3600./1000. << endl;
+                 << "\t" << pDistrict->getBuilding(j)->getTotalSolarThermalProduction()/3600./1000.;
+        // MRT and other CM indicators
+        if (pDistrict->getBuilding(j)->isMRT()) {
+            textFile << "\t" << pDistrict->getBuilding(j)->getMRTaverage()
+                     << "\t" << pDistrict->getBuilding(j)->getITScount()
+                     << "\t" << pDistrict->getBuilding(j)->getCOMFAcount()
+                     << "\t" << pDistrict->getBuilding(j)->getUTCIcount() << endl;
+        }
+        else textFile << "\t" << "-" << "\t" << "-" << "\t" << "-" << "\t" << "-" << endl;
     }
     textFile.close();
 
@@ -5124,8 +5150,8 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     float gwp = 0.f;
     float ubp = 0.f;
     // MRT indicator
-    float mrt = 0.f, MRTcount=0.f;
-    float MRT, COMFA, ITS, COMFAcount=0.f, ITScount=0.f;
+    double mrt = 0.;
+    unsigned int MRTcount=0, COMFAcount=0, ITScount=0, UTCIcount=0;
     // KPI
     float totalThermalLoss = 0.f;
     float totalHeatingUnsatisfied = 0.f;
@@ -5147,25 +5173,18 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
         fuel += pDistrict->getBuilding(j)->getTotalFuelConsumption();
         electric += pDistrict->getBuilding(j)->getTotalElectricConsumption();
         pv += pDistrict->getBuilding(j)->getTotalSolarPVProduction();
-        // MRT indicator
-        for (unsigned int i=preTimeStepsSimulated; i<preTimeStepsSimulated+timeStepsSimulated; ++i) {
-            if (!pDistrict->getBuilding(j)->isMRT()) continue; // forgets about the buildings that are not MRT (goes at the end of the for statement)
-
-            // compute the comfort indices
-            Model::computeCMIndices(pClimate,pDistrict->getBuilding(j),i,preTimeStepsSimulated,MRT,COMFA,ITS);
-            // keep only the values between 8h and 18h
-            if  ( ((i-preTimeStepsSimulated)%24 >= 7) && ((i-preTimeStepsSimulated)%24 <= 17) ) {
-                // computes the average mrt for the defined hours
-                mrt += MRT;
-                MRTcount += 1.f;
-                // computes the number of hours of comfort for ITS
-                if (ITS > -160.f && ITS < 160.f)
-                    ITScount += 1.f;
-                // computes the number of hours of comfort for COMFA
-                if (COMFA > -50.f && COMFA < 50.f)
-                    COMFAcount += 1.f;
-
-            }
+        // MRT and other CM indicators
+        if (pDistrict->getBuilding(j)->isMRT()) {
+            // computes the average mrt
+            mrt += pDistrict->getBuilding(j)->getMRTaverage();
+            // computes the number of hours of comfort for ITS
+            ITScount += pDistrict->getBuilding(j)->getITScount();
+            // computes the number of hours of comfort for COMFA
+            COMFAcount += pDistrict->getBuilding(j)->getCOMFAcount();
+            // computes the number of hours of comfort for UTCI
+            UTCIcount += pDistrict->getBuilding(j)->getUTCIcount();
+            // increments the number of MRT individuals
+            MRTcount++;
         }
         // KPI
         totalHeatingUnsatisfied += pDistrict->getBuilding(j)->getHeatingDemandUnsatisfied();
@@ -5192,9 +5211,10 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     textFile << "NRE (MJ):\t" << nre << "\n";
     textFile << "GWP (kgCO2):\t" << gwp << "\n";
     textFile << "UBP (pts):\t" << ubp << endl;
-    textFile << "MRT (°C):\t" << mrt/MRTcount << endl;
-    textFile << "ITS (h):\t" << ITScount << endl;
-    textFile << "COMFA (h):\t" << COMFAcount << endl;
+    textFile << "MRT (°C):\t" << mrt/static_cast<double>(MRTcount) << endl;
+    textFile << "ITS (h):\t" << ITScount/MRTcount << endl;
+    textFile << "COMFA (h):\t" << COMFAcount/MRTcount << endl;
+    textFile << "UTCI (h):\t" << UTCIcount/MRTcount << endl;
     textFile << "DHNTotalThermalLosses (Wh):\t" << totalThermalLoss << endl; //Added by Max
     textFile << "DHNElectricPump (J):\t" << electricPump << endl; //Added by Max
 
@@ -5598,6 +5618,9 @@ size_t XmlScene::memoryUsage() {                    // DP: modified to take into
     // add for the buildings EMPTIED vectors of double (2x stockT)
     bytes += pDistrict->getnBuildings()*sizeof(double)*2*(timeStepsSimulated+preTimeStepsSimulated);
     for (size_t buildingIndex=0; buildingIndex<pDistrict->getnBuildings(); ++buildingIndex) {
+        // add for the buildings NOT EMPTIED vectors of float (MRT,COMFA,ITS,UTCI)
+        if (pDistrict->getBuilding(buildingIndex)->isMRT())
+            bytes += sizeof(float)*4*(timeStepsSimulated+preTimeStepsSimulated+simulationIndex);
         // for each zone sum of NOT EMPTIED vectors of double (heating, cooling)
         bytes += pDistrict->getBuilding(buildingIndex)->getnZones()*sizeof(double)*2*(timeStepsSimulated+preTimeStepsSimulated+simulationIndex);
         // for each zone sum of EMPTIED vectors of double (Qs)
