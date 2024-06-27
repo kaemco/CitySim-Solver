@@ -71,6 +71,7 @@ private:
     // mrt parameters
     bool mrt = false;
     float mrtEpsilon = 0.97f;
+    vector<float> MRT /*!< MRT (in celsius) */, COMFA /*!< COMFA* (in W/m^2) */, ITS /*!< ITS (in W) */, UTCI /*!< UTCI (in celsius) */;
 
     // Cognet: Start of added code.
     // Variables for computations at each time step. (HS = hot storage, DHW = domestic hot water, CS = cold storage).
@@ -274,6 +275,73 @@ public:
     void eraseMachinePower(unsigned int keepValue) { machinePower.erase(machinePower.begin(),machinePower.end()-min(keepValue,(unsigned int)machinePower.size())); } // DP: modified to keep MachinePower results (MEU webservice)
     void eraseMachinePower_back() { machinePower.pop_back(); }
     size_t sizeMachinePower() { return machinePower.size(); }
+
+    // Comfort related
+    void setMRT(float value) { MRT.push_back(value); }
+    float getMRT(unsigned int step) { return MRT.at(step); }
+    float getMRTaverage() {
+        // computes the average over all the time steps
+        double mrt = 0.;
+        unsigned int MRTcount = 0;
+        for (size_t i=0; i<MRT.size(); ++i) {
+            // keep only the values between 8h and 18h
+            if  ( ((i)%24 >= 7) && ((i)%24 <= 17) ) {
+                // computes the sum of the mrt for the defined hours MRTcount
+                mrt += MRT.at(i);
+                MRTcount++;
+            }
+        }
+        return mrt/static_cast<double>(MRTcount);
+    }
+    void eraseMRT() { MRT.erase(MRT.begin(),MRT.end()); }
+    // COMFA*
+    void setCOMFA(float value) { COMFA.push_back(value); }
+    float getCOMFA(unsigned int step) { return COMFA.at(step); }
+    unsigned int getCOMFAcount() {
+        // computes the average over all the time steps
+        unsigned int COMFAcount = 0;
+        for (size_t i=0; i<COMFA.size(); ++i) {
+            // keep only the values between 8h and 18h
+            if  ( ((i)%24 >= 7) && ((i)%24 <= 17) ) {
+                // computes the number of hours of comfort for COMFA
+                if (COMFA.at(i) > -50.f && COMFA.at(i) < 50.f) COMFAcount++;
+            }
+        }
+        return COMFAcount;
+    }
+    void eraseCOMFA() { COMFA.erase(COMFA.begin(),COMFA.end()); }
+    // ITS
+    void setITS(float value) { ITS.push_back(value); }
+    float getITS(unsigned int step) { return ITS.at(step); }
+    unsigned int getITScount() {
+        // computes the average over all the time steps
+        unsigned int ITScount = 0;
+        for (size_t i=0; i<ITS.size(); ++i) {
+            // keep only the values between 8h and 18h
+            if  ( ((i)%24 >= 7) && ((i)%24 <= 17) ) {
+                // computes the number of hours of comfort for ITS
+                if (ITS.at(i) > -160.f && ITS.at(i) < 160.f) ITScount++;
+            }
+        }
+        return ITScount;
+    }
+    void eraseITS() { ITS.erase(ITS.begin(),ITS.end()); }
+    // UTCI
+    void setUTCI(float value) { UTCI.push_back(value); }
+    float getUTCI(unsigned int step) { return UTCI.at(step); }
+    unsigned int getUTCIcount() {
+        // computes the average over all the time steps
+        unsigned int UTCIcount = 0;
+        for (size_t i=0; i<UTCI.size(); ++i) {
+            // keep only the values between 8h and 18h
+            if  ( ((i)%24 >= 7) && ((i)%24 <= 17) ) {
+                // computes the number of hours of comfort for ITS
+                if (UTCI.at(i) >= 18.f && UTCI.at(i) <= 26.f) UTCIcount++;
+            }
+        }
+        return UTCIcount;
+    }
+    void eraseUTCI() { UTCI.erase(UTCI.begin(),UTCI.end()); }
 
     // get the eco-indicators
     float getNRE() { return nre; }

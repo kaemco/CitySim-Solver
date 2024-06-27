@@ -183,7 +183,8 @@ public :
 
     static float lightsElectricConsumption(Zone* pZone);
 
-    static void computeCMIndices(Climate* pClimate, Building* pBuilding, unsigned int i, unsigned int preTimeStepsSimulated, float &MRT, float &COMFA, float &ITS);
+    static double es(double ta);
+    static void computeCMIndices(Building* pBuilding, Climate* pClimate, unsigned int day, unsigned int hour);
 
 };
 

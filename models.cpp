@@ -3394,9 +3394,43 @@ float Model::lightsElectricConsumption(Zone* pZone) {
 
 }
 
-void Model::computeCMIndices(Climate* pClimate, Building* pBuilding, unsigned int i, unsigned int preTimeStepsSimulated, float &MRT, float &COMFA, float &ITS) {
+// function to compute the saturation pressure of water in the air
+double Model::es(double ta) {
+	// Constants for the calculation
+	const std::array<double, 8> g = {
+		-2836.5744,
+		-6028.076559,
+		19.54263612,
+		-0.02737830188,
+		1.6261698e-5,
+		7.0229056e-10,
+		-1.8680009e-13,
+		2.7150305
+	};
 
-    // compute the MRT for the building pBuilding and the timestep i
+	// Convert air temperature to Kelvin
+	double tk = ta + 273.15;
+
+	// Calculate saturation vapor pressure
+	double es = g[7] * std::log(tk);
+	for (int i = 0; i <= 6; ++i) {
+		es += g[i] * std::pow(tk, i - 2);
+	}
+	es = std::exp(es) * 0.01; // Convert Pa to hPa
+	return es;
+}
+
+void Model::computeCMIndices(Building* pBuilding, Climate* pClimate, unsigned int day, unsigned int hour) {
+
+#ifdef DEBUG
+    fstream textFile("CM_indices.dat", ios::out|ios::binary|ios::app);
+#endif // DEBUG
+
+    // indicators to be computed
+    float MRT /*!< MRT (in celsius) */, COMFA /*!< COMFA* (in W/m^2) */, ITS /*!< ITS (in W) */, UTCI /*!< UTCI (in celsius) */;
+
+    // compute the MRT (in celsius) for the building pBuilding
+
     // variables used with the estimation of the MRT
     float totalArea = 0.f;
     float LWabsorbed = 0.f;
@@ -3406,52 +3440,59 @@ void Model::computeCMIndices(Climate* pClimate, Building* pBuilding, unsigned in
         for (unsigned int k=0; k<pBuilding->getZone(zone)->getnWalls(); ++k) {
             Wall* thisWall = pBuilding->getZone(zone)->getWall(k);
             totalArea += thisWall->getArea();
-            LWabsorbed += thisWall->getLongWaveAbsorbed(i) * thisWall->getArea();
-            SWabsorbed += thisWall->getShortWaveIrradiance(i) * (1.f - thisWall->getShortWaveReflectance()) * thisWall->getArea();
+            LWabsorbed += thisWall->getLongWaveAbsorbed() * thisWall->getArea();
+            SWabsorbed += thisWall->getShortWaveIrradiance() * (1.f - thisWall->getShortWaveReflectance()) * thisWall->getArea();
         }
         // loop on the roofs
         for (unsigned int k=0; k<pBuilding->getZone(zone)->getnRoofs(); ++k) {
             Roof* thisRoof = pBuilding->getZone(zone)->getRoof(k);
             totalArea += thisRoof->getArea();
-            LWabsorbed += thisRoof->getLongWaveAbsorbed(i) * thisRoof->getArea();
-            SWabsorbed += thisRoof->getShortWaveIrradiance(i) * (1.f - thisRoof->getShortWaveReflectance()) * thisRoof->getArea();
+            LWabsorbed += thisRoof->getLongWaveAbsorbed() * thisRoof->getArea();
+            SWabsorbed += thisRoof->getShortWaveIrradiance() * (1.f - thisRoof->getShortWaveReflectance()) * thisRoof->getArea();
         }
     } // end the loop on zones
     LWabsorbed /= totalArea;
     SWabsorbed /= totalArea;
+
+    // output of the MRT (in celsius)
     MRT = pow((LWabsorbed + SWabsorbed)/(pBuilding->getMRT_Epsilon()*5.670373e-8), 0.25f)-273.15f;
-    // Renolds Number and co.
-    float reynoldsNumber = 0.17*((pClimate->getWindSpeed(i-preTimeStepsSimulated)>0)?pClimate->getWindSpeed(i-preTimeStepsSimulated):0.01)/1.5e-5;
+    pBuilding->setMRT(MRT);
+
+#ifdef DEBUG
+    textFile << day << "\t" << hour << "\t" << pBuilding->getId() << "\t" << LWabsorbed << "\t" << SWabsorbed << "\t" << totalArea << "\t" << MRT << "\t";
+#endif // DEBUG
+
+    // calculation of the COMFA* (in W/m2)
+    float reynoldsNumber = 0.17*((pClimate->getWindSpeed(day,hour)>0)?pClimate->getWindSpeed(day,hour):0.01)/1.5e-5;
     float re_A = (reynoldsNumber<4000.)?0.683:((reynoldsNumber<40000.)?0.193:0.0266);
     float re_n = (reynoldsNumber<4000.)?0.466:((reynoldsNumber<40000.)?0.618:0.805);
-    // output of the COMFA* (in W/m^2)
 
     // Metabolic
     float metabolicActivity = 70.f;
     float walkingSpeed =0.0052*(metabolicActivity-58);
-    float M = (1.-(0.15-0.0173*pClimate->getVapourPressure(i-preTimeStepsSimulated)-0.0014*pClimate->getToutCelsius(i-preTimeStepsSimulated)))*metabolicActivity; // activité métabolique 70 W/m^2
+    float M = (1.-(0.15-0.0173*pClimate->getVapourPressure(day,hour)-0.0014*pClimate->getToutCelsius(day,hour)))*metabolicActivity; // activité métabolique 70 W/m^2
 
     // Convection
     float coreTemperature = 36.5 + 0.0043*M;
-    float airDensity = pClimate->getPatm(i-preTimeStepsSimulated)/(287.04*(pClimate->getToutCelsius(i-preTimeStepsSimulated)+273.15));
+    float airDensity = pClimate->getPatm(day,hour)/(287.04*(pClimate->getToutCelsius(day,hour)+273.15));
     float resistanceBodyTissue = 1000.*airDensity/((0.13*(0.42*(M-58.)))+15.);
     float boundaryLayerResistance = 0.17/(re_A*pow(reynoldsNumber,re_n)*pow(0.71,0.33)*22.e-6);
-    float intrinsicClothingInsulation = (pClimate->getToutCelsius(i-preTimeStepsSimulated)>=27.f)?0.31:((1.372-(0.01866*pClimate->getToutCelsius(i-preTimeStepsSimulated))-(0.0004849*pow(pClimate->getToutCelsius(i-preTimeStepsSimulated),2))-(0.000009333*pow(pClimate->getToutCelsius(i-preTimeStepsSimulated),3)))*0.1555);
+    float intrinsicClothingInsulation = (pClimate->getToutCelsius(day,hour)>=27.f)?0.31:((1.372-(0.01866*pClimate->getToutCelsius(day,hour))-(0.0004849*pow(pClimate->getToutCelsius(day,hour),2))-(0.000009333*pow(pClimate->getToutCelsius(day,hour),3)))*0.1555);
     float staticClothingResistance = 1000.*airDensity * intrinsicClothingInsulation;
     float clothingResistance = staticClothingResistance*(-0.37*(1.-exp(-walkingSpeed/0.72))+1.);
-    float skinTemperature = ((((coreTemperature-pClimate->getToutCelsius(i-preTimeStepsSimulated))<0.)?0.001:(coreTemperature-pClimate->getToutCelsius(i-preTimeStepsSimulated))) / (resistanceBodyTissue+clothingResistance+boundaryLayerResistance)) * (boundaryLayerResistance+clothingResistance) + pClimate->getToutCelsius(i-preTimeStepsSimulated);
-    float C = 1000.*airDensity * (skinTemperature-pClimate->getToutCelsius(i-preTimeStepsSimulated))/(clothingResistance+boundaryLayerResistance);
+    float skinTemperature = ((((coreTemperature-pClimate->getToutCelsius(day,hour))<0.)?0.001:(coreTemperature-pClimate->getToutCelsius(day,hour))) / (resistanceBodyTissue+clothingResistance+boundaryLayerResistance)) * (boundaryLayerResistance+clothingResistance) + pClimate->getToutCelsius(day,hour);
+    float C = 1000.*airDensity * (skinTemperature-pClimate->getToutCelsius(day,hour))/(clothingResistance+boundaryLayerResistance);
 
     // Evaporation
     float evaporativeHeatLossThroughPerspiration =0.42*(M-58.);
-    float latentHeatOfVapourization =(2501.-(2.37*pClimate->getToutCelsius(i-preTimeStepsSimulated)))*1000.;
-    float specificHumidityAir =0.622*(pClimate->getVapourPressure(i-preTimeStepsSimulated)/(pClimate->getPatm(i-preTimeStepsSimulated)/1000.-pClimate->getVapourPressure(i-preTimeStepsSimulated)));
+    float latentHeatOfVapourization =(2501.-(2.37*pClimate->getToutCelsius(day,hour)))*1000.;
+    float specificHumidityAir =0.622*(pClimate->getVapourPressure(day,hour)/(pClimate->getPatm(day,hour)/1000.-pClimate->getVapourPressure(day,hour)));
     float saturatedVapourPressureSkin = pClimate->getSaturatedVapourPressure(skinTemperature);
-    float vapourPressureSkin = saturatedVapourPressureSkin*pClimate->getRelativeHumidity(i-preTimeStepsSimulated);
-    float specificHumiditySkin =0.622*(vapourPressureSkin/(pClimate->getPatm(i-preTimeStepsSimulated)/1000.-vapourPressureSkin));
+    float vapourPressureSkin = saturatedVapourPressureSkin*pClimate->getRelativeHumidity(day,hour);
+    float specificHumiditySkin =0.622*(vapourPressureSkin/(pClimate->getPatm(day,hour)/1000.-vapourPressureSkin));
     float airResistanceRav =0.92*boundaryLayerResistance;
-    float staticClothingVapourResistance = 0.622*latentHeatOfVapourization*airDensity*intrinsicClothingInsulation*0.18/(pClimate->getPatm(i-preTimeStepsSimulated)/1000.-pClimate->getVapourPressure(i-preTimeStepsSimulated));
-    float effectiveAirVelocity = pow(pow(pClimate->getWindSpeed(i-preTimeStepsSimulated),2)+pow(walkingSpeed,2),0.5);
+    float staticClothingVapourResistance = 0.622*latentHeatOfVapourization*airDensity*intrinsicClothingInsulation*0.18/(pClimate->getPatm(day,hour)/1000.-pClimate->getVapourPressure(day,hour));
+    float effectiveAirVelocity = pow(pow(pClimate->getWindSpeed(day,hour),2)+pow(walkingSpeed,2),0.5);
     float resistanceVapourTransferClothing = staticClothingVapourResistance*(-0.8*(1.-exp((-effectiveAirVelocity/1.095)+1)));
     float resistanceAirClothingSkinTissue = resistanceVapourTransferClothing+airResistanceRav+7.7e+3;
     float evaporativeLossThroughSkinDiffusion = airDensity*latentHeatOfVapourization*( (((specificHumiditySkin-specificHumidityAir)/(resistanceVapourTransferClothing+airResistanceRav))>0.f)?
@@ -3461,11 +3502,12 @@ void Model::computeCMIndices(Climate* pClimate, Building* pBuilding, unsigned in
     float E = evaporativeLossThroughSkinDiffusion+evaporativeHeatLossThroughPerspiration;
 
     //LongwaveEmitted
-    float surfaceTemperatureIndividual = max((skinTemperature-pClimate->getToutCelsius(i-preTimeStepsSimulated))/(boundaryLayerResistance+clothingResistance)*boundaryLayerResistance+pClimate->getToutCelsius(i-preTimeStepsSimulated),7.f);
+    float surfaceTemperatureIndividual = max((skinTemperature-pClimate->getToutCelsius(day,hour))/(boundaryLayerResistance+clothingResistance)*boundaryLayerResistance+pClimate->getToutCelsius(day,hour),7.f);
     float longWaveEmitted = 0.95*5.67e-8*pow((surfaceTemperatureIndividual+273.15),4);
 
-    // output of the COMFA (in W/m2)
+    // output of the COMFA* (in W/m2)
     COMFA = M+ LWabsorbed + SWabsorbed - C - E - longWaveEmitted;
+    pBuilding->setCOMFA(COMFA);
 
     // calculation of the ITS (in W)
 
@@ -3473,13 +3515,13 @@ void Model::computeCMIndices(Climate* pClimate, Building* pBuilding, unsigned in
     float metabolicRate = (metabolicActivity - (0.2 * (metabolicActivity - 80.)));
 
     // Convection
-    float deltaT = pClimate->getToutCelsius(i-preTimeStepsSimulated) - 35.;
-    float reynoldsNumberITS = 0.17*((pClimate->getWindSpeed(i-preTimeStepsSimulated)>0)?pClimate->getWindSpeed(i-preTimeStepsSimulated):0.01)/1.6e-5;
+    float deltaT = pClimate->getToutCelsius(day,hour) - 35.;
+    float reynoldsNumberITS = 0.17*((pClimate->getWindSpeed(day,hour)>0)?pClimate->getWindSpeed(day,hour):0.01)/1.6e-5;
     float A_ITS = (reynoldsNumberITS>4000.)?0.17:0.62;
     float B_ITS = (reynoldsNumberITS<4000.)?0.62:0.47;
     float convectionITS = (deltaT * pClimate->getAirDensity()*1005.*2.e-5 * A_ITS * pow(reynoldsNumberITS,B_ITS) / 0.17);
     // simplified version
-    //float convectionITS = (deltaT * 8.3 * pow(((pClimate->getWindSpeed(i-preTimeStepsSimulated)>0)?pClimate->getWindSpeed(i-preTimeStepsSimulated):0.01),0.6));
+    //float convectionITS = (deltaT * 8.3 * pow(((pClimate->getWindSpeed(day,hour)>0)?pClimate->getWindSpeed(day,hour):0.01),0.6));
 
     // Radiation Balance
     float LWEmittedITS = 0.95*5.67e-8*pow((35.+273.15),4);
@@ -3489,13 +3531,267 @@ void Model::computeCMIndices(Climate* pClimate, Building* pBuilding, unsigned in
     float coolingRate = (metabolicRate + radiationITS + convectionITS) * totalArea;
 
     // CoolingEfficiency
-    float saturationVapourPressure = exp(16.6536-(4030.183/(pClimate->getToutCelsius(i-preTimeStepsSimulated)+235.)));
-    float vapourPressureAir = 7.52*pClimate->getRelativeHumidity(i-preTimeStepsSimulated)*saturationVapourPressure;
-    float evaporativeCapacityAir = 1.163*20.5*pow(((pClimate->getWindSpeed(i-preTimeStepsSimulated)>0.)?pClimate->getWindSpeed(i-preTimeStepsSimulated):0.01),0.3) * (42.-vapourPressureAir);
+    float saturationVapourPressure = exp(16.6536-(4030.183/(pClimate->getToutCelsius(day,hour)+235.)));
+    float vapourPressureAir = 7.52*pClimate->getRelativeHumidity(day,hour)*saturationVapourPressure;
+    float evaporativeCapacityAir = 1.163*20.5*pow(((pClimate->getWindSpeed(day,hour)>0.)?pClimate->getWindSpeed(day,hour):0.01),0.3) * (42.-vapourPressureAir);
     float coolingEfficiencySweating = max(exp(0.6*((coolingRate/evaporativeCapacityAir)-0.12)),1.);
 
     // output of the ITS (in W)
     ITS = coolingRate * coolingEfficiencySweating;
+    pBuilding->setITS(ITS);
+
+    // calculation of the UTCI (in celsius)
+
+    // set upper and lower limits of air velocity according to Fiala model scenarios
+    float va = std::max(0.5f, std::min(pClimate->getWindSpeed(day,hour), 17.f));
+
+    // set upper and lower limits of air temperature according to Fiala model scenarios
+    float Ta = std::max(-50.f, std::min(pClimate->getToutCelsius(day,hour), 50.f));
+
+    // metrics derived from the inputs used in the polynomial equation
+    float ehPa = es(Ta) * pClimate->getRelativeHumidity(day,hour);  // partial vapour pressure
+    float Pa = ehPa / 10.f;  // convert vapour pressure to kPa
+
+    // set upper and lower limits of water vapour pressure according to Fiala model scenarios
+    Pa = std::min(Pa, 5.f);
+
+	// difference between radiant and air temperature
+	float Tmrt = MRT;
+    float D_Tmrt = Tmrt - Ta;
+
+    // set upper and lower limits of mean radiant temperature according to Fiala model scenarios
+    if (D_Tmrt < -30.) {
+        D_Tmrt = -30.;
+        Tmrt = D_Tmrt + Ta;
+    }
+    else if (D_Tmrt > 70) {
+        D_Tmrt = 70;
+        Tmrt = D_Tmrt + Ta;
+    }
+
+#ifdef DEBUG
+    textFile << va << "\t" << Ta << "\t" << Pa << "\t" << Tmrt << "\t";
+#endif // DEBUG
+
+	// compute the approximation of the UTCI (in celsius)
+    UTCI = Ta +
+        (6.07562052e-01) +
+        (-2.27712343e-02) * Ta +
+        (8.06470249e-04) * Ta * Ta +
+        (-1.54271372e-04) * Ta * Ta * Ta +
+        (-3.24651735e-06) * Ta * Ta * Ta * Ta +
+        (7.32602852e-08) * Ta * Ta * Ta * Ta * Ta +
+        (1.35959073e-09) * Ta * Ta * Ta * Ta * Ta * Ta +
+        (-2.25836520e+00) * va +
+        (8.80326035e-02) * Ta * va +
+        (2.16844454e-03) * Ta * Ta * va +
+        (-1.53347087e-05) * Ta * Ta * Ta * va +
+        (-5.72983704e-07) * Ta * Ta * Ta * Ta * va +
+        (-2.55090145e-09) * Ta * Ta * Ta * Ta * Ta * va +
+        (-7.51269505e-01) * va * va +
+        (-4.08350271e-03) * Ta * va * va +
+        (-5.21670675e-05) * Ta * Ta * va * va +
+        (1.94544667e-06) * Ta * Ta * Ta * va * va +
+        (1.14099531e-08) * Ta * Ta * Ta * Ta * va * va +
+        (1.58137256e-01) * va * va * va +
+        (-6.57263143e-05) * Ta * va * va * va +
+        (2.22697524e-07) * Ta * Ta * va * va * va +
+        (-4.16117031e-08) * Ta * Ta * Ta * va * va * va +
+        (-1.27762753e-02) * va * va * va * va +
+        (9.66891875e-06) * Ta * va * va * va * va +
+        (2.52785852e-09) * Ta * Ta * va * va * va * va +
+        (4.56306672e-04) * va * va * va * va * va +
+        (-1.74202546e-07) * Ta * va * va * va * va * va +
+        (-5.91491269e-06) * va * va * va * va * va * va +
+        (3.98374029e-01) * D_Tmrt +
+        (1.83945314e-04) * Ta * D_Tmrt +
+        (-1.73754510e-04) * Ta * Ta * D_Tmrt +
+        (-7.60781159e-07) * Ta * Ta * Ta * D_Tmrt +
+        (3.77830287e-08) * Ta * Ta * Ta * Ta * D_Tmrt +
+        (5.43079673e-10) * Ta * Ta * Ta * Ta * Ta * D_Tmrt +
+        (-2.00518269e-02) * va * D_Tmrt +
+        (8.92859837e-04) * Ta * va * D_Tmrt +
+        (3.45433048e-06) * Ta * Ta * va * D_Tmrt +
+        (-3.77925774e-07) * Ta * Ta * Ta * va * D_Tmrt +
+        (-1.69699377e-09) * Ta * Ta * Ta * Ta * va * D_Tmrt +
+        (1.69992415e-04) * va * va * D_Tmrt +
+        (-4.99204314e-05) * Ta * va * va * D_Tmrt +
+        (2.47417178e-07) * Ta * Ta * va * va * D_Tmrt +
+        (1.07596466e-08) * Ta * Ta * Ta * va * va * D_Tmrt +
+        (8.49242932e-05) * va * va * va * D_Tmrt +
+        (1.35191328e-06) * Ta * va * va * va * D_Tmrt +
+        (-6.21531254e-09) * Ta * Ta * va * va * va * D_Tmrt +
+        (-4.99410301e-06) * va * va * va * va * D_Tmrt +
+        (-1.89489258e-08) * Ta * va * va * va * va * D_Tmrt +
+        (8.15300114e-08) * va * va * va * va * va * D_Tmrt +
+        (7.55043090e-04) * D_Tmrt * D_Tmrt +
+        (-5.65095215e-05) * Ta * D_Tmrt * D_Tmrt +
+        (-4.52166564e-07) * Ta * Ta * D_Tmrt * D_Tmrt +
+        (2.46688878e-08) * Ta * Ta * Ta * D_Tmrt * D_Tmrt +
+        (2.42674348e-10) * Ta * Ta * Ta * Ta * D_Tmrt * D_Tmrt +
+        (1.54547250e-04) * va * D_Tmrt * D_Tmrt +
+        (5.24110970e-06) * Ta * va * D_Tmrt * D_Tmrt +
+        (-8.75874982e-08) * Ta * Ta * va * D_Tmrt * D_Tmrt +
+        (-1.50743064e-09) * Ta * Ta * Ta * va * D_Tmrt * D_Tmrt +
+        (-1.56236307e-05) * va * va * D_Tmrt * D_Tmrt +
+        (-1.33895614e-07) * Ta * va * va * D_Tmrt * D_Tmrt +
+        (2.49709824e-09) * Ta * Ta * va * va * D_Tmrt * D_Tmrt +
+        (6.51711721e-07) * va * va * va * D_Tmrt * D_Tmrt +
+        (1.94960053e-09) * Ta * va * va * va * D_Tmrt * D_Tmrt +
+        (-1.00361113e-08) * va * va * va * va * D_Tmrt * D_Tmrt +
+        (-1.21206673e-05) * D_Tmrt * D_Tmrt * D_Tmrt +
+        (-2.18203660e-07) * Ta * D_Tmrt * D_Tmrt * D_Tmrt +
+        (7.51269482e-09) * Ta * Ta * D_Tmrt * D_Tmrt * D_Tmrt +
+        (9.79063848e-11) * Ta * Ta * Ta * D_Tmrt * D_Tmrt * D_Tmrt +
+        (1.25006734e-06) * va * D_Tmrt * D_Tmrt * D_Tmrt +
+        (-1.81584736e-09) * Ta * va * D_Tmrt * D_Tmrt * D_Tmrt +
+        (-3.52197671e-10) * Ta * Ta * va * D_Tmrt * D_Tmrt * D_Tmrt +
+        (-3.36514630e-08) * va * va * D_Tmrt * D_Tmrt * D_Tmrt +
+        (1.35908359e-10) * Ta * va * va * D_Tmrt * D_Tmrt * D_Tmrt +
+        (4.17032620e-10) * va * va * va * D_Tmrt * D_Tmrt * D_Tmrt +
+        (-1.30369025e-09) * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (4.13908461e-10) * Ta * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (9.22652254e-12) * Ta * Ta * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (-5.08220384e-09) * va * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (-2.24730961e-11) * Ta * va * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (1.17139133e-10) * va * va * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (6.62154879e-10) * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (4.03863260e-13) * Ta * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (1.95087203e-12) * va * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (-4.73602469e-12) * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt +
+        (5.12733497) * Pa +
+        (-3.12788561e-01) * Ta * Pa +
+        (-1.96701861e-02) * Ta * Ta * Pa +
+        (9.99690870e-04) * Ta * Ta * Ta * Pa +
+        (9.51738512e-06) * Ta * Ta * Ta * Ta * Pa +
+        (-4.66426341e-07) * Ta * Ta * Ta * Ta * Ta * Pa +
+        (5.48050612e-01) * va * Pa +
+        (-3.30552823e-03) * Ta * va * Pa +
+        (-1.64119440e-03) * Ta * Ta * va * Pa +
+        (-5.16670694e-06) * Ta * Ta * Ta * va * Pa +
+        (9.52692432e-07) * Ta * Ta * Ta * Ta * va * Pa +
+        (-4.29223622e-02) * va * va * Pa +
+        (5.00845667e-03) * Ta * va * va * Pa +
+        (1.00601257e-06) * Ta * Ta * va * va * Pa +
+        (-1.81748644e-06) * Ta * Ta * Ta * va * va * Pa +
+        (-1.25813502e-03) * va * va * va * Pa +
+        (-1.79330391e-04) * Ta * va * va * va * Pa +
+        (2.34994441e-06) * Ta * Ta * va * va * va * Pa +
+        (1.29735808e-04) * va * va * va * va * Pa +
+        (1.29064870e-06) * Ta * va * va * va * va * Pa +
+        (-2.28558686e-06) * va * va * va * va * va * Pa +
+        (-3.69476348e-02) * D_Tmrt * Pa +
+        (1.62325322e-03) * Ta * D_Tmrt * Pa +
+        (-3.14279680e-05) * Ta * Ta * D_Tmrt * Pa +
+        (2.59835559e-06) * Ta * Ta * Ta * D_Tmrt * Pa +
+        (-4.77136523e-08) * Ta * Ta * Ta * Ta * D_Tmrt * Pa +
+        (8.64203390e-03) * va * D_Tmrt * Pa +
+        (-6.87405181e-04) * Ta * va * D_Tmrt * Pa +
+        (-9.13863872e-06) * Ta * Ta * va * D_Tmrt * Pa +
+        (5.15916806e-07) * Ta * Ta * Ta * va * D_Tmrt * Pa +
+        (-3.59217476e-05) * va * va * D_Tmrt * Pa +
+        (3.28696511e-05) * Ta * va * va * D_Tmrt * Pa +
+        (-7.10542454e-07) * Ta * Ta * va * va * D_Tmrt * Pa +
+        (-1.24382300e-05) * va * va * va * D_Tmrt * Pa +
+        (-7.38584400e-09) * Ta * va * va * va * D_Tmrt * Pa +
+        (2.20609296e-07) * va * va * va * va * D_Tmrt * Pa +
+        (-7.32469180e-04) * D_Tmrt * D_Tmrt * Pa +
+        (-1.87381964e-05) * Ta * D_Tmrt * D_Tmrt * Pa +
+        (4.80925239e-06) * Ta * Ta * D_Tmrt * D_Tmrt * Pa +
+        (-8.75492040e-08) * Ta * Ta * Ta * D_Tmrt * D_Tmrt * Pa +
+        (2.77862930e-05) * va * D_Tmrt * D_Tmrt * Pa +
+        (-5.06004592e-06) * Ta * va * D_Tmrt * D_Tmrt * Pa +
+        (1.14325367e-07) * Ta * Ta * va * D_Tmrt * D_Tmrt * Pa +
+        (2.53016723e-06) * va * va * D_Tmrt * D_Tmrt * Pa +
+        (-1.72857035e-08) * Ta * va * va * D_Tmrt * D_Tmrt * Pa +
+        (-3.95079398e-08) * va * va * va * D_Tmrt * D_Tmrt * Pa +
+        (-3.59413173e-07) * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (7.04388046e-07) * Ta * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (-1.89309167e-08) * Ta * Ta * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (-4.79768731e-07) * va * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (7.96079978e-09) * Ta * va * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (1.62897058e-09) * va * va * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (3.94367674e-08) * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (-1.18566247e-09) * Ta * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (3.34678041e-10) * va * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (-1.15606447e-10) * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * Pa +
+        (-2.80626406) * Pa * Pa +
+        (5.48712484e-01) * Ta * Pa * Pa +
+        (-3.99428410e-03) * Ta * Ta * Pa * Pa +
+        (-9.54009191e-04) * Ta * Ta * Ta * Pa * Pa +
+        (1.93090978e-05) * Ta * Ta * Ta * Ta * Pa * Pa +
+        (-3.08806365e-01) * va * Pa * Pa +
+        (1.16952364e-02) * Ta * va * Pa * Pa +
+        (4.95271903e-04) * Ta * Ta * va * Pa * Pa +
+        (-1.90710882e-05) * Ta * Ta * Ta * va * Pa * Pa +
+        (2.10787756e-03) * va * va * Pa * Pa +
+        (-6.98445738e-04) * Ta * va * va * Pa * Pa +
+        (2.30109073e-05) * Ta * Ta * va * va * Pa * Pa +
+        (4.17856590e-04) * va * va * va * Pa * Pa +
+        (-1.27043871e-05) * Ta * va * va * va * Pa * Pa +
+        (-3.04620472e-06) * va * va * va * va * Pa * Pa +
+        (5.14507424e-02) * D_Tmrt * Pa * Pa +
+        (-4.32510997e-03) * Ta * D_Tmrt * Pa * Pa +
+        (8.99281156e-05) * Ta * Ta * D_Tmrt * Pa * Pa +
+        (-7.14663943e-07) * Ta * Ta * Ta * D_Tmrt * Pa * Pa +
+        (-2.66016305e-04) * va * D_Tmrt * Pa * Pa +
+        (2.63789586e-04) * Ta * va * D_Tmrt * Pa * Pa +
+        (-7.01199003e-06) * Ta * Ta * va * D_Tmrt * Pa * Pa +
+        (-1.06823306e-04) * va * va * D_Tmrt * Pa * Pa +
+        (3.61341136e-06) * Ta * va * va * D_Tmrt * Pa * Pa +
+        (2.29748967e-07) * va * va * va * D_Tmrt * Pa * Pa +
+        (3.04788893e-04) * D_Tmrt * D_Tmrt * Pa * Pa +
+        (-6.42070836e-05) * Ta * D_Tmrt * D_Tmrt * Pa * Pa +
+        (1.16257971e-06) * Ta * Ta * D_Tmrt * D_Tmrt * Pa * Pa +
+        (7.68023384e-06) * va * D_Tmrt * D_Tmrt * Pa * Pa +
+        (-5.47446896e-07) * Ta * va * D_Tmrt * D_Tmrt * Pa * Pa +
+        (-3.59937910e-08) * va * va * D_Tmrt * D_Tmrt * Pa * Pa +
+        (-4.36497725e-06) * D_Tmrt * D_Tmrt * D_Tmrt * Pa * Pa +
+        (1.68737969e-07) * Ta * D_Tmrt * D_Tmrt * D_Tmrt * Pa * Pa +
+        (2.67489271e-08) * va * D_Tmrt * D_Tmrt * D_Tmrt * Pa * Pa +
+        (3.23926897e-09) * D_Tmrt * D_Tmrt * D_Tmrt * D_Tmrt * Pa * Pa +
+        (-3.53874123e-02) * Pa * Pa * Pa +
+        (-2.21201190e-01) * Ta * Pa * Pa * Pa +
+        (1.55126038e-02) * Ta * Ta * Pa * Pa * Pa +
+        (-2.63917279e-04) * Ta * Ta * Ta * Pa * Pa * Pa +
+        (4.53433455e-02) * va * Pa * Pa * Pa +
+        (-4.32943862e-03) * Ta * va * Pa * Pa * Pa +
+        (1.45389826e-04) * Ta * Ta * va * Pa * Pa * Pa +
+        (2.17508610e-04) * va * va * Pa * Pa * Pa +
+        (-6.66724702e-05) * Ta * va * va * Pa * Pa * Pa +
+        (3.33217140e-05) * va * va * va * Pa * Pa * Pa +
+        (-2.26921615e-03) * D_Tmrt * Pa * Pa * Pa +
+        (3.80261982e-04) * Ta * D_Tmrt * Pa * Pa * Pa +
+        (-5.45314314e-09) * Ta * Ta * D_Tmrt * Pa * Pa * Pa +
+        (-7.96355448e-04) * va * D_Tmrt * Pa * Pa * Pa +
+        (2.53458034e-05) * Ta * va * D_Tmrt * Pa * Pa * Pa +
+        (-6.31223658e-06) * va * va * D_Tmrt * Pa * Pa * Pa +
+        (3.02122035e-04) * D_Tmrt * D_Tmrt * Pa * Pa * Pa +
+        (-4.77403547e-06) * Ta * D_Tmrt * D_Tmrt * Pa * Pa * Pa +
+        (1.73825715e-06) * va * D_Tmrt * D_Tmrt * Pa * Pa * Pa +
+        (-4.09087898e-07) * D_Tmrt * D_Tmrt * D_Tmrt * Pa * Pa * Pa +
+        (6.14155345e-01) * Pa * Pa * Pa * Pa +
+        (-6.16755931e-02) * Ta * Pa * Pa * Pa * Pa +
+        (1.33374846e-03) * Ta * Ta * Pa * Pa * Pa * Pa +
+        (3.55375387e-03) * va * Pa * Pa * Pa * Pa +
+        (-5.13027851e-04) * Ta * va * Pa * Pa * Pa * Pa +
+        (1.02449757e-04) * va * va * Pa * Pa * Pa * Pa +
+        (-1.48526421e-03) * D_Tmrt * Pa * Pa * Pa * Pa +
+        (-4.11469183e-05) * Ta * D_Tmrt * Pa * Pa * Pa * Pa +
+        (-6.80434415e-06) * va * D_Tmrt * Pa * Pa * Pa * Pa +
+        (-9.77675906e-06) * D_Tmrt * D_Tmrt * Pa * Pa * Pa * Pa +
+        (8.82773108e-02) * Pa * Pa * Pa * Pa * Pa +
+        (-3.01859306e-03) * Ta * Pa * Pa * Pa * Pa * Pa +
+        (1.04452989e-03) * va * Pa * Pa * Pa * Pa * Pa +
+        (2.47090539e-04) * D_Tmrt * Pa * Pa * Pa * Pa * Pa +
+        (1.48348065e-03) * Pa * Pa * Pa * Pa * Pa * Pa;
+    pBuilding->setUTCI(UTCI);
+
+#ifdef DEBUG
+    textFile << UTCI;
+    textFile << endl;
+    textFile.close();
+#endif // DEBUG
 
     return;
 }

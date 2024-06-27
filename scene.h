@@ -262,6 +262,8 @@ public:
     void computeThermal_EnergyPlus(unsigned int day, unsigned int hour);
     void terminateThermal_EnergyPlus();
     #endif
+    // computes the comfort indices outdoors
+    void computeComfort(unsigned int day, unsigned int hour);
     // simulate
     void simulate();
     // simulate only the irradiation on the surfaces
