@@ -99,6 +99,8 @@ public:
     unsigned int getnFarFieldObstructions() { return farFieldObstructions.size(); }
     vector<pair<float,float> > getFarFieldObstructions() { return farFieldObstructions; }
     pair<float,float> getFarFieldObstructions(unsigned int i) { return farFieldObstructions[i]; }
+    void addFarFieldObstructions(float phi, float theta) { farFieldObstructions.push_back(pair<float,float>(phi,theta)); }
+    void clearFarFieldObstructions() { farFieldObstructions.clear(); }
 
     Composite* getComposite(string type) { map<string,Composite*>::iterator it = composites.find(type); if (it!=composites.end()) return it->second; else throw(string("Composite: ") + type + string(" not found in XML file.")); }
     int getMaxWallTypeId() {

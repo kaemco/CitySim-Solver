@@ -1743,6 +1743,128 @@ void XmlScene::importClimatePVGIS(string fileName, int defaultCloudiness) {
 
 }
 
+void XmlScene::importHorizonPVGIS(string fileName) {
+
+    // open the file
+    fstream input(fileName.c_str(), ios::in | ios::binary);
+    if (!(input.good())){
+        logStream << "Bad horizon file input" << endl;
+        throw(string("Error opening horizon file: " + fileName));
+    }
+
+    // clear the previous far field obstructions vector of pair<float,float>
+    pDistrict->clearFarFieldObstructions();
+
+    // read the content and add the far field to the vector
+    string buffer;
+    size_t pos1,pos2;
+    try{
+        // start the reading
+
+        // LattitudeN
+        getline(input,buffer,'\n');
+        pos1 = 0;
+        pos2 = buffer.find_first_of(":",pos1);
+        cout << buffer.substr(pos1,pos2) << " ";
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of("\n");
+        cout << stof(buffer.substr(pos1,pos2)) << endl;
+
+        // LongitudeE
+        getline(input,buffer,'\n');
+        pos1 = 0;
+        pos2 = buffer.find_first_of(":",pos1);
+        cout << buffer.substr(pos1,pos2) << " ";
+        pos1 = pos2+1;
+        pos2 = buffer.find_first_of("\n");
+        cout << stof(buffer.substr(pos1,pos2)) << endl;
+
+        // remove unnecessary spaces
+        do {
+            getline(input,buffer,'\n');
+        } while (buffer.find_first_of("\t") != string::npos);
+
+        // reads the header of the file
+        input >> buffer;
+        if(buffer != "A") throw(string("Horizon file: wrong format A"));
+        // Azimuth (0 = S, 90 = W, -90 = E) (degree)
+
+        input >> buffer;
+        if(buffer != "H_hor") throw(string("Horizon file: wrong format H_hor"));
+        // Horizon height (degree)
+
+        input >> buffer;
+        if(buffer != "A_sun(w)") throw(string("Horizon file: wrong format A_sun(w)"));
+        // Sun azimuth in the winter solstice (Dec 21) (0 = S, 90 = W, -90 = E) (degree)
+
+        input >> buffer;
+        if(buffer != "H_sun(w)") throw(string("Horizon file: wrong format H_sun(w)"));
+        // Sun height in the winter solstice (Dec 21) (degree)
+
+        input >> buffer;
+        if(buffer != "A_sun(s)") throw(string("Horizon file: wrong format A_sun(s)"));
+        // Sun azimuth in the summer solstice (June 21) (0 = S, 90 = W, -90 = E) (degree)
+
+        input >> buffer;
+        if(buffer != "H_sun(s)") throw(string("Horizon file: wrong format H_sun(s)"));
+        // Sun height in the summer solstice (June 21) (degree)
+
+        // remove unnecessary spaces
+        do {
+            getline(input,buffer,'\n');
+        } while (buffer.find_first_of("\t") != string::npos);
+
+        // start reading the data
+        float phi, theta;
+        getline(input,buffer,'\n');
+        do {
+            // read phi
+            pos1 = 0;
+            pos2 = buffer.find_first_of("\t",pos1);
+            phi = stof(buffer.substr(pos1,pos2));
+
+            // read theta
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            theta = stof(buffer.substr(pos1,pos2));
+
+            // save the values
+            pDistrict->addFarFieldObstructions(phi,theta);
+
+            /*
+            // discard reading A_sun(w)
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            // discard reading H_sun(w)
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            // discard reading A_sun(s)
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            // discard reading H_sun(s)
+            pos1 = pos2+1;
+            pos2 = buffer.find_first_of("\t",pos1);
+            */
+
+            // go to the next line
+            getline(input,buffer,'\n');
+
+        }
+        while (buffer.find_first_of("\t") != string::npos);
+    }
+    catch (exception& e) {
+        pDistrict->clearFarFieldObstructions();
+        throw("Error reading the line: \n" + buffer);
+    }
+    catch (...) {
+        pDistrict->clearFarFieldObstructions();
+        throw;
+    }
+
+    return;
+
+}
+
 XmlScene::~XmlScene() {
 
 #ifdef DEBUG

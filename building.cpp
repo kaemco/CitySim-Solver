@@ -1167,14 +1167,14 @@ void Building::writeXML(ofstream& file, string tab){
 
     // Energy system not considered
     string subtab=tab+"\t";
-    heatStock->writeXML(file,"HeatTank",subtab);
-    coldStock->writeXML(file,"CoolTank",subtab);
-    if(heatingUnit!=NULL){
+    if (heatStock) heatStock->writeXML(file,"HeatTank",subtab);
+    if (coldStock) coldStock->writeXML(file,"CoolTank",subtab);
+    if (heatingUnit) {
         file << subtab << "<HeatSource beginDay=\"" << heatingUnit->getBeginDay() << "\" endDay=\"" << heatingUnit->getEndDay() << "\">" << endl;
         heatingUnit->writeXML(file,subtab+"\t");
         file << subtab << "</HeatSource>" << endl;
     }
-    if(coolingUnit!=NULL){
+    if (coolingUnit) {
         file << subtab << "<CoolSource beginDay=\"" << coolingUnit->getBeginDay() << "\" endDay=\"" << coolingUnit->getEndDay() << "\">" << endl;
         coolingUnit->writeXML(file,subtab+"\t");
         file << subtab << "</CoolSource>" << endl;
