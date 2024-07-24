@@ -237,6 +237,7 @@ public:
     string getClimateFile(){return climateFile;}
     void readClimate(string fileName);
     void importClimatePVGIS(string fileName, int defaultCloudiness);
+    void importHorizonPVGIS(string fileName);
     void setHorizon();
 
     // compute the far field obstructions
