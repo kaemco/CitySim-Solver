@@ -5333,10 +5333,13 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     textFile << "NRE (MJ):\t" << nre << "\n";
     textFile << "GWP (kgCO2):\t" << gwp << "\n";
     textFile << "UBP (pts):\t" << ubp << endl;
-    textFile << "MRT (°C):\t" << mrt/static_cast<double>(MRTcount) << endl;
-    textFile << "ITS (h):\t" << ITScount/MRTcount << endl;
-    textFile << "COMFA (h):\t" << COMFAcount/MRTcount << endl;
-    textFile << "UTCI (h):\t" << UTCIcount/MRTcount << endl;
+    if (MRTcount>0)
+    {   // MRTcount is the number of MRT individuals
+        textFile << "MRT (°C):\t" << mrt/static_cast<double>(MRTcount) << endl;
+        textFile << "ITS (h):\t" << ITScount/MRTcount << endl;
+        textFile << "COMFA (h):\t" << COMFAcount/MRTcount << endl;
+        textFile << "UTCI (h):\t" << UTCIcount/MRTcount << endl;
+    }
     textFile << "DHNTotalThermalLosses (Wh):\t" << totalThermalLoss << endl; //Added by Max
     textFile << "DHNElectricPump (J):\t" << electricPump << endl; //Added by Max
 
