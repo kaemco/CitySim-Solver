@@ -283,6 +283,11 @@ void District::addBuilding(Building *b) {
 
 void District::addTree(Tree *t) {
 
+    // if Tree has no Id, give one
+    if (t->getId()==numeric_limits<unsigned int>::max()) {
+        t->setId(trees.size());
+    }
+
     // adds the Tree to the vector
     trees.push_back(t);
 
