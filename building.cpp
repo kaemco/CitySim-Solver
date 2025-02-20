@@ -1896,7 +1896,7 @@ Tree::Tree(TiXmlHandle hdl, ostream* pLogStream):logStream(std::cout.rdbuf()) {
 }
 
 void Tree::writeXML(ofstream& file, string tab){
-    file << tab << "<Tree id=\"" << id << "\" name=\"" << name << "\" key=\"" << key << "\" leafAreaIndex=\"" << layers << "\" leafWidth=\"" << leafWidth << "\" leafDistance=\"" << layersDistance << "\" deciduous=\"" << (deciduous?"true":"false") << "\" class=\"" << leafClass << "\">" << endl;
+    file << tab << "<Tree id=\"" << id << "\" key=\"" << key << "\" leafAreaIndex=\"" << layers << "\" leafWidth=\"" << leafWidth << "\" leafDistance=\"" << layersDistance << "\" deciduous=\"" << (deciduous?"true":"false") << "\" class=\"" << leafClass << "\">" << endl;
     string subtab=tab+"\t";
     // leaves
     for (size_t i=0; i < leaves.size(); ++i) {

@@ -433,8 +433,7 @@ class Tree {
 
 private:
 
-    unsigned int id = numeric_limits<unsigned int>::quiet_NaN();
-    string name = "";
+    unsigned int id = numeric_limits<unsigned int>::max();
     string key = "";
     // geometrical parameters
     unsigned int layers = 1;
@@ -466,8 +465,6 @@ public:
 
     void setId(unsigned int id) { this->id = id; }
     unsigned int getId() { return id; }
-    void setName(string name) { this->name = name; }
-    string getName() { return name; }
     void setKey(string key) { this->key = key; }
     string getKey() { return key; }
     void setLeafAreaIndex(unsigned int index) { layers = index; }
