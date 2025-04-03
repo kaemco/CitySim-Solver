@@ -1968,21 +1968,31 @@ void Model::noHVAC_Control_Needs(Building* pBui, Climate* pClim, unsigned int da
                 }
             } // Otherwise DHW_needs=0
         }
-        if ( pBui->getCoolingUnit()!=NULL and pBui->getCoolingUnit()->isWorking(day) and coolingNeeds<0  ) { // If cooling unit is working and space cooling is needed.
-            if (pBui->getColdStock()) {
-                // Cold storage tank.
-                double CS_T0 = pBui->getColdStockTemperature();
-                double CS_Tmin = pBui->getColdStock()->getTmin();
-                double CS_Tmax = pBui->getColdStock()->getTmax();
-                CS_T1 = pBui->getColdStock()->temperature(dt, 0., 0., CS_SolPp-coolingNeeds, CS_T0, 0., Tamb);
-                if (CS_T1 > CS_Tmax) { // If CS temperature goes above Tmax, cool to Tmin.
-                    CS_needs = pBui->getColdStock()->power(dt, CS_Tmin, 0., CS_SolPp-coolingNeeds, CS_T0, 0., Tamb);
+        else if (pBui->isMRT()) { // no heating unit but MRT is calculated -> pedestrian
+            HS_needs = heatingNeeds; // satisfy the needs to stay within the temperature range for the pedestrian
+        }
+
+        if ( pBui->getCoolingUnit()){
+            if (pBui->getCoolingUnit()->isWorking(day) and coolingNeeds<0  ) { // If cooling unit is working and space cooling is needed.
+                if (pBui->getColdStock()) {
+                    // Cold storage tank.
+                    double CS_T0 = pBui->getColdStockTemperature();
+                    double CS_Tmin = pBui->getColdStock()->getTmin();
+                    double CS_Tmax = pBui->getColdStock()->getTmax();
+                    CS_T1 = pBui->getColdStock()->temperature(dt, 0., 0., CS_SolPp-coolingNeeds, CS_T0, 0., Tamb);
+                    if (CS_T1 > CS_Tmax) { // If CS temperature goes above Tmax, cool to Tmin.
+                        CS_needs = pBui->getColdStock()->power(dt, CS_Tmin, 0., CS_SolPp-coolingNeeds, CS_T0, 0., Tamb);
+                    }
+                }
+                else {
+                    CS_needs = coolingNeeds;
                 }
             }
-            else {
-                CS_needs = coolingNeeds;
-            }
         }
+        else if (pBui->isMRT())  { // no cooling unit but MRT is calculated -> pedestrian
+            CS_needs = coolingNeeds; // satisfy the needs to stay within the temperature range for the pedestrian
+        }
+        // save the needs in the building
         pBui->setHS_needs( HS_needs );
         pBui->setDHW_needs( DHW_needs );
         pBui->setCS_needs( CS_needs );
@@ -2022,16 +2032,16 @@ void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned
 #endif // DEBUG
     for (size_t i=0 ; i<pDis->getnBuildings() ; ++i) {
         pBui = pDis->getBuilding(i);
-        double HS_Pp, DHW_Pp, CS_Pp;
+        double HS_Pp=0., DHW_Pp=0., CS_Pp=0.;
         // Heating Unit
         if (pBui->getHeatingUnit()) {
             double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getHeatingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
             double machineThermalPower = pBui->getHeatingUnit()->getThermalPower(heatPumpSrcTemp);
             DHW_Pp = min(pBui->getDHW_needs(), machineThermalPower); // Priority to the DHW in machineThermalPower not enough.
             HS_Pp = min(pBui->getHS_needs(), machineThermalPower-DHW_Pp); // Give what's left of machineThermalPower to HS.
-        } else {
-            HS_Pp = 0.;
-            DHW_Pp = 0.;
+        }
+        else if (pBui->isMRT()) { // if pedestrian then satisfy the needs to remain within a good temperature range
+            HS_Pp = pBui->getHS_needs();
         }
         pBui->setHS_Pp( HS_Pp );
         pBui->setDHW_Pp( DHW_Pp );
@@ -2040,8 +2050,9 @@ void Model::noHVAC_Control_ThermalPower(District* pDis, Climate* pClim, unsigned
         if (pBui->getCoolingUnit()) {
             double heatPumpSrcTemp = computeHeatPumpSrcTemp(pBui->getCoolingUnit(), pClim, day, hour); // TODO, make it so that the heat pump can themselves go get the temperature (of air or ground)
             CS_Pp = pBui->getCoolingUnit()->getThermalPower(heatPumpSrcTemp);
-        } else {
-            CS_Pp = 0.;
+        }
+        else if (pBui->isMRT()) {
+            CS_Pp = pBui->getCS_needs();
         }
         pBui->setCS_Pp( CS_Pp );
 
