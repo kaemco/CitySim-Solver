@@ -181,11 +181,9 @@ public:
 
     // get the heating and cooling in Wh
     double getHeating() { double watthour = 0.; for (size_t i=0; i<zones.size(); ++i) { watthour += zones.at(i)->getHeating(); } return watthour; }
-    double getHeating(unsigned int step) { float watthour = 0.f;   for (size_t i=0;i<zones.size();++i)  { watthour += zones.at(i)->getHeating(step); } return watthour; }
-    double getHeating(unsigned int day, unsigned int hour) { double watthour = 0.;   for (unsigned int i=0;i<zones.size();++i)  { watthour += zones[i]->getHeating(day, hour); } return watthour; }
+    double getHeatingSatisfied(unsigned int step) { float watthour = 0.f;   for (size_t i=0;i<zones.size();++i)  { watthour += zones.at(i)->getHeatingSatisfied(step); } return watthour; }
     double getCooling() { double watthour = 0.; for (size_t i=0; i<zones.size(); ++i) { watthour += zones.at(i)->getCooling(); } return watthour; }
-    double getCooling(unsigned int step) { double watthour = 0.;   for (unsigned int i=0;i<zones.size();++i)  { watthour += zones[i]->getCooling(step); } return watthour; }
-    double getCooling(unsigned int day, unsigned int hour) { double watthour = 0.;   for (unsigned int i=0;i<zones.size();++i)  { watthour += zones[i]->getCooling(day, hour); } return watthour; }
+    double getCoolingSatisfied(unsigned int step) { double watthour = 0.;   for (size_t i=0;i<zones.size();++i)  { watthour += zones[i]->getCoolingSatisfied(step); } return watthour; }
     // occupants number is the number of people maximum in the building
     float getOccupantsNumber() { float number = 0.f; for (size_t i=0; i<zones.size();++i) { number += zones[i]->getOccupantsNumber(); } return number; }
     // occupants count is the actual number of people
