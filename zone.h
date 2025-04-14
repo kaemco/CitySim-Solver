@@ -6,9 +6,7 @@
 #include <string>
 #include <iostream>
 #include <limits>
-#include <iterator>
 
-#include "tinyxml.h"
 #include "surface.h"
 #include "occupants.h"
 
@@ -104,7 +102,6 @@ protected:
     vector<double> heating,cooling; // energy for heating and cooling to get Tmin and Tmax (in Wh)
     vector<float> Qi; // internal gains (in Wh)
     vector<double> Qs; // sensible heat that needs to be given to the room (in Wh)
-    double Qs_heating = 0., Qs_cooling = 0.; // total sensible heating and cooling given to the room
 
     // from the explicit model due to stochastic calculation
     vector<float> windowState; // fully closed = 0.f and fully open 1.f
@@ -287,40 +284,30 @@ public:
     virtual void eraseTExpl(unsigned int keepValue) { TaExpl.erase(TaExpl.begin(),TaExpl.end()-min(keepValue,(unsigned int)TaExpl.size())); }
     virtual void eraseTExpl_back() { TaExpl.pop_back(); }
 
-    double getHeating(unsigned int day, unsigned int hour) { return heating.at((day-1)*24 + hour -1); }
     double getHeating(unsigned int it) { return heating.at(it); }
     double getHeating() { if (heating.empty()) return 0.0; else return heating.back(); }
     void setHeating(double watthour) { heating.push_back(watthour); }
-    // erase heating only if preSimulation, otherwise keep the hourly results. Previously: else { heating.push_back(accumulate(heating.begin(),heating.end(),0.0)); heating.erase(heating.begin(),heating.end()-1) }
     void eraseHeating() { heating.erase(heating.begin(),heating.end()); }
     void eraseHeating_back() { heating.pop_back(); }
-    double getTotalHeating() { return accumulate(heating.begin(),heating.end(),0.0); }
 
-    double getCooling(unsigned int day, unsigned int hour) { return cooling.at((day-1)*24 + hour -1); }
     double getCooling(unsigned int it) { return cooling.at(it); }
     double getCooling() { if (cooling.empty()) return 0.0; else return cooling.back(); }
     void setCooling(double watthour) { cooling.push_back(watthour); }
-    // erase cooling only if preSimulation, otherwise keep the hourly results. Previously: else { cooling.push_back(accumulate(cooling.begin(),cooling.end(),0.0)); cooling.erase(cooling.begin(),cooling.end()-1); }
     void eraseCooling() { cooling.erase(cooling.begin(),cooling.end()); }
     void eraseCooling_back() { cooling.pop_back(); }
-    double getTotalCooling() { return accumulate(cooling.begin(),cooling.end(),0.0); }
 
     // Qs is the sensible heating/cooling that is provided by the HVAC & plant systems to the thermal model
     void setQs(double watthour) { Qs.push_back(watthour); }
     double getQs(unsigned int it) { return Qs.at(it); }
     double getQs() { return Qs.back(); }
-    void eraseQs(bool eraseAllResults) {
-        if (!eraseAllResults) {
-            Qs_heating += accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_greater);
-            Qs_cooling += accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_less);
-        }
-        Qs.erase(Qs.begin(),Qs.end());
-    }
+    void eraseQs() { Qs.erase(Qs.begin(),Qs.end()); }
     void eraseQs_back() { Qs.pop_back(); }
     static double myBinaryOperation_greater(double a, double b) { return (b>0) ? a+b : a; }
     static double myBinaryOperation_less(double a, double b) { return (b<0) ? a+b : a; }
-    double getTotalHeatingSatisfied() { return Qs_heating + accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_greater); }
-    double getTotalCoolingSatisfied() { return Qs_cooling + accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_less); }
+    double getTotalHeatingSatisfied() { return accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_greater); }
+    double getTotalCoolingSatisfied() { return accumulate(Qs.begin(),Qs.end(),0.0, myBinaryOperation_less); }
+    double getHeatingSatisfied(unsigned int it) { return max(Qs.at(it),0.); } // return the positive part of Qs
+    double getCoolingSatisfied(unsigned int it) { return min(Qs.at(it),0.); } // return the negative part of Qs
 
     // Qi are the internal gains of the zone
     void setQi(float watthour) { Qi.push_back(watthour); }

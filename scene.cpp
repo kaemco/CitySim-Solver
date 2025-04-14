@@ -3945,11 +3945,8 @@ void XmlScene::eraseResults(unsigned int keepValue, bool eraseAllResults) {
             // deleting the results for the TH
             pDistrict->getBuilding(j)->getZone(zone)->eraseT(keepValue);
             pDistrict->getBuilding(j)->getZone(zone)->eraseKe(keepValue);
-            // the two following elements do not erase the results if not in preSimulation
-            if(eraseAllResults){ // && keepValue???
-                pDistrict->getBuilding(j)->getZone(zone)->eraseHeating();
-                pDistrict->getBuilding(j)->getZone(zone)->eraseCooling();
-            }
+            pDistrict->getBuilding(j)->getZone(zone)->eraseHeating();
+            pDistrict->getBuilding(j)->getZone(zone)->eraseCooling();
             if (pDistrict->getBuilding(j)->getHVACpresence()) {
                 pDistrict->getBuilding(j)->getZone(zone)->eraseHVACHeat(keepValue);
                 pDistrict->getBuilding(j)->getZone(zone)->eraseHVACHeatAvailable(keepValue);
@@ -3965,7 +3962,7 @@ void XmlScene::eraseResults(unsigned int keepValue, bool eraseAllResults) {
                 pDistrict->getBuilding(j)->getZone(zone)->eraseHVACMassFlowRateAvailable(keepValue);
             }
             pDistrict->getBuilding(j)->getZone(zone)->eraseQi(keepValue);
-            pDistrict->getBuilding(j)->getZone(zone)->eraseQs(eraseAllResults); // never keep a value in the vector
+            if (eraseAllResults) pDistrict->getBuilding(j)->getZone(zone)->eraseQs(); // needed in getHeatingSatisfied(...) and getCoolingSatisfied(...)
             pDistrict->getBuilding(j)->getZone(zone)->eraseVdotVent(keepValue);
 
 
@@ -4579,8 +4576,8 @@ void XmlScene::writeTHResultsText(string fileOut) {
             // loop on the zones
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getnZones(); ++k) {
                 textFile << fixed << setprecision(1) << pDistrict->getBuilding(j)->getZone(k)->getTa(i) << "\t";
-                textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getHeating(i-preTimeStepsSimulated+simulationIndex) << "\t";
-                textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getCooling(i-preTimeStepsSimulated+simulationIndex) << "\t";
+                textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getHeating(i-preTimeStepsSimulated) << "\t";
+                textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getCooling(i-preTimeStepsSimulated) << "\t";
                 // if the HVAC system is present, save those values
                 if (pDistrict->getBuilding(j)->getHVACpresence()) {
                    textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getHVACHeat(i) << "\t"
@@ -4597,7 +4594,7 @@ void XmlScene::writeTHResultsText(string fileOut) {
                             << fixed << setprecision(1) << pDistrict->getBuilding(j)->getZone(k)->getHVACMassFlowRateAvailable(i) << "\t";
                 }
                 textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getQi(i) << "\t";
-                textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getQs(i-preTimeStepsSimulated) << "\t";
+                textFile << fixed << setprecision(0) << pDistrict->getBuilding(j)->getZone(k)->getQs(i-preTimeStepsSimulated+simulationIndex) << "\t";
                 textFile << fixed << setprecision(1) << 3600.f*pDistrict->getBuilding(j)->getZone(k)->getVdotVent(i) << "\t";
             }
             if (pDistrict->getBuilding(j)->getHeatStock())
@@ -4949,8 +4946,8 @@ void XmlScene::writeMonthlyResultsText(string fileOut) {
             textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << "coolingNeeds(Wh)" << "\t";
             textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << "DHW(J)" << "\t";
             textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << "fuelConsumption(J)" << "\t";
-            textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << "electricConsumption(J)" << "\t";
-            textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << "electricProduction(J)" << "\t";
+            textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << "electricConsumption(kWh)" << "\t";
+            textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << "):" << "solarPVProduction(kWh)" << "\t";
     }
     textFile << endl;
 
@@ -4968,13 +4965,13 @@ void XmlScene::writeMonthlyResultsText(string fileOut) {
             dhw = 1.2f*1000.f*50.e-3f*daysPerMonth[monthIndex]*pDistrict->getBuilding(j)->getOccupantsCount()*(55.f-10.f);
             // loop on the number of time steps
             for (unsigned int i=preTimeStepsSimulated+cumDays[monthIndex]*24; i<preTimeStepsSimulated+cumDays[monthIndex+1]*24; ++i) {
-                heating += pDistrict->getBuilding(j)->getHeating(i-preTimeStepsSimulated);
-                cooling += pDistrict->getBuilding(j)->getCooling(i-preTimeStepsSimulated);
+                heating += pDistrict->getBuilding(j)->getHeatingSatisfied(i-preTimeStepsSimulated);
+                cooling += pDistrict->getBuilding(j)->getCoolingSatisfied(i-preTimeStepsSimulated);
                 fuel += pDistrict->getBuilding(j)->getFuelConsumption(i-preTimeStepsSimulated);
                 electric += pDistrict->getBuilding(j)->getElectricConsumption(i-preTimeStepsSimulated);
                 pv += pDistrict->getBuilding(j)->getSolarPVProduction(i-preTimeStepsSimulated);
             }
-            textFile << heating << "\t" << cooling << "\t" << dhw << "\t" << fuel << "\t" << electric << "\t";
+            textFile << heating << "\t" << cooling << "\t" << dhw << "\t" << fuel << "\t" << electric/3600./1000. << "\t" << pv/3600./1000. << "\t";
         }
         textFile << endl;
     }
@@ -5022,27 +5019,6 @@ void XmlScene::writeYearlyResultsPerBuildingText(string fileOut) {
 
 }
 
-////added by Dapeng // Cognet: Deleted it (never used?).
-//void XmlScene::writeYearlyResultsPerDECText(string fileOut) {
-//    // clear the fiel
-//    remove(fileOut.c_str());
-
-//    //open the binary file
-//    fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::app);
-
-//    //write the header
-//    textFile<<"#DECID\t fuelConsumption\t electricConsumption"<<endl;
-
-//    //loop on the number of DECs
-//    for (unsigned int j=0; j<pDistrict->getnDECs(); ++j) {
-//        textFile<<pDistrict->getDEC(j)->getId()<<"\t"
-//                <<pDistrict->getDEC(j)->getTotalFuelConsumption()<<"\t"
-//                <<pDistrict->getDEC(j)->getTotalElectricConsumption()<<endl;
-//    }
-//    textFile.close();
-
-//}
-
 map<unsigned int,vector<double> > XmlScene::getHeatingHourlyResultsPerBuilding() {
 
     map<unsigned int,vector<double> > results;
@@ -5057,7 +5033,7 @@ map<unsigned int,vector<double> > XmlScene::getHeatingHourlyResultsPerBuilding()
             heatingHour_i = 0.;
             // loop on the zones
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getnZones(); ++k) {
-                heatingHour_i += pDistrict->getBuilding(j)->getZone(k)->getHeating(i-preTimeStepsSimulated); // DP: Heating does not keep any preTimeStepsSimulated values
+                heatingHour_i += pDistrict->getBuilding(j)->getZone(k)->getHeatingSatisfied(i-preTimeStepsSimulated); // DP: Heating does not keep any preTimeStepsSimulated values
             }
             heating.push_back(heatingHour_i);
         }
@@ -5085,7 +5061,7 @@ map<unsigned int,vector<double> > XmlScene::getHeatingMonthlyResultsPerBuilding(
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getnZones(); ++k) {
                 // loop on the simulation time steps
                 for (unsigned int i=preTimeStepsSimulated+cumDays[monthIndex]*24; i<preTimeStepsSimulated+cumDays[monthIndex+1]*24; ++i) {
-                    heatingPerMonth += pDistrict->getBuilding(j)->getZone(k)->getHeating(i-preTimeStepsSimulated); // DP: Heating does not keep any preTimeStepsSimulated values
+                    heatingPerMonth += pDistrict->getBuilding(j)->getZone(k)->getHeatingSatisfied(i-preTimeStepsSimulated); // DP: Heating does not keep any preTimeStepsSimulated values
                 }
             }
             heating.push_back(heatingPerMonth);
@@ -5107,7 +5083,7 @@ map<unsigned int,double> XmlScene::getHeatingYearlyResultsPerBuilding() {
         double heating = 0.;
         // loop on the zones
         for (unsigned int k=0; k<pDistrict->getBuilding(j)->getnZones(); ++k) {
-            heating += pDistrict->getBuilding(j)->getZone(k)->getTotalHeating();
+            heating += pDistrict->getBuilding(j)->getZone(k)->getTotalHeatingSatisfied();
         }
         results.insert(pair<unsigned int,double>(pDistrict->getBuilding(j)->getId(), heating));
     }
@@ -5130,7 +5106,7 @@ map<unsigned int,vector<double> > XmlScene::getCoolingHourlyResultsPerBuilding()
             coolingHour_i = 0.;
             // loop on the zones
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getnZones(); ++k) {
-                coolingHour_i += pDistrict->getBuilding(j)->getZone(k)->getCooling(i-preTimeStepsSimulated); // DP: Heating does not keep any preTimeStepsSimulated values
+                coolingHour_i += pDistrict->getBuilding(j)->getZone(k)->getCoolingSatisfied(i-preTimeStepsSimulated); // DP: Heating does not keep any preTimeStepsSimulated values
             }
             cooling.push_back(coolingHour_i);
         }
@@ -5159,7 +5135,7 @@ map<unsigned int,vector<double> > XmlScene::getCoolingMonthlyResultsPerBuilding(
             for (unsigned int k=0; k<pDistrict->getBuilding(j)->getnZones(); ++k) {
                 // loop on the number of time steps
                 for (unsigned int i=preTimeStepsSimulated+cumDays[monthIndex]*24; i<preTimeStepsSimulated+cumDays[monthIndex+1]*24; ++i) {
-                    coolingPerMonth += pDistrict->getBuilding(j)->getZone(k)->getCooling(i-preTimeStepsSimulated); // DP: Heating does not keep any preTimeStepsSimulated values
+                    coolingPerMonth += pDistrict->getBuilding(j)->getZone(k)->getCoolingSatisfied(i-preTimeStepsSimulated); // DP: Heating does not keep any preTimeStepsSimulated values
                 }
             }
             cooling.push_back(coolingPerMonth);
@@ -5181,7 +5157,7 @@ map<unsigned int,double> XmlScene::getCoolingYearlyResultsPerBuilding() {
         double cooling = 0.;
         // loop on the zones
         for (unsigned int k=0; k<pDistrict->getBuilding(j)->getnZones(); ++k) {
-            cooling += pDistrict->getBuilding(j)->getZone(k)->getTotalCooling();
+            cooling += pDistrict->getBuilding(j)->getZone(k)->getTotalCoolingSatisfied();
         }
         results.insert(pair<unsigned int,double>(pDistrict->getBuilding(j)->getId(), cooling));
     }
@@ -5267,6 +5243,7 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     float fuel = 0.f;
     float electric = 0.f;
     float pv = 0.f;
+    float st = 0.f;
     // eco indicators
     float nre = 0.f;
     float gwp = 0.f;
@@ -5295,6 +5272,7 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
         fuel += pDistrict->getBuilding(j)->getTotalFuelConsumption();
         electric += pDistrict->getBuilding(j)->getTotalElectricConsumption();
         pv += pDistrict->getBuilding(j)->getTotalSolarPVProduction();
+        st += pDistrict->getBuilding(j)->getTotalSolarThermalProduction();
         // MRT and other CM indicators
         if (pDistrict->getBuilding(j)->isMRT()) {
             // computes the average mrt
@@ -5328,6 +5306,7 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     textFile << "Fuel (J):\t" << fuel << "\n";
     textFile << "ElectricConsumption (J):\t" << electric << "\n";
     textFile << "ElectricPVProduction (J):\t" << pv << endl;
+    textFile << "SolarThermalProduction (J):\t" << st << endl;
     textFile << "HeatingUnsatisfied (Wh):\t" << totalHeatingUnsatisfied << endl; //Added by Max
     textFile << "CoolingUnsatisfied (Wh):\t" << totalCoolingUnsatisfied << endl; //Added by Max
     textFile << "NRE (MJ):\t" << nre << "\n";
@@ -5342,23 +5321,6 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     }
     textFile << "DHNTotalThermalLosses (Wh):\t" << totalThermalLoss << endl; //Added by Max
     textFile << "DHNElectricPump (J):\t" << electricPump << endl; //Added by Max
-
-// Cognet: Deleted it, to put back, need to change how Fuel and ElectricConsumption are saved.
-//    //beginning of contents added by Dapeng
-//    double fuel_DEC=0, electric_DEC=0;
-//    for(unsigned int i=0; i<pDistrict->getnDECs(); ++i) {
-//        fuel_DEC += pDistrict->getDEC(i)->getTotalFuelConsumption();
-//        electric_DEC += pDistrict->getDEC(i)->getTotalElectricConsumption();
-//    }
-//    if(pDistrict->getnDECs() > 0) {
-//        textFile<<"District Fuel (J):\t" << fuel_DEC <<"\n";
-//        textFile<<"District Electric (J):\t" << electric_DEC <<"\n";
-//    }
-//    //end of contents added by Dapeng
-
-//    logStream << "Total yearly energy demand & supply" << endl << flush;
-//    logStream << "heating (Wh): " << heating << "\ncooling (Wh): " << cooling << "\nfuel (J): " << fuel
-//         << "\ndhw (J): " << dhw << "\nelectric (J): " << electric << endl << flush;
 
     textFile.close();
 

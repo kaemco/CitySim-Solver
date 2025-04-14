@@ -1261,7 +1261,7 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
     string subtab=tab+"\t\t";
 
     // add the energy demand computed by CitySim
-    if (pDistrict->getScene()->getTimeStepsSimulated() > 0) {
+    if (pDistrict->getScene()->getSimulationIndex()+pDistrict->getScene()->getTimeStepsSimulated() > 0) {
         // add the energy demand
         file << subtab << "<energy:demands>" << endl;
         // heating
@@ -1282,8 +1282,8 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
         file << subtab << tabs(4) << "<energy:timeInterval unit=\"hour\">1</energy:timeInterval>" << endl;
         // loop on the number of time steps
         file << subtab << tabs(4) << "<energy:values uom=\"Wh\">";
-        for (unsigned int i=0; i<pDistrict->getScene()->getTimeStepsSimulated(); ++i)
-             file << getHeating(i) << " ";
+        for (unsigned int i=0; i<pDistrict->getScene()->getSimulationIndex()+pDistrict->getScene()->getTimeStepsSimulated(); ++i)
+             file << getHeatingSatisfied(i) << " ";
         file << "\n" << subtab << tabs(4) << "</energy:values>" << endl;
         // close the tab EnergyDemand
         file << subtab << tabs(3) << "</energy:RegularTimeSeries>" << endl;
@@ -1314,8 +1314,8 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
         file << subtab << tabs(4) << "<energy:timeInterval unit=\"hour\">1</energy:timeInterval>" << endl;
         // loop on the number of time steps
         file << subtab << tabs(4) << "<energy:values uom=\"Wh\">";
-        for (unsigned int i=0; i<pDistrict->getScene()->getTimeStepsSimulated(); ++i)
-            file << max(-getCooling(i),0.) << " ";
+        for (unsigned int i=0; i<pDistrict->getScene()->getSimulationIndex()+pDistrict->getScene()->getTimeStepsSimulated(); ++i)
+            file << max(-getCoolingSatisfied(i),0.) << " ";
         file << "\n" << subtab << tabs(4) << "</energy:values>" << endl;
         file << subtab << tabs(3) << "</energy:RegularTimeSeries>" << endl;
         file << subtab << tabs(2) << "</energy:energyAmount>" << endl;
