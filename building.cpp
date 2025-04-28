@@ -1223,10 +1223,10 @@ void Building::writeGML(ofstream& file, string tab, const vector<double>& origin
             if (zones[i]->getRoof(j)->getPVRatio() > 0.f) {
                 file << tab << "<core:cityObjectMember>\n"
                      << tab << "\t<energy:PhotovoltaicSystem gml:id=\"PV_";
-                    if (zones[i]->getWall(j)->getKey().empty())
-                        file << "Roof_b_" << id << "_s_" << zones[i]->getWall(j)->getId() << "\">" << endl;
+                    if (zones[i]->getRoof(j)->getKey().empty())
+                        file << "Roof_b_" << id << "_s_" << zones[i]->getRoof(j)->getId() << "\">" << endl;
                     else
-                        file << "Roof_" << zones[i]->getWall(j)->getKey() << "\">" << endl;
+                        file << "Roof_" << zones[i]->getRoof(j)->getKey() << "\">" << endl;
                 file << tab << "\t\t<energy:nominalEfficiency uom=\"ratio\">" << zones[i]->getRoof(j)->getPVPanel()->getMaxPowerEfficiency(800.,20.) << "</energy:nominalEfficiency>\n"
                      << tab << "\t\t<energy:collectorSurface uom=\"m2\">" << zones[i]->getRoof(j)->getPVRatio()*zones[i]->getRoof(j)->getArea() << "</energy:collectorSurface>\n"
                      << tab << "\t\t<gen:measureAttribute name=\"panelAzimuth\">\n"
