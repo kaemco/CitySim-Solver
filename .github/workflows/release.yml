@@ -10,6 +10,11 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
+      - name: glu
+        run: |
+          sudo apt-get update
+          sudo apt install --no-install-recommends -y libglu1-mesa-dev
+
       - name: checkout
         uses: actions/checkout@v4
 
