@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["\d{4}.\d{2}.\d{2}"]
+
+jobs:
+
+  build_release:
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: build
+        run: |
+          mkdir ~/bin
+          make CitySim
+
+      - name: release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: v${{ github.ref }}
+          tag_name: ${{ github.ref }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: upload linux artifact
+        uses: actions/upload-release-asset@v4
+        with:
+          path: ~/bin/CitySim
+          name: CitySim
