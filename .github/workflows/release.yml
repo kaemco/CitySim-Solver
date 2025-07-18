@@ -24,17 +24,6 @@ jobs:
           make CitySim
 
       - name: release
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          draft: false
-          prerelease: false
-          release_name: v${{ github.ref }}
-          tag_name: ${{ github.ref }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      - name: release-files
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
