@@ -20,7 +20,6 @@ jobs:
 
       - name: build
         run: |
-          mkdir ~/bin
           make CitySim
 
       - name: release
@@ -28,5 +27,5 @@ jobs:
         if: github.ref_type == 'tag'
         with:
           files: |
-            ~/bin/CitySim
+            CitySim
             LICENSE.txt
