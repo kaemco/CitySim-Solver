@@ -408,6 +408,7 @@ public:
 
     uint64_t getId() const { return id; }
     string getKey() { return key; }
+    void setKey(string value) { key=value; }
     virtual SType getType(){return SURFACE;}
 
     void pushVertex(float x, float y, float z) { vertices.push_back(GENPoint::Cartesian(x,y,z)); }
