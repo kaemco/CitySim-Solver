@@ -382,8 +382,8 @@ void Model::ThermalStepImplicitTemperature(Building *pBuilding, Climate* pClimat
 
         // *** determination of the lights state and electric consumption *** //
         // DP : commented for now, create trouble when DayLight is not computed (see doDayLightSim parameter of XmlScene::simulateTimeStep) // Cognet: Dapeng has removed this, should it be put back?
-        //Model::lightAction_Threshold(pBuilding->getZone(i));
-        //pBuilding->addElectricConsumption(Model::lightsElectricConsumption(pBuilding->getZone(i)));
+        Model::lightAction_Threshold(pBuilding->getZone(i));
+        pBuilding->addElectricConsumption(Model::lightsElectricConsumption(pBuilding->getZone(i)));
 
         // *** calculation of UA, which depends on the VdotVent *** -> in getUA() //
 
@@ -699,10 +699,10 @@ void Model::ThermalStepExplicitTemperature(Building *pBuilding, Climate* pClimat
 
             // the occupants presence -> heat released
             /// commented: if needed again, this must be uncommented and adapted
-            //Lr = pBuilding->getZone(i)->getOccupantsSensibleHeatRadiative()  * pBuilding->getZone(i)->getOccupants()->getOccupantsFraction(day,hour,step2);
-            //Lc = pBuilding->getZone(i)->getOccupantsSensibleHeatConvective() * pBuilding->getZone(i)->getOccupants()->getOccupantsFraction(day,hour,step2);
-            //pBuilding->getZone(i)->setRadiativeInternalHeatGains(Lr);
-            //pBuilding->getZone(i)->setConvectiveInternalHeatGains(Lc);
+            Lr = pBuilding->getZone(i)->getOccupantsSensibleHeatRadiative()  * pBuilding->getZone(i)->getOccupants()->getOccupantsFraction(day,hour,step2);
+            Lc = pBuilding->getZone(i)->getOccupantsSensibleHeatConvective() * pBuilding->getZone(i)->getOccupants()->getOccupantsFraction(day,hour,step2);
+            pBuilding->getZone(i)->setRadiativeInternalHeatGains(Lr);
+            pBuilding->getZone(i)->setConvectiveInternalHeatGains(Lc);
 
             // *** the blind procedure *** //
             for (unsigned int wallIndex=0; wallIndex<pBuilding->getZone(i)->getnWalls(); ++wallIndex) {
@@ -746,8 +746,8 @@ void Model::ThermalStepExplicitTemperature(Building *pBuilding, Climate* pClimat
 
             // *** determination of the lights state and electric consumption *** //
             // DP : commented for now, create trouble when DayLight is not computed (see doDayLightSim parameter of XmlScene::simulateTimeStep)
-            //Model::lightAction_Lightswitch2002(pBuilding->getZone(i), day, hour, step2);
-            //pBuilding->addElectricConsumption(Model::lightsElectricConsumption(pBuilding->getZone(i)));
+            Model::lightAction_Lightswitch2002(pBuilding->getZone(i), day, hour, step2);
+            pBuilding->addElectricConsumption(Model::lightsElectricConsumption(pBuilding->getZone(i)));
 
             // *** calculation of UAm which depends on VdotVent *** -> in getUA() /
 
@@ -3806,3 +3806,4 @@ void Model::computeCMIndices(Building* pBuilding, Climate* pClimate, unsigned in
 
     return;
 }
+
