@@ -52,7 +52,11 @@ $(LIB): $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
 %d.o: %.f
 	$(F95) -c -g $< -o $*d.o
 
-clean: 
+clean: $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ) $(MAINOBJ_D) $(LAPACKOBJ_D) $(SKYOBJ_D) $(TINYXMLOBJ_D) $(VFCLIBRARYOBJ_D)
+	del /f /s $^
+	del /f /s *.o
+
+clear:
 	del /f /s *.o
 
 install: all
