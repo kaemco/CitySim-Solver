@@ -1,7 +1,7 @@
 CXX		= g++
 F95		= gfortran
 CXXFLAGS	= -std=c++11 -O2 -fopenmp -fPIC -DTIXML_USE_STL
-LDFLAGS		= -lGLU32 -lgfortran -lquadmath -fopenmp
+LDFLAGS		= -static -lGLU32 -lgfortran -lquadmath -fopenmp
 CXXFLAGS_D	= -std=c++11 -g -DDEBUG -DTIXML_USE_STL
 LDFLAGS_D	= -lGLU32 -lgfortran -lquadmath
 INCLUDES	= -I./Sky -I./Tinyxml -I./VFCLibrary
