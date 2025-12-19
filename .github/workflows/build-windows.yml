@@ -7,9 +7,15 @@ jobs:
 
     runs-on: windows-latest
     steps:
-      - name: checkout
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: build
+      - name: Build
         run: |
-          make -f Makefile.mingw32 CitySim
+          make -f Makefile.mingw32 all
+
+      - name: Archive executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: executable
+          path: CitySim.exe
