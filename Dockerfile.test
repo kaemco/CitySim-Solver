@@ -22,7 +22,8 @@ COPY . /src/CitySim-Solver
 
 # compile the code
 WORKDIR CitySim-Solver
-RUN make -j $(nproc)
+RUN make -j $(nproc) && \
+    make install
 
 # make a final image with the executables and the necessary libraries
 FROM python:3.10-slim-bookworm
