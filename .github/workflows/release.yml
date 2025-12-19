@@ -6,26 +6,45 @@ on:
 
 jobs:
 
-  build_release:
+  build_release_linux:
 
     runs-on: ubuntu-latest
     steps:
-      - name: glu
+      - name: Install glu
         run: |
           sudo apt-get update
           sudo apt install --no-install-recommends -y libglu1-mesa-dev
 
-      - name: checkout
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-      - name: build
+      - name: Build
         run: |
-          make CitySim
+          make all
 
-      - name: release
+      - name: Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           files: |
             CitySim
             LICENSE.txt
+
+
+  build_release_windows:
+
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build
+        run: |
+          make -f Makefile.mingw32 all
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          files: |
+            CitySim.exe
