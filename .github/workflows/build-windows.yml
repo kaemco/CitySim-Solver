@@ -1,0 +1,15 @@
+name: Build Windows
+
+on: [push, pull_request]
+
+jobs:
+  build_release_windows:
+
+    runs-on: windows-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: build
+        run: |
+          make -f Makefile.mingw32 CitySim
