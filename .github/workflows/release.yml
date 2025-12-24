@@ -21,13 +21,14 @@ jobs:
       - name: Build
         run: |
           make all
+          mv CitySim CitySim-linux-x86_64
 
       - name: Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           files: |
-            CitySim
+            CitySim-linux-x86_64
             LICENSE.txt
 
 
@@ -41,10 +42,11 @@ jobs:
       - name: Build
         run: |
           make -f Makefile.mingw32 all
+          move CitySim.exe CitySim-windows-x86_64.exe
 
       - name: Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           files: |
-            CitySim.exe
+            CitySim-windows-x86_64.exe
