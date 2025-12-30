@@ -8,10 +8,6 @@ RUN apt-get update &&\
 # prepare the directory for the executables
 RUN mkdir ~/bin
 
-# prepare the directory for the library
-RUN mkdir ~/lib
-RUN mkdir ~/lib/CitySim
-
 # prepare the directory for the sources
 WORKDIR /src
 
@@ -22,8 +18,8 @@ COPY . /src/CitySim-Solver
 
 # compile the code
 WORKDIR CitySim-Solver
-RUN make -j $(nproc) && \
-    make install
+RUN make -j $(nproc) CitySim && \
+    cp CitySim ~/bin
 
 # make a final image with the executables and the necessary libraries
 FROM python:3.10-slim-bookworm
