@@ -22,14 +22,15 @@ COPY . /src/CitySim-Solver
 
 # compile the code
 WORKDIR CitySim-Solver
-RUN make -j $(nproc)
+RUN make -j $(nproc) && \
+    make install
 
 # make a final image with the executables
 FROM alpine:latest
 RUN apk add --no-cache --update gcompat gfortran glu
 
 # prepare the environnement for the executables
-ENV PATH "$PATH:/root/bin"
+ENV PATH="$PATH:/root/bin"
 
 # copy the build solver from the builder image
 COPY --from=builder /root/bin /root/bin

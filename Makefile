@@ -33,26 +33,12 @@ all: $(EXEC) $(EXEC_D) $(LIB)
 
 $(EXEC): main.o $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
-	cp $(EXEC) ~/bin
-	rm $(EXEC)
 
 $(EXEC_D): maind.o $(MAINOBJ_D) $(LAPACKOBJ_D) $(SKYOBJ_D) $(TINYXMLOBJ_D) $(VFCLIBRARYOBJ_D)
 	$(CXX) -o $@ $^ $(LDFLAGS_D)
-	cp $(EXEC_D) ~/bin
-	rm $(EXEC_D)
 
 $(LIB): $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
 	$(AR) rcs $@ $^
-	cp $(LIB) ~/lib/CitySim
-	cp $(wildcard ./*.h) ~/lib/CitySim
-	cp $(wildcard ./Sky/*.h) ~/lib/CitySim
-	cp $(wildcard ./Tinyxml/*.h) ~/lib/CitySim
-	cp $(wildcard ./VFCLibrary/*.h) ~/lib/CitySim
-	cp $(wildcard ./VFCLibrary/*.inl) ~/lib/CitySim
-	cp main.cpp ~/lib/CitySim
-	@echo "all: main.cpp $(LIB)" > ~/lib/CitySim/Makefile
-	@echo "	$(CXX) $(CXXFLAGS) -L. main.cpp -l$(EXEC) $(LDFLAGS) -o $(EXEC)" >> ~/lib/CitySim/Makefile
-	rm $(LIB)
 
 %.o: %.cpp
 	$(CXX) $(INCLUDES) $(DEFINES) $(CXXFLAGS) -c $< -o $*.o
@@ -70,5 +56,20 @@ clean: $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ) $(MAINOB
 	rm -f $^
 	rm -f *.o
 
-clear: 
+clear:
 	rm -f *.o
+
+install: all
+	@mkdir -p ~/bin
+	mv $(EXEC) ~/bin
+	mv $(EXEC_D) ~/bin
+	@mkdir -p ~/lib/CitySim
+	mv $(LIB) ~/lib/CitySim
+	cp $(wildcard ./*.h) ~/lib/CitySim
+	cp $(wildcard ./Sky/*.h) ~/lib/CitySim
+	cp $(wildcard ./Tinyxml/*.h) ~/lib/CitySim
+	cp $(wildcard ./VFCLibrary/*.h) ~/lib/CitySim
+	cp $(wildcard ./VFCLibrary/*.inl) ~/lib/CitySim
+	cp main.cpp ~/lib/CitySim
+	@echo "all: main.cpp $(LIB)" > ~/lib/CitySim/Makefile
+	@echo "	$(CXX) $(CXXFLAGS) -L. main.cpp -l$(EXEC) $(LDFLAGS) -o $(EXEC)" >> ~/lib/CitySim/Makefile

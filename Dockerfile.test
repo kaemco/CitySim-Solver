@@ -8,10 +8,6 @@ RUN apt-get update &&\
 # prepare the directory for the executables
 RUN mkdir ~/bin
 
-# prepare the directory for the library
-RUN mkdir ~/lib
-RUN mkdir ~/lib/CitySim
-
 # prepare the directory for the sources
 WORKDIR /src
 
@@ -22,7 +18,8 @@ COPY . /src/CitySim-Solver
 
 # compile the code
 WORKDIR CitySim-Solver
-RUN make -j $(nproc)
+RUN make -j $(nproc) CitySim && \
+    cp CitySim ~/bin
 
 # make a final image with the executables and the necessary libraries
 FROM python:3.10-slim-bookworm
@@ -30,16 +27,13 @@ RUN apt-get update &&\
         apt-get --no-install-recommends install --yes gfortran libglu1-mesa
 
 # prepare the environnement for the executables
-ENV PATH "$PATH:/root/bin"
+ENV PATH="$PATH:/root/bin"
 
 # copy the build solver from the builder image
 COPY --from=builder /root/bin /root/bin
 
 # prepare the testing
 COPY test test
-WORKDIR test
+WORKDIR /test
 RUN pip3 install -r ./checks/requirements.txt
-CMD ./test.sh
-
-
-
+CMD ["/bin/bash", "test.sh"]
