@@ -1,4 +1,4 @@
-Copyright 2009-2020 EPFL Solar Energy and Building Physics Laboratory (LESO-PB), kaemco LLC
+Copyright 2009-2026 EPFL Solar Energy and Building Physics Laboratory (LESO-PB), kaemco LLC
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
