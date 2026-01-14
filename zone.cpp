@@ -79,6 +79,9 @@ void Zone::update(bool constructor){
     else
         setAirDensity(Climate::getAirDensity(0.f)); // if no Climate make an assumption that the altitude of the situation is 0 m (sea level)
 
+    // add the furniture heat capacity to the internal air node capacity Ci
+    addC(Cadd); // in J/K
+
     // output of the values
     logStream << "Vi: " << Vi << endl << flush;
 }
