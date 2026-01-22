@@ -898,6 +898,11 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
                 zones.back()->setKpsi(to<float>(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("psi")));
             }
 
+            // adds the additional heat capacity to the air node if it exists
+            if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("Cadd")) {
+                zones.back()->setCadd(to<float>(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("Cadd")));
+            }
+
             // adds the Tmin and Tmax to the zone if they exist in the Tag Zone or take it from the building itself
             if (hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("Tmin")) {
                 zones.back()->setTmin(to<float>(hdl.ChildElement("Zone",zoneIndex).ToElement()->Attribute("Tmin")));

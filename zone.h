@@ -97,6 +97,7 @@ protected:
     float Cpi = 1005.f;  //!< Internal air specific heat (J/(kg*K)), initialise with air Cp inside the zone @ 300 K
     float rhoi; //!< Internal air density (kg/m³)
     float Ci; //!< capacitance of the air node (J/K)
+    float Cadd = 0.f; //!< additional capacitance to the air node for furniture (J/K)
     float Lr = 0.f, Lc= 0.f; //!< radiative and convective internal heat gains (W)
 
     vector<double> heating,cooling; // energy for heating and cooling to get Tmin and Tmax (in Wh)
@@ -263,6 +264,8 @@ public:
 
     void setKpsi(float wattsPerKelvin) { Kpsi = wattsPerKelvin; }
     float getKpsi() { return Kpsi; }
+
+    void setCadd(float joulesPerKelvin) { Cadd = joulesPerKelvin; }
 
     float getQsun1();
     float getQsun2();
