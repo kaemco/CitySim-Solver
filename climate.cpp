@@ -200,14 +200,12 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
             pos2 = buffer.find_first_of("\t",pos1);
             cloudiness.push_back(stof(buffer.substr(pos1,pos2)));
 
-            getline(input,buffer,'\n');
-
         }
-        while (buffer.find_first_of("\t") != string::npos);
+        while (getline(input,buffer,'\n') && buffer.find_first_of("\t") != string::npos);
 
     }
     catch (exception& e) { throw("Error reading the line: \n" + buffer); }
-    catch (...) { throw; }
+    catch (...) { throw("Error reading the line: \n" + buffer); }
 
     //logStream << "last line: " << endl;
     //logStream << "Igh: " << Igh.back() << "\tTout: " << Tout.back() << "\twindSpeed: " << windSpeed.back() << "\twindDirection: " << windDirection.back()
