@@ -180,6 +180,8 @@ int main(int argc, char *argv[])
             xmlscene.writeHCHeaderText(firstParameter.substr(0,firstParameter.size()-4) + "_HC.out");
             xmlscene.writeETHeaderText(firstParameter.substr(0,firstParameter.size()-4) + "_ET.out");
             xmlscene.writeCMHeaderText(firstParameter.substr(0,firstParameter.size()-4) + "_CM.out");
+            xmlscene.writePollutantHeaderText(firstParameter.substr(0,firstParameter.size()-4) + "_Pollutant.out");
+            xmlscene.writeNoiseHeaderText(firstParameter.substr(0,firstParameter.size()-4) + "_Noise.out");
 
             // pre-simulation process
             xmlscene.computeViewFactors();
@@ -200,6 +202,8 @@ int main(int argc, char *argv[])
             xmlscene.writeHCResultsText(firstParameter.substr(0,firstParameter.size()-4) + "_HC.out");
             xmlscene.writeETResultsText(firstParameter.substr(0,firstParameter.size()-4) + "_ET.out");
             xmlscene.writeCMResultsText(firstParameter.substr(0,firstParameter.size()-4) + "_CM.out");
+            xmlscene.writePollutantResultsText(firstParameter.substr(0,firstParameter.size()-4) + "_Pollutant.out");
+            xmlscene.writeNoiseResultsText(firstParameter.substr(0,firstParameter.size()-4) + "_Noise.out");
 
             // save climatic data
             xmlscene.writeClimaticDataText(firstParameter.substr(0,firstParameter.size()-4) + "_ClimaticData.out");

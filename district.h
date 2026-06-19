@@ -6,6 +6,8 @@
 
 #include "building.h"
 #include "surface.h"
+#include "pollutant.h"
+#include "noise.h"
 
 //beginning of contents added by Dapeng
 #include "plant.h"
@@ -41,6 +43,8 @@ private:
     vector<ActivityType*> activityTypes;
 
     vector<DistrictEnergyCenter*> districtEnergyCenters;
+    vector<Pollutant*> pollutants;
+    vector<Noise*>     noises;
 
 public:
 
@@ -55,6 +59,8 @@ public:
         for (vector<Surface*>::iterator it=surfaces.begin();it!=surfaces.end();++it) (*it)->clear();
         for (vector<Tree*>::iterator it=trees.begin();it!=trees.end();++it) (*it)->clear();
         for (forward_list<Ground*>::iterator it=grounds.begin();it!=grounds.end();++it) (*it)->clear();
+        for (vector<Pollutant*>::iterator it=pollutants.begin();it!=pollutants.end();++it) (*it)->clear();
+        for (vector<Noise*>::iterator it=noises.begin();it!=noises.end();++it) (*it)->clear();
     }
 
     void writeXML(ofstream& file, string tab="");
@@ -141,6 +147,33 @@ public:
     unsigned int getnDECs() { return districtEnergyCenters.size(); }
     DistrictEnergyCenter* getDEC(unsigned int i) {return districtEnergyCenters[i]; }
     //end of contents added by Dapeng
+    unsigned int getnPollutants() { return pollutants.size(); }
+    Pollutant* getPollutant(unsigned int i) { return pollutants[i]; }
+    void computePollutants(Climate* pClimate, unsigned int day, unsigned int hour) {
+        for (vector<Pollutant*>::iterator it=pollutants.begin(); it!=pollutants.end(); ++it) (*it)->compute(pClimate, day, hour);
+    }
+    void erasePollutantResults(unsigned int keepValue) {
+        for (vector<Pollutant*>::iterator it=pollutants.begin(); it!=pollutants.end(); ++it) (*it)->eraseResults(keepValue);
+    }
+    size_t memoryUsagePollutants() {
+        size_t bytes=0;
+        for (vector<Pollutant*>::iterator it=pollutants.begin(); it!=pollutants.end(); ++it) bytes += (*it)->memoryUsage();
+        return bytes;
+    }
+
+    unsigned int getnNoises() { return noises.size(); }
+    Noise* getNoise(unsigned int i) { return noises[i]; }
+    void computeNoises(Climate* pClimate, unsigned int day, unsigned int hour) {
+        for (vector<Noise*>::iterator it=noises.begin(); it!=noises.end(); ++it) (*it)->compute(this, pClimate, day, hour);
+    }
+    void eraseNoiseResults(unsigned int keepValue) {
+        for (vector<Noise*>::iterator it=noises.begin(); it!=noises.end(); ++it) (*it)->eraseResults(keepValue);
+    }
+    size_t memoryUsageNoises() {
+        size_t bytes=0;
+        for (vector<Noise*>::iterator it=noises.begin(); it!=noises.end(); ++it) bytes += (*it)->memoryUsage();
+        return bytes;
+    }
 
 };
 

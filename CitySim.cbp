@@ -401,6 +401,10 @@
 		<Unit filename="occupants.h" />
 		<Unit filename="plant.cpp" />
 		<Unit filename="plant.h" />
+		<Unit filename="pollutant.cpp" />
+		<Unit filename="noise.cpp" />
+		<Unit filename="pollutant.h" />
+		<Unit filename="noise.h" />
 		<Unit filename="result.cpp" />
 		<Unit filename="result.h" />
 		<Unit filename="scene.cpp" />

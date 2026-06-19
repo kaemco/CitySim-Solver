@@ -306,6 +306,10 @@ public:
     void writeETResultsText(string fileOut);
     void writeCMHeaderText(string fileOut);
     void writeCMResultsText(string fileOut);
+    void writePollutantHeaderText(string fileOut);
+    void writePollutantResultsText(string fileOut);
+    void writeNoiseHeaderText(string fileOut);
+    void writeNoiseResultsText(string fileOut);
     void writeClimaticDataText(string fileOut);
     void writeMonthlyResultsText(string fileOut);
     void writeYearlyResultsText(string fileOut);

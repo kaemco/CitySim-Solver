@@ -84,6 +84,19 @@ District::District(TiXmlHandle XMLHandler, XmlScene* pScene):pScene(pScene),occu
         }
         // Cognet: End of moved code.
 
+        logStream << "Loading pollutant(s). ";
+        i=0;
+        while (XMLHandler.FirstChild("District").ChildElement("Pollutant",i).ToElement()) {
+            pollutants.push_back(new Pollutant(XMLHandler.FirstChild("District").ChildElement("Pollutant",i), &logStream));
+            ++i;
+        }
+
+        logStream << "Loading noise(s). ";
+        i=0;
+        while (XMLHandler.FirstChild("District").ChildElement("Noise",i).ToElement()) {
+            noises.push_back(new Noise(XMLHandler.FirstChild("District").ChildElement("Noise",i), &logStream));
+            ++i;
+        }
 
         // loading the geometry of the buildings
         logStream << "Loading geometry of building(s)." << endl << flush;
@@ -108,6 +121,7 @@ District::District(TiXmlHandle XMLHandler, XmlScene* pScene):pScene(pScene),occu
 
                         // reads the vertices and creates a shading, with an id
                         surfaces.push_back(new Surface(elem,nullptr,&logStream));
+                        // Non-simulated walls use default acoustic coefficients.
 
                         // checks the size of the surface
                         if ((surfaces.back()->getArea() <= 0.f) || (surfaces.back()->getRadius() <= 0.f)) {
@@ -401,6 +415,15 @@ void District::writeXML(ofstream& file, string tab){
         buildings[i]->writeXML(file, subtab);
     }
 
+    // Write Pollutants
+    for (unsigned int i=0; i<pollutants.size(); ++i){
+        pollutants[i]->writeXML(file, subtab);
+    }
+    // Write Noise models
+    for (unsigned int i=0; i<noises.size(); ++i){
+        noises[i]->writeXML(file, subtab);
+    }
+
     // Write Shading
     file << subtab << "<ShadingSurface>" << endl;
     for (size_t i=0; i<surfaces.size(); ++i){
@@ -460,6 +483,8 @@ District::~District() {
     //beginning of contents added by Dapeng
     for (vector<DistrictEnergyCenter*>::iterator it = districtEnergyCenters.begin(); it!=districtEnergyCenters.end(); ++it) delete *it;
     //ending of contents added by Dapeng
+    for (vector<Pollutant*>::iterator it=pollutants.begin();it!=pollutants.end();++it) delete *it;
+    for (vector<Noise*>::iterator it=noises.begin();it!=noises.end();++it) delete *it;
     if (temperatureProfiles) delete temperatureProfiles;
 
 }
@@ -469,6 +494,8 @@ void District::deleteDynamicallyAllocated() { // Cognet: Added this, to delete o
     while(!deviceTypes.empty()) { delete deviceTypes.back(); deviceTypes.pop_back(); }
     while(!activityTypes.empty()) { delete activityTypes.back(); activityTypes.pop_back(); }
     while(!districtEnergyCenters.empty()) { delete districtEnergyCenters.back(); districtEnergyCenters.pop_back(); }
+    while(!pollutants.empty()) { delete pollutants.back(); pollutants.pop_back(); }
+    while(!noises.empty()) { delete noises.back(); noises.pop_back(); }
     while(!buildings.empty()) { delete buildings.back(); buildings.pop_back(); }
     while(!surfaces.empty()) { delete surfaces.back(); surfaces.pop_back(); }
     while(!trees.empty()) { delete trees.back(); trees.pop_back(); }

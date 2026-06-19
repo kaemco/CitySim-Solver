@@ -3749,6 +3749,11 @@ void XmlScene::simulateTimeStep(int day, int hour, bool preCond, bool radOnly, b
 
     computeComfort(day,hour);
 
+    if (!preCond && !radOnly) {
+        pDistrict->computePollutants(pClimate, day, hour);
+        pDistrict->computeNoises(pClimate, day, hour);
+    }
+
     if (preCond){
         ++preTimeStepsSimulated;
     }
@@ -3787,6 +3792,8 @@ void XmlScene::checkMemoryUsage(double limit, bool radOnly){
         writeHCResultsText(inputFile.substr(0,inputFile.size()-4) + "_HC.out");
         writeETResultsText(inputFile.substr(0,inputFile.size()-4) + "_ET.out");
         writeCMResultsText(inputFile.substr(0,inputFile.size()-4) + "_CM.out");
+        writePollutantResultsText(inputFile.substr(0,inputFile.size()-4) + "_Pollutant.out");
+        writeNoiseResultsText(inputFile.substr(0,inputFile.size()-4) + "_Noise.out");
         if (Model::thermalExplicit)
             writeTHExplicitResultsText(inputFile.substr(0,inputFile.size()-4) + "_THExplicit.out");
         #endif
@@ -3914,6 +3921,8 @@ void XmlScene::eraseResults(unsigned int keepValue, bool eraseAllResults) {
         pClimate->eraseIgh(keepValue);
         pClimate->eraseIgh_vis(keepValue);
     }
+    pDistrict->erasePollutantResults(keepValue);
+    pDistrict->eraseNoiseResults(keepValue);
 
     // deleting all results, loop on buildings
     // emptying the vectors (leaving only one value in each vector)
@@ -4905,6 +4914,72 @@ void XmlScene::writeCMResultsText(string fileOut) {
 
 }
 
+void XmlScene::writePollutantHeaderText(string fileOut) {
+
+    if (pDistrict->getnPollutants()==0) return;
+
+    fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::trunc);
+    if (!textFile.is_open()) throw(string("Cannot open file: ")+fileOut);
+
+    textFile << "#timeStep\t";
+    for (unsigned int i=0; i<pDistrict->getnPollutants(); ++i)
+        pDistrict->getPollutant(i)->writeHeaderText(textFile);
+    textFile << endl;
+    textFile.close();
+}
+
+void XmlScene::writePollutantResultsText(string fileOut) {
+
+    if (pDistrict->getnPollutants()==0) return;
+
+    fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::app);
+    if (!textFile.is_open()) throw(string("Cannot open file: ")+fileOut);
+
+    unsigned int firstIndex = 0;
+    if (pDistrict->getPollutant(0)->getnResults() > timeStepsSimulated)
+        firstIndex = pDistrict->getPollutant(0)->getnResults() - timeStepsSimulated;
+
+    for (unsigned int i=0; i<timeStepsSimulated; ++i) {
+        textFile << simulationIndex+i+1 << "\t";
+        for (unsigned int j=0; j<pDistrict->getnPollutants(); ++j)
+            pDistrict->getPollutant(j)->writeResultsText(textFile, firstIndex+i);
+        textFile << endl;
+    }
+    textFile.close();
+}
+
+void XmlScene::writeNoiseHeaderText(string fileOut) {
+
+    if (pDistrict->getnNoises()==0) return;
+
+    fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::trunc);
+    if (!textFile.is_open()) throw(string("Cannot open file: ")+fileOut);
+
+    textFile << "#timeStep\t";
+    for (unsigned int i=0; i<pDistrict->getnNoises(); ++i)
+        pDistrict->getNoise(i)->writeHeaderText(textFile);
+    textFile << endl;
+    textFile.close();
+}
+
+void XmlScene::writeNoiseResultsText(string fileOut) {
+
+    if (pDistrict->getnNoises()==0) return;
+
+    fstream textFile(fileOut.c_str(),ios::out|ios::binary|ios::app);
+    if (!textFile.is_open()) throw(string("Cannot open file: ")+fileOut);
+
+    unsigned int firstIndex = 0;
+    if (pDistrict->getNoise(0)->getnResults() > timeStepsSimulated) firstIndex = pDistrict->getNoise(0)->getnResults() - timeStepsSimulated;
+
+    for (unsigned int i=0; i<timeStepsSimulated; ++i) {
+        textFile << simulationIndex+i+1 << "\t";
+        for (unsigned int j=0; j<pDistrict->getnNoises(); ++j) pDistrict->getNoise(j)->writeResultsText(textFile, firstIndex+i);
+        textFile << endl;
+    }
+    textFile.close();
+}
+
 void XmlScene::writeClimaticDataText(string fileOut) {
 
     // clear the file
@@ -5744,6 +5819,8 @@ size_t XmlScene::memoryUsage() {                    // DP: modified to take into
     for (unsigned int i=0; i<pDistrict->getnDECs(); i++) { // Cognet: Added this.
         bytes += pDistrict->getDEC(i)->nbFloatsRecorded()*sizeof(float)*(timeStepsSimulated+preTimeStepsSimulated);
     }
+    bytes += pDistrict->memoryUsagePollutants();
+    bytes += pDistrict->memoryUsageNoises();
     return bytes;
 }
 

@@ -4,6 +4,39 @@
 #include "scene.h"
 #include "GEOMBoundingSphereCalc.h"
 
+void Composite::readAcousticCoefficients(TiXmlElement* elem) {
+
+    if (!elem) return;
+
+    auto readOptional = [&](const char* primary, const char* secondary, const char* tertiary, const char* quaternary, float& value) {
+        const char* attr = elem->Attribute(primary);
+        if (!attr && secondary) attr = elem->Attribute(secondary);
+        if (!attr && tertiary) attr = elem->Attribute(tertiary);
+        if (!attr && quaternary) attr = elem->Attribute(quaternary);
+        if (!attr) return false;
+        value = to<float>(attr);
+        return true;
+    };
+
+    bool hasAbsorption = readOptional("AcousticAbsorptionCoeff",
+                                      "AbsorptionCoeff",
+                                      "wallAbsorptionCoeff",
+                                      "absorptionCoeff",
+                                      acousticAbsorptionCoeff);
+    bool hasReflectivity = readOptional("AcousticReflectivityCoeff",
+                                        "ReflectivityCoeff",
+                                        "wallReflectivityCoeff",
+                                        "reflectivityCoeff",
+                                        acousticReflectivityCoeff);
+
+    if (acousticAbsorptionCoeff < 0.f || acousticAbsorptionCoeff > 1.f) throw string("Composite id ") + toString(id) + ": acoustic absorption coefficient must be between 0 and 1.";
+    if (acousticReflectivityCoeff < 0.f || acousticReflectivityCoeff > 1.f) throw string("Composite id ") + toString(id) + ": acoustic reflectivity coefficient must be between 0 and 1.";
+
+    if (hasAbsorption && !hasReflectivity) acousticReflectivityCoeff = 1.f - acousticAbsorptionCoeff;
+    else if (!hasAbsorption && hasReflectivity) acousticAbsorptionCoeff = 1.f - acousticReflectivityCoeff;
+    else if (hasAbsorption && hasReflectivity && acousticAbsorptionCoeff + acousticReflectivityCoeff > 1.00001f) throw string("Composite id ") + toString(id) + ": acoustic absorption plus reflectivity must not exceed 1.";
+}
+
 Material::Material(TiXmlHandle hdl, ostream* pLogStr):logStream(std::cout.rdbuf()) {
 
     // logStream is directed by default to the "cout" streambuf
@@ -44,6 +77,7 @@ Composite::Composite(TiXmlHandle hdl, ostream* pLogStr):insulationLayer(NULL),lo
     if((hdl.ToElement())->Attribute("category")!=NULL){
         hdl.ToElement()->QueryStringAttribute("category",&category);
     }
+    readAcousticCoefficients(hdl.ToElement());
     if (hdl.FirstChildElement().ToElement()){
         TiXmlElement *elem = hdl.FirstChildElement().ToElement();
         while(elem){
@@ -98,6 +132,7 @@ Composite::Composite(TiXmlHandle hdl, map<string,Material*> materials, ostream* 
     if((hdl.ToElement())->Attribute("category")!=NULL){
         hdl.ToElement()->QueryStringAttribute("category",&category);
     }
+    readAcousticCoefficients(hdl.ToElement());
     if (hdl.FirstChildElement().ToElement()){
         TiXmlElement *elem = hdl.FirstChildElement().ToElement();
         while(elem){
@@ -167,13 +202,17 @@ void Composite::addLayer(float thickness, Material* m, bool isInsulationLayer){
 
 void Composite::writeXML(ofstream& file, string tab=""){
     if(!vLayer.empty()){
-        file << tab << "<Composite id=\"" << id << "\" name=\"" << name << "\" category=\"" << category << "\">" << endl;
+        file << tab << "<Composite id=\"" << id << "\" name=\"" << name << "\" category=\"" << category << "\"";
+        file << " AcousticAbsorptionCoeff=\"" << acousticAbsorptionCoeff << "\"";
+        file << " AcousticReflectivityCoeff=\"" << acousticReflectivityCoeff << "\">" << endl;
         for (unsigned int i=0; i<vLayer.size(); ++i)
             vLayer[i].writeXML(file, &vLayer[i]==insulationLayer, tab+"\t");
         file << tab << "</Composite>" << endl;
     }
     else{
-        file << tab << "<Composite id=\"" << id << "\" Uvalue =\"" << Uvalue << "\"/>" << endl;
+        file << tab << "<Composite id=\"" << id << "\" Uvalue =\"" << Uvalue << "\"";
+        file << " AcousticAbsorptionCoeff=\"" << acousticAbsorptionCoeff << "\"";
+        file << " AcousticReflectivityCoeff=\"" << acousticReflectivityCoeff << "\"/>" << endl;
     }
 }
 
@@ -192,6 +231,8 @@ bool Composite::equals(const Composite& c) const {
     if (c.name != name) return false;
     //if (c->id != id) return false;
     if (c.Uvalue != Uvalue) return false;
+    if (c.acousticAbsorptionCoeff != acousticAbsorptionCoeff) return false;
+    if (c.acousticReflectivityCoeff != acousticReflectivityCoeff) return false;
     if (vLayer.size() != c.vLayer.size()) return false;
     for (unsigned int i = 0; i<vLayer.size(); ++i){
         if (c.vLayer[i] != vLayer[i]) return false;

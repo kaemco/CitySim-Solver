@@ -128,6 +128,10 @@ class Composite {
     float Uvalue;
 	int id;
     Layer* insulationLayer=NULL;
+    float acousticAbsorptionCoeff = 0.1f;
+    float acousticReflectivityCoeff = 0.9f;
+
+    void readAcousticCoefficients(TiXmlElement* elem);
 
  public :
 
@@ -151,6 +155,10 @@ class Composite {
     float getUvalue() { return Uvalue; }
     string getCategory() { return name;}
     void setCategory(string cat) { category=cat;}
+    float getAcousticAbsorptionCoeff() { return acousticAbsorptionCoeff; }
+    float getAcousticReflectivityCoeff() { return acousticReflectivityCoeff; }
+    static float defaultAcousticAbsorptionCoeff() { return 0.1f; }
+    static float defaultAcousticReflectivityCoeff() { return 0.9f; }
 
     Layer* getInsulationLayer(){
         return insulationLayer;
