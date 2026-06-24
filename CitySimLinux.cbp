@@ -215,10 +215,14 @@
 		<Unit filename="main.cpp" />
 		<Unit filename="models.cpp" />
 		<Unit filename="models.h" />
+		<Unit filename="noise.cpp" />
+		<Unit filename="noise.h" />
 		<Unit filename="occupants.cpp" />
 		<Unit filename="occupants.h" />
 		<Unit filename="plant.cpp" />
 		<Unit filename="plant.h" />
+		<Unit filename="pollutant.cpp" />
+		<Unit filename="pollutant.h" />
 		<Unit filename="scene.cpp" />
 		<Unit filename="scene.h" />
 		<Unit filename="surface.cpp" />
