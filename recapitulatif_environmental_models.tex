@@ -1,0 +1,729 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{url}
+
+\geometry{margin=22mm}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\unit}[1]{\,\mathrm{#1}}
+\newcommand{\NA}{--}
+\newcommand{\toprule}{\hline}
+\newcommand{\midrule}{\hline}
+\newcommand{\bottomrule}{\hline}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\title{CitySim Environmental Models\\
+       Pollutant Dispersion and Outdoor Noise Propagation}
+\author{Implementation recap and XML input reference}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note documents the pollutant-dispersion and outdoor-noise modules added to
+CitySim. Both modules are evaluated hourly, accept multiple point emitters and
+multiple point receptors, use the CitySim three-dimensional coordinate system,
+and write dedicated tab-separated result files. The pollutant module is a
+Gaussian-plume screening model inspired by the use case covered by Soft-P's
+AERO software. It is not an implementation of the complete Polish regulatory
+AERO methodology. The noise module is a single-frequency engineering subset of
+ISO~9613-1 and ISO~9613-2:2024. It is not a certified full implementation of
+ISO~9613-2:2024. The scope and limitations are stated explicitly below.
+\end{abstract}
+
+\tableofcontents
+
+\section{Integration in CitySim}
+
+The two new model tags are children of the CitySim \code{<District>} element:
+\code{<Pollutant>} and \code{<Noise>}. More than one model tag can be declared.
+Each tag contains one or several \code{<PointEmittor>} elements and one or
+several \code{<PointReceptor>} elements. The spelling \code{Emittor}, with two
+letters ``t'', is the XML spelling currently implemented in the source code.
+
+The models are computed after the regular CitySim hourly calculations. They use
+the same climate object and the same coordinate frame as the rest of the scene.
+The result files are:
+\begin{itemize}
+  \item \code{<input-base-name>\_Pollutant.tsv};
+  \item \code{<input-base-name>\_Noise.tsv}.
+\end{itemize}
+
+Both files use the usual CitySim convention: one header line beginning with
+\code{\#timeStep}, followed by one line per simulated hour. Identifiers and
+optional keys appear in column names so that several models, receptors, and
+emitters can be distinguished.
+
+\section{Pollutant Dispersion Model}
+
+\subsection{Physical scope}
+
+The implemented pollutant model is a steady-state Gaussian plume evaluated at
+each CitySim hourly time step. It is suitable for screening calculations from
+point sources such as chimneys or discretised road-traffic emissions. The
+hourly climate data determine the wind direction, the default reference wind
+speed, and the automatically selected atmospheric stability class.
+
+The model uses the CitySim coordinates of sources and receptors. Building
+geometry does \emph{not} modify pollutant dispersion: there is no street-canyon
+flow, facade interception, recirculation zone, or computational-fluid-dynamics
+calculation. The geometry is presently a shared positioning frame only.
+
+Soft-P's AERO application calculates atmospheric pollutant dispersion according
+to the Polish regulatory framework \cite{softp-aero,polish-regulation}. The
+present implementation covers a simpler Gaussian-plume use case and should not
+be presented as a reproduction of the full AERO methodology.
+
+\subsection{Wind coordinates and logarithmic wind profile}
+
+Meteorological wind direction $\theta$ is the direction \emph{from which} the
+wind blows. It is converted to a downwind unit vector:
+\begin{equation}
+  w_x = -\sin(\theta), \qquad w_y = -\cos(\theta).
+\end{equation}
+For an emitter--receptor horizontal displacement
+$(\Delta x,\Delta y)=(x_r-x_e,y_r-y_e)$, the downwind and crosswind coordinates
+are:
+\begin{align}
+  x &= \Delta x\,w_x + \Delta y\,w_y, \\
+  y &= -\Delta x\,w_y + \Delta y\,w_x.
+\end{align}
+Upwind receptors ($x\leq0$) receive no contribution from that emitter. For
+numerical stability, positive downwind distances are clamped to
+$x\geq x_{\min}$, where $x_{\min}$ is configured by \code{downwindMin}.
+
+The effective emitter height is:
+\begin{equation}
+  H = z_e + \Delta h_{\mathrm{plume}},
+\end{equation}
+where $z_e$ is the emitter coordinate and $\Delta h_{\mathrm{plume}}$ is the
+user-entered \code{plumeRise}. The wind speed at this effective height follows
+a logarithmic profile:
+\begin{equation}
+  u(H) =
+  \max\left[
+    u_{\min},
+    u_{\mathrm{ref}}
+    \frac{\ln(H^\ast/z_0)}{\ln(z_{\mathrm{ref}}/z_0)}
+  \right],
+  \qquad
+  H^\ast=\max(H,1.01z_0),
+  \label{eq:pollutant-wind-profile}
+\end{equation}
+where $z_0$ is the roughness length, $z_{\mathrm{ref}}$ is the reference
+height, and $u_{\min}$ avoids singular low-wind calculations. By default,
+$u_{\mathrm{ref}}$ is the hourly CitySim climate wind speed. The optional
+\code{windSpeed} XML attribute overrides it.
+
+This logarithmic profile is a CitySim model choice. It is not the
+stability-dependent power-law wind profile used by the complete AERO regulatory
+workflow.
+
+\subsection{Gaussian plume concentration}
+
+For one emitter $e$ and one receptor $r$, the concentration contribution is:
+\begin{align}
+ C_{e,r} &=
+ \frac{Q_e}{2\pi u(H)\sigma_y\sigma_z}
+ \exp\left[-\frac{1}{2}\left(\frac{y}{\sigma_y}\right)^2\right]
+ V_z F_{\mathrm{decay}}F_{\mathrm{dep}}, \\
+ V_z &=
+ \exp\left[-\frac{1}{2}\left(\frac{z_r-H}{\sigma_z}\right)^2\right]
+ + I_g
+ \exp\left[-\frac{1}{2}\left(\frac{z_r+H}{\sigma_z}\right)^2\right],
+ \label{eq:gaussian-plume}
+\end{align}
+where:
+\begin{itemize}
+  \item $Q_e$ is the emitter mass flow rate in $\unit{kg\,s^{-1}}$;
+  \item $u(H)$ is the wind speed at the effective emitter height;
+  \item $\sigma_y$ and $\sigma_z$ are horizontal and vertical plume spreads;
+  \item $z_r$ is the receptor height;
+  \item $I_g=1$ when \code{groundReflection=true}, otherwise $I_g=0$.
+\end{itemize}
+
+The optional first-order attenuation factors are:
+\begin{align}
+ F_{\mathrm{decay}} &= \exp\left(-k\frac{x}{u(H)}\right), \\
+ F_{\mathrm{dep}} &=
+ \exp\left[
+   -\frac{v_d x}{u(H)\max(h_{\mathrm{mix}},1\unit{m})}
+ \right],
+ \label{eq:pollutant-optional-losses}
+\end{align}
+where $k$ is \code{decayRate}, $v_d$ is \code{depositionVelocity}, and
+$h_{\mathrm{mix}}$ is \code{mixingHeight}. These exponential factors are
+screening approximations. They are not the complete AERO suspended-dust and
+deposition calculations.
+
+Contributions from all emitters are summed linearly with an optional background
+concentration:
+\begin{equation}
+  C_r = C_{\mathrm{background}} + \sum_e C_{e,r}.
+\end{equation}
+
+\subsection{Pasquill--Gifford plume spreads}
+
+Unless both \code{sigmaY} and \code{sigmaZ} are given manually, the module uses
+the following Pasquill--Gifford screening coefficients \cite{turner-workbook}.
+Distances and plume spreads are expressed in metres.
+
+\begin{center}
+\small
+\begin{tabular}{c l l}
+\toprule
+Class & $\sigma_y(x)$ & $\sigma_z(x)$ \\
+\midrule
+A & $0.22x(1+0.0001x)^{-1/2}$ & $0.20x$ \\
+B & $0.16x(1+0.0001x)^{-1/2}$ & $0.12x$ \\
+C & $0.11x(1+0.0001x)^{-1/2}$ & $0.08x(1+0.0002x)^{-1/2}$ \\
+D & $0.08x(1+0.0001x)^{-1/2}$ & $0.06x(1+0.0015x)^{-1/2}$ \\
+E & $0.06x(1+0.0001x)^{-1/2}$ & $0.03x(1+0.0003x)^{-1}$ \\
+F & $0.04x(1+0.0001x)^{-1/2}$ & $0.016x(1+0.0003x)^{-1}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The horizontal spread is multiplied by \code{sigmaYFactor}. The vertical
+spread is multiplied by \code{sigmaZFactor}. When \code{stabilityClass} is
+\code{auto}, CitySim selects a conventional class from hourly global horizontal
+irradiance, cloud-cover fraction, and wind speed. A manual class \code{A} to
+\code{F} can be provided for controlled studies.
+
+\begin{center}
+\small
+\begin{tabular}{l l l}
+\toprule
+Condition & Wind condition & Selected class \\
+\midrule
+$I_{gh}>600\unit{W\,m^{-2}}$ & $u<2$, $2\leq u<3$, $3\leq u<5$, $u\geq5$ & A, B, C, D \\
+$300<I_{gh}\leq600\unit{W\,m^{-2}}$ & $u<2$, $2\leq u<5$, $u\geq5$ & B, C, D \\
+$10<I_{gh}\leq300\unit{W\,m^{-2}}$ & $u<2$, $u\geq2$ & C, D \\
+$I_{gh}\leq10\unit{W\,m^{-2}}$, cloud cover $>0.5$ & any & D \\
+$I_{gh}\leq10\unit{W\,m^{-2}}$, cloud cover $\leq0.5$ & $u<2$, $2\leq u<5$, $u\geq5$ & F, E, D \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Pollutant XML parameters}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.29\linewidth} L{0.12\linewidth} L{0.11\linewidth} L{0.34\linewidth}}
+\toprule
+\normalfont Attribute & Unit & Default & Meaning \\
+\midrule
+\endhead
+\multicolumn{4}{l}{\textbf{\code{<Pollutant>} attributes}} \\
+model & -- & plume & Model identifier. The implemented calculation is the plume model. \\
+id & -- & Pollutant & Result-column model identifier. \\
+key & -- & model & Optional result-column key, often used for the species name such as NOx or PM10. \\
+windSpeed & $\unit{m\,s^{-1}}$ & climate & Optional manual wind-speed override at \code{windReferenceHeight}. \\
+windReferenceHeight & $\unit{m}$ & 10 & Reference height $z_{\mathrm{ref}}$ for the logarithmic profile. \\
+roughnessLength & $\unit{m}$ & 0.1 & Aerodynamic roughness length $z_0$; must be positive. \\
+windSpeedMin & $\unit{m\,s^{-1}}$ & 0.5 & Minimum wind speed used by the plume equation; must be positive. \\
+downwindMin & $\unit{m}$ & 1 & Minimum positive downwind distance used numerically. \\
+backgroundConcentration & $\unit{kg\,m^{-3}}$ & 0 & Concentration added at every receptor. \\
+groundReflection & boolean & true & Include the reflected Gaussian image-source term. \\
+stabilityClass & -- & auto & Automatic selection or manual class A--F. \\
+sigmaY & $\unit{m}$ & \NA & Manual constant $\sigma_y$; active only when \code{sigmaZ} is also set. \\
+sigmaZ & $\unit{m}$ & \NA & Manual constant $\sigma_z$; active only when \code{sigmaY} is also set. \\
+sigmaYFactor & -- & 1 & Multiplier applied to $\sigma_y$. \\
+sigmaZFactor & -- & 1 & Multiplier applied to $\sigma_z$. \\
+decayRate & $\unit{s^{-1}}$ & 0 & Optional first-order pollutant decay rate $k$. \\
+depositionVelocity & $\unit{m\,s^{-1}}$ & 0 & Optional simplified deposition velocity $v_d$. \\
+mixingHeight & $\unit{m}$ & 1000 & Mixing height used by the simplified deposition term. \\
+\midrule
+\multicolumn{4}{l}{\textbf{\code{<PointEmittor>} attributes inside \code{<Pollutant>}}} \\
+id & -- & sequence & Emitter identifier. \\
+key & -- & empty & Optional emitter key. \\
+x, y, z & $\unit{m}$ & 0 & Emitter position in CitySim scene coordinates. \\
+emissionRate & $\unit{kg\,s^{-1}}$ & 0 & Pollutant mass flow rate $Q_e$. \\
+plumeRise & $\unit{m}$ & 0 & User-entered effective plume rise above the source point. \\
+\midrule
+\multicolumn{4}{l}{\textbf{\code{<PointReceptor>} attributes inside \code{<Pollutant>}}} \\
+id & -- & sequence & Receptor identifier. \\
+key & -- & empty & Optional receptor key. \\
+x, y, z & $\unit{m}$ & 0 & Receptor position in CitySim scene coordinates. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Pollutant XML example}
+
+Declare one \code{<Pollutant>} block per species when simulating several
+pollutants such as NOx, PM2.5, and PM10. Each species can have different
+emission rates, background concentrations, decay rates, and deposition
+velocities.
+
+\begin{verbatim}
+<District ...>
+  <Pollutant id="NOx" key="NOx" model="plume"
+             windReferenceHeight="10"
+             roughnessLength="0.1"
+             windSpeedMin="0.5"
+             backgroundConcentration="0">
+    <PointEmittor id="chimney_1" key="chimney"
+                  x="130" y="240" z="32"
+                  plumeRise="5"
+                  emissionRate="0.001"/>
+    <PointEmittor id="traffic_1" key="traffic"
+                  x="95" y="180" z="0.5"
+                  emissionRate="0.00002"/>
+    <PointReceptor id="street_1" x="150" y="170" z="1.5"/>
+    <PointReceptor id="roof_1" x="210" y="120" z="28"/>
+  </Pollutant>
+</District>
+\end{verbatim}
+
+To force a fixed reference wind speed for a sensitivity calculation, set
+\code{windSpeed} to \code{4}, for example. When omitted, the CitySim climate wind speed is
+used hourly.
+
+\subsection{Pollutant result columns}
+
+The pollutant TSV file contains:
+\begin{itemize}
+  \item mean effective emitter-height \code{windSpeed(m/s)} for the model;
+  \item hourly climate \code{windDirection(deg)};
+  \item selected \code{stabilityClass};
+  \item total \code{concentration(kg/m3)} at each receptor;
+  \item each emitter's \code{concentration(kg/m3)} contribution at each receptor.
+\end{itemize}
+The concentration equation itself uses the individual wind speed evaluated at
+each emitter height. The reported wind speed is their arithmetic mean.
+
+\section{Outdoor Noise Propagation Model}
+
+\subsection{Physical scope}
+
+The noise module estimates steady-state outdoor sound-pressure levels from
+point emitters to point receptors. Unlike the pollutant module, it actively
+uses CitySim three-dimensional geometry. Building walls and roofs are collected
+from the district, tested for ray obstruction, used to construct top-edge
+diffraction paths, and used for approximate first-order wall reflections.
+
+The implemented attenuation terms follow the engineering structure of
+ISO~9613-2:2024 \cite{iso9613-2}, with atmospheric absorption derived from
+ISO~9613-1 \cite{iso9613-1}. The implementation currently evaluates one
+representative frequency rather than aggregating octave bands. It is an
+ISO-inspired CitySim engineering subset, not a certified full
+ISO~9613-2:2024 implementation.
+
+\subsection{Energy aggregation}
+
+For one propagation path $p$ between an emitter and a receptor:
+\begin{equation}
+  L_{p} = L_W + D_c - A_{p},
+\end{equation}
+where $L_W$ is the point-source sound power level in
+$\unit{dB}$ re $1\unit{pW}$, $D_c$ is the directivity correction, and $A_p$ is
+the sum of path-specific attenuation terms.
+
+Direct, diffracted, and reflected paths are combined incoherently:
+\begin{equation}
+  L_{e,r} = 10\log_{10}\left(\sum_p 10^{L_p/10}\right).
+\end{equation}
+Emitter contributions and the optional background level are also combined as
+energies:
+\begin{equation}
+  L_r = 10\log_{10}\left(
+    10^{L_{\mathrm{background}}/10}
+    + \sum_e 10^{L_{e,r}/10}
+  \right).
+\end{equation}
+
+\subsection{Direct-path attenuation}
+
+For an unobstructed source--receptor path:
+\begin{equation}
+  A_p = A_{\mathrm{div}} + A_{\mathrm{atm}} + A_{\mathrm{gr}}.
+\end{equation}
+Spherical spreading is:
+\begin{equation}
+  A_{\mathrm{div}} = 20\log_{10}\left[\max(d,0.1\unit{m})\right]+11,
+  \label{eq:noise-div}
+\end{equation}
+where $d$ is the three-dimensional source--receptor distance.
+
+Atmospheric absorption is:
+\begin{equation}
+  A_{\mathrm{atm}} = \alpha\frac{d}{1000},
+  \label{eq:noise-atm}
+\end{equation}
+where $\alpha$ is expressed in $\unit{dB\,km^{-1}}$. If it is not manually
+specified, $\alpha$ is computed hourly from CitySim temperature, relative
+humidity, and atmospheric pressure according to ISO~9613-1.
+
+The speed of sound and wavelength used for diffraction are:
+\begin{equation}
+  c = 331.3\sqrt{1+\frac{T_C}{273.15}},
+  \qquad
+  \lambda=\frac{c}{f}.
+\end{equation}
+
+\subsection{ISO 9613-1 atmospheric absorption}
+
+The ISO~9613-1 coefficient is implemented explicitly. Let $T$ be the absolute
+temperature, $T_0=293.15\unit{K}$, $T_{\mathrm{tp}}=273.16\unit{K}$,
+$p_r=p/101325$, and $h$ the molar humidity:
+\begin{align}
+  \frac{p_{\mathrm{sat}}}{p_0}
+    &= 10^{-6.8346(T_{\mathrm{tp}}/T)^{1.261}+4.6151}, \\
+  h &= 100\,RH\,\frac{p_{\mathrm{sat}}/p_0}{p_r}, \\
+  f_{\mathrm{r,O}} &=
+    \frac{24+4.04\times10^4 h(0.02+h)/(0.391+h)}{p_r}, \\
+  f_{\mathrm{r,N}} &=
+    \frac{(T/T_0)^{-1/2}
+    \left[9+280h\exp\left(-4.17((T/T_0)^{-1/3}-1)\right)\right]}{p_r}.
+\end{align}
+For selected frequency $f$, the hourly absorption coefficient is:
+\begin{align}
+ \alpha ={}& 1000(8.686)f^2
+ \left\{
+ \frac{1.84\times10^{-11}}{p_r}\sqrt{\frac{T}{T_0}}
+ + \left(\frac{T}{T_0}\right)^{-5/2}
+ \left[
+ \frac{0.01275e^{-2239.1/T}}
+      {f_{\mathrm{r,O}}+f^2/f_{\mathrm{r,O}}}
+ \right.\right. \nonumber\\
+ &\left.\left.\hspace{38mm}
+ + \frac{0.1068e^{-3352/T}}
+      {f_{\mathrm{r,N}}+f^2/f_{\mathrm{r,N}}}
+ \right]
+ \right\}.
+ \label{eq:noise-alpha}
+\end{align}
+
+\subsection{ISO 9613-2 ground effect}
+
+The selected frequency is mapped to the closest nominal octave band:
+$63$, $125$, $250$, $500$, $1000$, $2000$, $4000$, or $8000\unit{Hz}$.
+The implementation uses one global ground factor $G$ for source, middle, and
+receptor regions:
+\begin{itemize}
+  \item $G=0$: acoustically hard ground, such as paving or water;
+  \item $G=1$: porous ground, such as grass or soil;
+  \item $0<G<1$: mixed-ground screening approximation.
+\end{itemize}
+
+For horizontal source--receptor distance $d_p$ and acoustic heights $h_s$ and
+$h_r$, define:
+\begin{align}
+  q &= \max\left(0,1-\frac{30(h_s+h_r)}{d_p}\right), \\
+  K_{\mathrm{geo}} &=
+  \frac{d_p^2+(h_s-h_r)^2}{d_p^2+(h_s+h_r)^2}.
+\end{align}
+The ground attenuation is:
+\begin{equation}
+  A_{\mathrm{gr}} =
+  -10\log_{10}\left[
+    1 + \left(10^{-A'_{\mathrm{gr}}/10}-1\right)K_{\mathrm{geo}}
+  \right],
+  \qquad
+  A'_{\mathrm{gr}}=A_s+A_r+A_m.
+  \label{eq:noise-ground}
+\end{equation}
+The source and receptor terms use the same function,
+$A_s=A_G(h_s)$ and $A_r=A_G(h_r)$. The middle-region term is
+$A_m=-3q$ at $63\unit{Hz}$ and $A_m=-3q(1-G)$ otherwise. The implemented
+$A_G(h)$ functions are:
+
+\begin{center}
+\scriptsize
+\begin{tabular}{c p{0.76\linewidth}}
+\toprule
+Band & $A_G(h)$ \\
+\midrule
+$63$ &
+$-1.5$ \\
+$125$ &
+$-1.5 + G\{1.5+3e^{-0.12(h-5)^2}(1-e^{-d_p/50})
++5.7e^{-0.09h^2}(1-e^{-2.8\times10^{-6}d_p^2})\}$ \\
+$250$ &
+$-1.5 + G\{1.5+8.6e^{-0.09h^2}(1-e^{-d_p/50})\}$ \\
+$500$ &
+$-1.5 + G\{1.5+14e^{-0.46h^2}(1-e^{-d_p/50})\}$ \\
+$1000$ &
+$-1.5 + G\{1.5+5e^{-0.9h^2}(1-e^{-d_p/50})\}$ \\
+$2000$, $4000$, $8000$ &
+$-1.5(1-G)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Top-edge diffraction over buildings}
+
+If the direct ray is blocked, CitySim constructs a screened path over the
+intersected building top edges. Hidden low edges are pruned using an upper
+rubber-band path. Each resulting segment is checked again against the scene.
+If no clear top-edge path can be constructed, the direct/diffracted
+contribution is omitted rather than allowing sound to pass through a building.
+
+For a valid screened path, let:
+\begin{itemize}
+  \item $d$ be the direct source--receptor distance;
+  \item $d_{\mathrm{dif}}$ be the sum of all screened-path segment lengths;
+  \item $z=d_{\mathrm{dif}}-d$ be the path-length difference;
+  \item $e$ be the distance along intermediate edges between the first and last
+        diffraction edges;
+  \item $d_{\mathrm{SS}}$ and $d_{\mathrm{SR}}$ be the first and last screened
+        segment lengths.
+\end{itemize}
+The implemented ISO~9613-2:2024 top-edge attenuation uses:
+\begin{align}
+  C_2 &= 20, \\
+  C_3 &=
+  \begin{cases}
+    1, & \text{one edge}, \\
+    \dfrac{1+(5\lambda/e)^2}{1/3+(5\lambda/e)^2}, & \text{multiple edges},
+  \end{cases} \\
+  z_{\min} &= -\frac{2\lambda}{C_2C_3}, \\
+  K_{\mathrm{met}} &=
+  \exp\left[
+    -\frac{1}{2000}
+    \sqrt{
+      \frac{
+        [\max(d_{\mathrm{SS}},d_{\mathrm{SR}})+e]
+        \min(d_{\mathrm{SS}},d_{\mathrm{SR}})d
+      }{
+        2(z-z_{\min})
+      }
+    }
+  \right], \\
+  A_{\mathrm{bar}} &=
+  10\log_{10}\left[
+    1+
+    \left(2+\frac{C_2}{\lambda}C_3z\right)K_{\mathrm{met}}
+  \right].
+  \label{eq:noise-barrier}
+\end{align}
+When $z\leq z_{\min}$, $A_{\mathrm{bar}}=0$. For a screened ray, spreading is
+evaluated at direct distance $d$, atmospheric absorption is evaluated along the
+screened path length, and the applied ground term is
+$\min(A_{\mathrm{gr}},0)$.
+
+\subsection{Approximate first-order wall reflections}
+
+When \code{reflectionOrder="1"}, vertical walls are considered for one
+image-source reflection. Source and receptor must lie on the same side of the
+reflecting wall. Both segments from source to reflection point and from
+reflection point to receptor must be unobstructed.
+
+For wall reflected-energy coefficient $\rho_w$:
+\begin{equation}
+  A_{\mathrm{refl}}=-10\log_{10}(\rho_w).
+  \label{eq:noise-reflection}
+\end{equation}
+When only an absorption coefficient $\alpha_w$ is supplied in the wall
+composition, CitySim uses $\rho_w=1-\alpha_w$.
+A reflected path uses:
+\begin{equation}
+  A_p=A_{\mathrm{div}}(d_{\mathrm{refl}})
+     +A_{\mathrm{atm}}(d_{\mathrm{refl}})
+     +A_{\mathrm{refl}}.
+\end{equation}
+
+\subsection{Noise XML parameters}
+
+\begin{longtable}{>{\ttfamily\raggedright\arraybackslash}p{0.29\linewidth} L{0.12\linewidth} L{0.11\linewidth} L{0.34\linewidth}}
+\toprule
+\normalfont Attribute & Unit & Default & Meaning \\
+\midrule
+\endhead
+\multicolumn{4}{l}{\textbf{\code{<Noise>} attributes}} \\
+id & -- & Noise & Result-column model identifier. \\
+key & -- & id & Optional result-column key. \\
+frequency & $\unit{Hz}$ & 500 & Representative frequency used for all attenuation terms. \\
+atmosphericAlpha & $\unit{dB\,km^{-1}}$ & climate & Optional manual override. When omitted, use hourly ISO~9613-1 absorption from CitySim climate data. \\
+groundFactor & -- & 0 & Global $G$: 0 for hard ground, 1 for porous ground. \\
+wallAbsorptionCoeff & -- & 0.1 & Fallback absorbed-energy fraction for walls whose composition has no acoustic coefficient; range 0--1. \\
+wallReflectivityCoeff & -- & 0.9 & Fallback reflected-energy fraction. If omitted, it is one minus \code{wallAbsorptionCoeff}. \\
+reflectionOrder & -- & 1 & 0 for direct/diffracted propagation only; 1 to include first-order wall reflections. \\
+backgroundLevel & $\unit{dB}$ & -300 & Incoherent background level. Values at or below $-300$ disable it. \\
+directivityCorrection & $\unit{dB}$ & 0 & Default source directivity correction $D_c$. \\
+\midrule
+\multicolumn{4}{l}{\textbf{Acoustic wall-composition attributes on \code{<WallType>} or \code{<Composite>}}} \\
+AcousticAbsorptionCoeff & -- & 0.1 & Absorbed-energy fraction for walls using this composition. If reflectivity is omitted, reflectivity becomes $1-\alpha_w$. \\
+AcousticReflectivityCoeff & -- & 0.9 & Reflected-energy fraction for walls using this composition. This coefficient is used by first-order reflections. \\
+\multicolumn{4}{l}{\code{AbsorptionCoeff} and \code{ReflectivityCoeff} are accepted aliases.} \\
+\midrule
+\multicolumn{4}{l}{\textbf{\code{<PointEmittor>} attributes inside \code{<Noise>}}} \\
+id & -- & sequence & Emitter identifier. \\
+key & -- & empty & Optional emitter key. \\
+x, y, z & $\unit{m}$ & 0 & Emitter position in CitySim scene coordinates. \\
+heightAboveGround & $\unit{m}$ & z & Acoustic source height above local ground used by $A_{\mathrm{gr}}$. \\
+powerLevel & $\unit{dB}$ & 0 & Sound power level $L_W$, re $1\unit{pW}$. \\
+directivityCorrection & $\unit{dB}$ & model value & Optional emitter-specific override of $D_c$. \\
+\midrule
+\multicolumn{4}{l}{\textbf{\code{<PointReceptor>} attributes inside \code{<Noise>}}} \\
+id & -- & sequence & Receptor identifier. \\
+key & -- & empty & Optional receptor key. \\
+x, y, z & $\unit{m}$ & 0 & Receptor position in CitySim scene coordinates. \\
+heightAboveGround & $\unit{m}$ & z & Acoustic receptor height above local ground used by $A_{\mathrm{gr}}$. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Noise XML example}
+
+\begin{verbatim}
+<District ...>
+  <WallType id="1" name="ConcreteFacade" category="wall"
+            AbsorptionCoeff="0.1"
+            ReflectivityCoeff="0.9">
+    ...
+  </WallType>
+  <Noise id="RoadNoise" key="road" frequency="500"
+         groundFactor="0.5"
+         reflectionOrder="1"
+         backgroundLevel="30">
+    <PointEmittor id="road_1"
+                  x="110" y="180" z="0.5"
+                  heightAboveGround="0.5"
+                  powerLevel="90"
+                  directivityCorrection="0"/>
+    <PointReceptor id="facade_1"
+                   x="185" y="160" z="4"
+                   heightAboveGround="4"/>
+  </Noise>
+</District>
+\end{verbatim}
+
+The \code{z} coordinate places a point in the CitySim scene. The optional
+\code{heightAboveGround} attribute supplies the local acoustic height used by
+the ground-effect model. Set it explicitly for elevated terrain and roof-level
+points. Normally omit \code{atmosphericAlpha}; it remains available as a
+manual override for calibrated or controlled studies.
+
+\subsection{Noise result columns}
+
+The noise TSV file contains:
+\begin{itemize}
+  \item hourly \code{atmosphericAlpha(dB/km)};
+  \item total \code{level(dB)} at each receptor;
+  \item each emitter's \code{level(dB)} contribution at each receptor.
+\end{itemize}
+
+\section{Model Comparison and Limitations}
+
+\begin{longtable}{L{0.24\linewidth} L{0.34\linewidth} L{0.34\linewidth}}
+\toprule
+Aspect & Pollutant module & Noise module \\
+\midrule
+\endhead
+Primary purpose &
+Hourly Gaussian-plume concentration screening. &
+Hourly outdoor sound-propagation screening. \\
+CitySim climate use &
+Wind speed, wind direction, irradiance, and cloud cover. &
+Temperature, relative humidity, and atmospheric pressure. \\
+CitySim geometry use &
+Coordinates only. Buildings do not alter the plume. &
+Coordinates, obstruction tests, top-edge screening, and first-order wall reflections. \\
+Multiple emitters and receptors &
+Yes. Mass concentrations are summed linearly. &
+Yes. Sound levels are summed as incoherent energies. \\
+Main reference family &
+Gaussian-plume screening literature and AERO use case. &
+ISO~9613-1 and ISO~9613-2:2024 engineering structure. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Pollutant limitations}
+
+\begin{itemize}
+  \item No building-wake, urban-canyon, or terrain-flow correction.
+  \item No stack-physics plume-rise calculation from exit velocity, stack
+        diameter, or exhaust temperature. \code{plumeRise} is entered manually.
+  \item No complete Polish AERO regulatory meteorology, coefficients, or
+        suspended-dust and deposition method.
+  \item No chemical reaction network. \code{decayRate} is a single simplified
+        first-order loss.
+  \item No line-source primitive. Traffic roads are represented by several
+        point emitters.
+\end{itemize}
+
+\subsection{Noise limitations}
+
+\begin{itemize}
+  \item One representative frequency is evaluated. Full octave-band source
+        spectra and A-weighted band aggregation are not yet implemented.
+  \item Diffraction paths go over building tops. Lateral paths around facade
+        sides are not evaluated and compared.
+  \item One global \code{groundFactor} is used instead of spatial ground
+        regions mapped from the CitySim scene.
+  \item Reflections are approximate first-order image-source paths. Higher
+        orders and more complete object-reflection handling are not included.
+  \item Vegetation, miscellaneous-object attenuation, line sources, and area
+        sources are not included.
+  \item Complex non-convex surfaces remain an engineering approximation because
+        polygons are fan-triangulated for ray tests.
+\end{itemize}
+
+\section{Recommended Configuration Practice}
+
+\begin{enumerate}
+  \item Use one \code{<Pollutant>} block per chemical species. Set
+        species-specific emissions for NOx, PM2.5, and PM10.
+  \item Use CitySim climate wind speed by default. Apply \code{windSpeed} only
+        for controlled sensitivity studies.
+  \item Calibrate \code{plumeRise}, background concentration, roughness, and
+        optional pollutant losses against the intended study scale.
+  \item For noise, supply octave-specific runs when spectral sensitivity
+        matters: use one \code{<Noise>} block per representative octave band
+        until native octave aggregation is implemented.
+  \item Set noise \code{heightAboveGround} explicitly whenever scene $z$ is not
+        the local acoustic height.
+  \item Treat both modules as transparent engineering-screening tools. Use a
+        regulatory implementation when legal compliance must be demonstrated.
+\end{enumerate}
+
+\section{References}
+
+\begin{thebibliography}{9}
+
+\bibitem{softp-aero}
+Soft-P,
+\emph{AERO 2010 -- calculation of air pollutant dispersion},
+software description.
+\url{https://soft-p.com.pl/en/software/aero-2010/}
+
+\bibitem{polish-regulation}
+Minister of the Environment of the Republic of Poland,
+\emph{Regulation of 26 January 2010 on reference values for certain substances
+in the air},
+Dz.U. 2010 nr 16 poz. 87.
+\url{https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU20100160087}
+
+\bibitem{turner-workbook}
+D. B. Turner,
+\emph{Workbook of Atmospheric Dispersion Estimates},
+U.S. Environmental Protection Agency, AP-26, revised edition, 1970.
+\url{https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=2000JCID.TXT}
+
+\bibitem{iso9613-1}
+International Organization for Standardization,
+\emph{ISO 9613-1:1993, Acoustics -- Attenuation of sound during propagation
+outdoors -- Part 1: Calculation of the absorption of sound by the atmosphere}.
+\url{https://www.iso.org/standard/17426.html}
+
+\bibitem{iso9613-2}
+International Organization for Standardization,
+\emph{ISO 9613-2:2024, Acoustics -- Attenuation of sound during propagation
+outdoors -- Part 2: Engineering method for the prediction of sound pressure
+levels outdoors}.
+\url{https://www.iso.org/standard/74047.html}
+
+\bibitem{moller-trumbore}
+T. M\"oller and B. Trumbore,
+\emph{Fast, Minimum Storage Ray--Triangle Intersection},
+Journal of Graphics Tools, 2(1), 21--28, 1997.
+\url{https://doi.org/10.1080/10867651.1997.10487468}
+
+\end{thebibliography}
+
+\end{document}

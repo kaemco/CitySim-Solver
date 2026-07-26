@@ -10,3 +10,6 @@ CppCheckResults.xml
 CitySim.cscope_file_list
 # remove .svn
 .svn/
+
+# remove dependancies files
+*.d
