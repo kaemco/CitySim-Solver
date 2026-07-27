@@ -21,6 +21,7 @@
 #include "climate.h"
 #include "tinyxml.h"
 #include "district.h"
+#include "voxel.h"
 #include <iostream>
 
 #ifdef FMI
@@ -175,6 +176,10 @@ private:
     // the district itself
     District* pDistrict;
 
+    // Optional fixed-grid preprocessing requested by CitySim/Voxelization.
+    bool voxelizationRequested = false;
+    VoxelizationOptions voxelizationOptions;
+
     // stores the actual surfaces' irradiation from beam and from the sky and ground
     vector<float> irradiationBeam, irradiationDiffuseSky, irradiationDiffuseGround;
 
@@ -215,6 +220,10 @@ public:
     void addAllSurfacesToScene();
 
     District* getDistrict() {return pDistrict;}
+    bool hasVoxelizationRequest() const { return voxelizationRequested; }
+    const VoxelizationOptions& getVoxelizationOptions() const {
+        return voxelizationOptions;
+    }
     void setInputFile(string inputFile) { this->inputFile = inputFile; }
     string getInputFile() { return inputFile; }
     string getInputFileNoExt() { return inputFile.substr(0,inputFile.size()-4); }

@@ -26,6 +26,8 @@ private:
     // elements in the District
     vector<Building*> buildings;
     vector<Surface*> surfaces; //!< obstructing surfaces
+    // Non-owning subset of surfaces: floors from Building Simulate="false".
+    vector<Surface*> nonSimulatedBuildingFloors;
     vector<Tree*> trees; //!< trees in the district
 
     float groundAlbedo = 0.2f; //!< albedo of the lower hemisphere
@@ -87,6 +89,9 @@ public:
     vector<Surface*>* getSurfaces() { return &surfaces;}
     Surface* getSurface() { if (surfaces.empty()) return NULL; else return surfaces.back(); }
     void addSurface(Surface* s);
+    const vector<Surface*>& getNonSimulatedBuildingFloors() const {
+        return nonSimulatedBuildingFloors;
+    }
 
     float getGroundAlbedo() { return groundAlbedo; }
 

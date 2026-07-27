@@ -11,7 +11,7 @@ EXEC		= CitySim
 EXEC_D		= CitySimd
 LIB		= lib$(EXEC).a
 
-MAINSRC		= building.cpp district.cpp models.cpp plant.cpp scene.cpp zone.cpp climate.cpp occupants.cpp result.cpp util.cpp surface.cpp
+MAINSRC		= building.cpp district.cpp models.cpp plant.cpp scene.cpp zone.cpp climate.cpp occupants.cpp result.cpp util.cpp surface.cpp voxel.cpp
 LAPACKSRC	= $(wildcard ./LAPACK/*.f)
 SKYSRC		= $(wildcard ./Sky/*.cpp)
 TINYXMLSRC	= $(wildcard ./Tinyxml/*.cpp)
@@ -30,6 +30,10 @@ TINYXMLOBJ_D	= $(patsubst %.cpp, %d.o, $(TINYXMLSRC))
 VFCLIBRARYOBJ_D	= $(patsubst %.cpp, %d.o, $(VFCLIBRARYSRC))
 
 all: $(EXEC) $(EXEC_D) $(LIB)
+
+.PHONY: test-voxel
+test-voxel: $(EXEC)
+	bash test/voxelization/test.sh ./$(EXEC)
 
 $(EXEC): main.o $(MAINOBJ) $(LAPACKOBJ) $(SKYOBJ) $(TINYXMLOBJ) $(VFCLIBRARYOBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)

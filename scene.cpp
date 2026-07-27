@@ -1548,6 +1548,35 @@ XmlScene::XmlScene(string inputFile, ostream* pLogFileStr, bool climateFileRequi
     TiXmlElement* citysim = XMLHandle.FirstChild("CitySim").ToElement();
     if (!citysim) throw(string("Error in XML file: no CitySim tag."));
 
+    // Voxelization is opt-in. Parse it from the already-loaded document so a
+    // potentially large CitySim XML file is never loaded a second time.
+    TiXmlElement* voxelization = citysim->FirstChildElement("Voxelization");
+    if (voxelization) {
+        if (voxelization->NextSiblingElement("Voxelization"))
+            throw(string("Voxelization XML: only one Voxelization element is allowed."));
+
+        const auto readDelta = [voxelization](const char* attributeName,
+                                               double& value) {
+            const int status=voxelization->QueryDoubleAttribute(attributeName,&value);
+            if (status==TIXML_NO_ATTRIBUTE)
+                throw string("Voxelization XML: missing required attribute '")
+                        +attributeName+"'.";
+            if (status!=TIXML_SUCCESS)
+                throw string("Voxelization XML: attribute '")
+                        +attributeName+"' must be a number.";
+            if (!(value>0.) || !isfinite(value))
+                throw string("Voxelization XML: attribute '")
+                        +attributeName+"' must be finite and greater than zero.";
+        };
+
+        VoxelizationOptions parsed;
+        readDelta("deltaX",parsed.deltaX);
+        readDelta("deltaY",parsed.deltaY);
+        readDelta("deltaZ",parsed.deltaZ);
+        voxelizationOptions=parsed;
+        voxelizationRequested=true;
+    }
+
     // load the climate
     TiXmlElement* climate = XMLHandle.FirstChild("CitySim").FirstChild("Climate").ToElement();
 

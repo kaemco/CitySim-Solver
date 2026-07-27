@@ -6,6 +6,7 @@ Copyright (C) (2009-2013)  EPFL
 #include "scene.h"
 #include "result.h"
 #include "climate.h"
+#include "voxel.h"
 
 #ifdef GLUT
 #include "GL/glut.h"
@@ -15,6 +16,32 @@ Copyright (C) (2009-2013)  EPFL
 // JK - removed all references to André's radiation model
 
 using namespace std;
+
+namespace {
+
+string defaultVoxelFileName(const string& inputFile) {
+    if (inputFile.size()>4 && inputFile.substr(inputFile.size()-4)==".xml")
+        return inputFile.substr(0,inputFile.size()-4)+"_voxels.vtk";
+    return inputFile+"_voxels.vtk";
+}
+
+void writeVoxelGrid(XmlScene& scene,
+                    const VoxelizationOptions& options,
+                    const string& inputFile,
+                    const string& requestedOutput,
+                    ostream& logStream) {
+    string outputFile=requestedOutput.empty()
+            ?defaultVoxelFileName(inputFile):requestedOutput;
+    if (outputFile.size()<=4 || outputFile.substr(outputFile.size()-4)!=".vtk")
+        outputFile+=".vtk";
+
+    VoxelGrid grid=SceneVoxelizer::voxelize(scene,options,&logStream);
+    grid.writeLegacyVtk(outputFile);
+    logStream << "Voxel file: " << outputFile << "\n"
+              << "Material IDs: AIR=0, BUILDING=1, GROUND=2, TREE=3" << endl;
+}
+
+} // namespace
 
 // *** main, CitySim         *** //
 // *** jerome.kaempf@epfl.ch *** //
@@ -68,6 +95,27 @@ int main(int argc, char *argv[])
 
         // prints the WARRANTY extract
         if (firstParameter == "--license") { cout << license << endl; return 0; }
+
+        // Generate only the fixed-cell material representation configured by
+        // CitySim/Voxelization in an XML scene.
+        // Syntax:
+        // CitySim --voxelize scene.xml [output.vtk]
+        if (firstParameter == "--voxelize") {
+            if (argc < 3 || argc > 4)
+                throw(string("Usage: CitySim --voxelize scene.xml [output.vtk]"));
+
+            const string voxelInput=argv[2];
+            if (voxelInput.size()<=4 || voxelInput.substr(voxelInput.size()-4)!=".xml")
+                throw(string("Voxelization input must be a CitySim .xml file."));
+
+            // Climate data are not required for the static geometry conversion.
+            XmlScene xmlscene(voxelInput,&logStream,false);
+            if (!xmlscene.hasVoxelizationRequest())
+                throw(string("Voxelization requested, but the input has no CitySim/Voxelization element."));
+            writeVoxelGrid(xmlscene,xmlscene.getVoxelizationOptions(),voxelInput,
+                           argc>3?string(argv[3]):string(),logStream);
+            return 0;
+        }
 
         // go to the simulation bits
         if ( firstParameter == "-Ie" && secondParameter.size() > 4 && secondParameter.substr(secondParameter.size()-4,4) == ".rad" &&
@@ -156,6 +204,11 @@ int main(int argc, char *argv[])
 
             // creates the XmlScene, which will populate under classes (pre-process)
             XmlScene xmlscene(firstParameter, &logStream);
+
+            // Voxelization is opt-in and precedes the numerical simulations.
+            if (xmlscene.hasVoxelizationRequest())
+                writeVoxelGrid(xmlscene,xmlscene.getVoxelizationOptions(),
+                               firstParameter,string(),logStream);
 
             #ifdef DEBUG
             // outputs the radFile (for visualisation), the Inp file and the cumulative radiance files, plus a DXF file

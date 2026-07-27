@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CitySim name="Tree-only terrain inference regression">
+    <Simulation beginMonth="1" endMonth="1" beginDay="1" endDay="1"/>
+    <Voxelization deltaX="1" deltaY="1" deltaZ="1"/>
+    <District>
+        <Trees>
+            <Tree id="1" key="unsupported-tree" leafAreaIndex="1"
+                  leafWidth="0.1" leafDistance="1">
+                <Leaf id="1">
+                    <V0 x="0" y="0" z="2"/><V1 x="2" y="0" z="2"/>
+                    <V2 x="2" y="2" z="2"/><V3 x="0" y="2" z="2"/>
+                </Leaf>
+                <Leaf id="2">
+                    <V0 x="0" y="0" z="4"/><V1 x="2" y="0" z="4"/>
+                    <V2 x="2" y="2" z="4"/><V3 x="0" y="2" z="4"/>
+                </Leaf>
+                <Trunc id="3">
+                    <V0 x="0.9" y="0.9" z="0"/><V1 x="1.1" y="0.9" z="0"/>
+                    <V2 x="1.1" y="0.9" z="2"/><V3 x="0.9" y="0.9" z="2"/>
+                </Trunc>
+            </Tree>
+        </Trees>
+    </District>
+</CitySim>

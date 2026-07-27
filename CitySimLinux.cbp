@@ -225,6 +225,8 @@
 		<Unit filename="surface.h" />
 		<Unit filename="util.cpp" />
 		<Unit filename="util.h" />
+		<Unit filename="voxel.cpp" />
+		<Unit filename="voxel.h" />
 		<Unit filename="zone.cpp" />
 		<Unit filename="zone.h" />
 		<Extensions>

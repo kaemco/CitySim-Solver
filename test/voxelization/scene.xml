@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CitySim name="Voxelization regression scene">
+    <Simulation beginMonth="1" endMonth="1" beginDay="1" endDay="1"/>
+    <Climate location="../simulations/ClimateFile/DRYCOLD3.cli"/>
+    <Voxelization deltaX="1" deltaY="1" deltaZ="1"/>
+    <District>
+        <!-- A closed 2 x 2 x 2 m non-simulated building.  CitySim stores
+             these polygons as generic District obstacles. -->
+        <Building id="1" key="voxel-box" Simulate="false">
+            <Zone id="1" volume="8">
+                <Floor id="1">
+                    <V0 x="0" y="0" z="0"/><V1 x="0" y="2" z="0"/>
+                    <V2 x="2" y="2" z="0"/><V3 x="2" y="0" z="0"/>
+                </Floor>
+                <Roof id="2">
+                    <V0 x="0" y="0" z="2"/><V1 x="2" y="0" z="2"/>
+                    <V2 x="2" y="2" z="2"/><V3 x="0" y="2" z="2"/>
+                </Roof>
+                <Wall id="3">
+                    <V0 x="0" y="0" z="0"/><V1 x="2" y="0" z="0"/>
+                    <V2 x="2" y="0" z="2"/><V3 x="0" y="0" z="2"/>
+                </Wall>
+                <Wall id="4">
+                    <V0 x="2" y="0" z="0"/><V1 x="2" y="2" z="0"/>
+                    <V2 x="2" y="2" z="2"/><V3 x="2" y="0" z="2"/>
+                </Wall>
+                <Wall id="5">
+                    <V0 x="2" y="2" z="0"/><V1 x="0" y="2" z="0"/>
+                    <V2 x="0" y="2" z="2"/><V3 x="2" y="2" z="2"/>
+                </Wall>
+                <Wall id="6">
+                    <V0 x="0" y="2" z="0"/><V1 x="0" y="0" z="0"/>
+                    <V2 x="0" y="0" z="2"/><V3 x="0" y="2" z="2"/>
+                </Wall>
+            </Zone>
+        </Building>
+
+        <Trees>
+            <Tree id="1" key="two-level-canopy" leafAreaIndex="1"
+                  leafWidth="0.1" leafDistance="1">
+                <Leaf id="20">
+                    <V0 x="4" y="1" z="2"/><V1 x="6" y="1" z="2"/>
+                    <V2 x="6" y="3" z="2"/><V3 x="4" y="3" z="2"/>
+                </Leaf>
+                <Leaf id="21">
+                    <V0 x="4" y="1" z="4"/><V1 x="6" y="1" z="4"/>
+                    <V2 x="6" y="3" z="4"/><V3 x="4" y="3" z="4"/>
+                </Leaf>
+                <!-- Deliberately present but ignored by voxelization. -->
+                <Trunc id="22">
+                    <V0 x="4.9" y="1.9" z="0"/><V1 x="5.1" y="1.9" z="0"/>
+                    <V2 x="5.1" y="1.9" z="2"/><V3 x="4.9" y="1.9" z="2"/>
+                </Trunc>
+            </Tree>
+        </Trees>
+
+        <!-- Two ground polygons with a two-metre gap.  The missing columns
+             must be filled by interpolation/extrapolation. -->
+        <GroundSurface ShortWaveReflectance="0.2">
+            <Ground id="30">
+                <V0 x="0" y="0" z="0"/><V1 x="0" y="4" z="0"/>
+                <V2 x="2" y="4" z="0"/><V3 x="2" y="0" z="0"/>
+            </Ground>
+            <Ground id="31">
+                <V0 x="4" y="0" z="0"/><V1 x="4" y="4" z="0"/>
+                <V2 x="6" y="4" z="0"/><V3 x="6" y="0" z="0"/>
+            </Ground>
+        </GroundSurface>
+    </District>
+</CitySim>

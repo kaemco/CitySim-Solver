@@ -147,6 +147,11 @@ District::District(TiXmlHandle XMLHandler, XmlScene* pScene):pScene(pScene),occu
                             delete surfaces.back();
                             surfaces.pop_back();
                         }
+                        else {
+                            // Preserve the semantic type for voxel ground
+                            // reconstruction; ownership remains in surfaces.
+                            nonSimulatedBuildingFloors.push_back(surfaces.back());
+                        }
                         elem = elem->NextSiblingElement("Floor");
                     }
 
