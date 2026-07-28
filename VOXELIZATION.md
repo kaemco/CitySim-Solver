@@ -1,8 +1,9 @@
 # CitySim fixed-cell voxelization (V1)
 
 This module converts CitySim's polygon scene into a compact, LEGO-like
-Cartesian material grid. It is a static geometry preprocessing step; it does
-not yet solve wind or pollutant transport.
+Cartesian material grid and attaches a neutral log-law wind profile with V1
+tree-canopy attenuation. It is a static preprocessing step; it does not yet
+solve pollutant transport or building-induced flow.
 
 ## XML activation
 
@@ -12,17 +13,28 @@ Voxelization is opt-in. Add one `Voxelization` element directly under the
 ```xml
 <CitySim>
     <Simulation beginMonth="1" endMonth="1" beginDay="1" endDay="1"/>
-    <Voxelization deltaX="2" deltaY="2" deltaZ="1"/>
+    <Climate location="weather.cli"/>
+    <Voxelization deltaX="2" deltaY="2" deltaZ="1"
+                  roughness="0.3"/>
     <District>
-        ...
+        <Trees>
+            <Tree id="1" leafAreaIndex="1" leafDistance="1"
+                  attenuation="0.3">
+                ...
+            </Tree>
+        </Trees>
     </District>
 </CitySim>
 ```
 
-All three dimensions are required, expressed in metres, and must be finite and
-strictly positive. If the element is absent, a normal CitySim run performs no
-voxelization and creates no voxel file. Invalid or duplicate elements stop
-processing with an error instead of silently using a default.
+All three dimensions and `roughness` are required. Dimensions and roughness
+are expressed in metres and must be finite and strictly positive. Roughness
+must also be below the fixed 10 m wind reference height. Each Tree may
+independently override its optional dimensionless `attenuation`, whose default
+is `0.5`. A readable climate file is required because its wind speed and
+direction define the steady wind field. If `Voxelization` is absent, a normal
+CitySim run creates no voxel file. Invalid or duplicate elements stop
+processing with an error.
 
 During a normal run:
 
@@ -39,13 +51,17 @@ then continues normally.
 CitySim --voxelize scene.xml [output.vtk]
 ```
 
-This mode also requires the XML `Voxelization` element, but does not require a
-climate file and stops after writing the grid. It is the fastest way to inspect
-the current preprocessing result. The optional output argument changes only the
-file location; it does not override the XML cell dimensions.
+This mode requires the XML `Voxelization` and `Climate` elements and stops
+after writing the grid. It is the fastest way to inspect the current
+preprocessing result. The optional output argument changes only the file
+location; it does not override the XML parameters.
 
-The VTK file is a binary legacy `STRUCTURED_POINTS` data set with one unsigned
-byte named `material` per cell:
+The VTK file is a binary legacy `STRUCTURED_POINTS` data set with these cell
+arrays:
+
+- `material`: one unsigned byte per cell.
+- `wind_speed`: speed magnitude in m/s as a big-endian float.
+- `wind_velocity`: `(u,v,w)` in m/s as three big-endian floats.
 
 | Value | Material | Pollutant unknown later? |
 |---:|---|---:|
@@ -56,7 +72,9 @@ byte named `material` per cell:
 
 Keeping building and ground distinct lets a later finite-volume solver obtain
 the boundary condition directly from the material on the other side of each
-air-cell face.
+air-cell face. Wind values are also written in solid cells to preserve regular
+cell arrays; a later solver must ignore velocity unknowns in `BUILDING` and
+`GROUND`.
 
 ## Public C++ API
 
@@ -65,7 +83,7 @@ air-cell face.
 - `VoxelizationOptions`: resolution, repair, threading and allocation options.
 - `SceneVoxelizer::voxelize(...)`: static scene conversion.
 - `VoxelGrid`: contiguous material storage, interpolated column ground heights,
-  counts and VTK export.
+  compact per-level wind values, counts and VTK export.
 
 Materials are stored with `x` as the fastest-changing index:
 
@@ -83,6 +101,59 @@ six-neighbour finite-volume stencils.
 Required positive, finite voxel dimensions in metres, read from the
 `CitySim/Voxelization` element. Cells are always the requested size; there are
 no smaller remainder cells.
+
+### `roughness`
+
+Required aerodynamic roughness length `z0` in metres. It must satisfy
+`0 < z0 < 10`. No default is silently selected because terrain roughness is a
+user/model choice.
+
+The climate `FF` value at the simulation `beginDay`, hour 1 is interpreted as
+the wind speed at `zref = 10 m`. Following the Beamer V1 model, the speed at a
+voxel-centre height `z` is:
+
+```text
+Ulog(z) = U10 * ln((z + z0)/z0) / ln((10 + z0)/z0)
+```
+
+Height is measured from the lower domain plane and therefore the unattenuated
+profile depends only on voxel level `k`. This deliberately ignores local
+terrain-height changes and building flow disturbance in V1.
+
+Climate `DD` is treated as a meteorological direction: degrees clockwise from
+North describing where wind comes from. With CitySim `x=East`, `y=North`:
+
+```text
+u = -U sin(DD)
+v = -U cos(DD)
+w = 0
+```
+
+### Tree `attenuation`
+
+Optional dimensionless canopy-class factor `a_t` on each `Tree`, with
+`0 < a_t < 1`. Default: `0.5`. The Beamer gives `0.7`, `0.5` and `0.3` as
+example sparse, medium and dense canopy classes respectively.
+
+The cell multiplier and stored velocity are:
+
+```text
+aP = that Tree's attenuation  for its TREE cells
+aP = 1                for every other cell
+uP = aP * ulog(zP)
+```
+
+If multiple Tree crowns occupy one voxel, V1 uses the smallest attenuation
+factor (the strongest obstruction). It does not multiply factors, which would
+make the result depend on duplicate or overlapping Tree geometry.
+
+Thus only TREE cells are slowed. Air immediately downstream returns to the
+diagnostic log profile: V1 has no cumulative canopy wake, canopy drag,
+pollutant uptake or vegetation deposition. No additional canopy drag or
+leaf-density inputs are introduced at this stage. CitySim's existing integer
+`leafAreaIndex` remains solely the legacy control that generates leaf layers;
+the pollutant model does not reinterpret or estimate a physical quantity from
+it.
 
 ### `threads`
 
@@ -266,6 +337,10 @@ Trees remain fluid cells for the later pollutant solve.
   size and capacity metadata to every point.
 - One byte per material cell in contiguous storage.
 - Ground heights require one `float` per horizontal column.
+- Wind uses only one speed and one three-component vector per z level.
+  Per-tree factors are retained as sorted sparse `(cell index, attenuation)`
+  arrays only for TREE cells. Scaling is applied while the expanded cell
+  arrays are streamed row-by-row to VTK.
 - Geometry is triangulated only once.
 - Triangle tests are restricted to triangle bounding boxes.
 - Ground queries use coarse spatial bins.
@@ -274,7 +349,8 @@ Trees remain fluid cells for the later pollutant solve.
   over the complete domain.
 - Buildings are processed in OpenMP dynamic scheduling.
 - Large column and material passes use OpenMP static scheduling.
-- The VTK payload is binary and written in one contiguous operation.
+- The material VTK payload is written contiguously; big-endian wind rows are
+  generated and streamed without allocating full per-cell float arrays.
 - Exterior connectivity is currently a serial depth-first traversal using
   temporary 32-bit indices; it is the main remaining non-parallel preprocessing
   stage.
@@ -290,6 +366,15 @@ of each `AIR` or `TREE` cell.
   diffusive/Robin contribution.
 - Neighbour `AIR` or `TREE`: ordinary fluid-fluid face.
 
+Following the Beamer, the later solver should use one shared harmonic
+attenuation on each fluid-fluid face:
+
+```text
+af = 2*aP*aN/(aP+aN)
+```
+
+This modifies only advective flux. It is not a pollutant sink.
+
 This avoids storing six face labels per cell and keeps preprocessing memory
 small.
 
@@ -300,10 +385,13 @@ make test-voxel
 ```
 
 The test scene contains a building, two separated ground polygons, two leaf
-levels and a thin trunk. It verifies binary VTK dimensions/materials, ground
-gap interpolation, inclusive vertical TREE filling, and that the trunk does
-not create solid or TREE cells below the canopy. It also verifies that a
-missing `Voxelization` element and a non-positive cell dimension create no VTK
-file and return an error. Additional cases remove all explicit ground beneath a
-building and trees, and exercise a tree-only scene; both must produce a
-continuous solid terrain layer across the full domain.
+levels and a thin trunk. It verifies binary VTK dimensions/materials, the
+big-endian scalar/vector wind arrays, the shifted Beamer log law and exact
+TREE-only canopy attenuation, including an explicit per-tree value and the
+`0.5` default. It also checks ground gap interpolation, inclusive vertical
+TREE filling, and that the trunk does not create solid or TREE cells below the
+canopy. Missing/invalid voxel dimensions, roughness or climate input, and
+invalid Tree attenuation create no VTK file and return an error.
+Additional cases remove all explicit ground beneath a building and trees, and
+exercise a tree-only scene; both must produce a continuous solid terrain layer
+across the full domain.

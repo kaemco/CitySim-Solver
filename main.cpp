@@ -38,7 +38,8 @@ void writeVoxelGrid(XmlScene& scene,
     VoxelGrid grid=SceneVoxelizer::voxelize(scene,options,&logStream);
     grid.writeLegacyVtk(outputFile);
     logStream << "Voxel file: " << outputFile << "\n"
-              << "Material IDs: AIR=0, BUILDING=1, GROUND=2, TREE=3" << endl;
+              << "Material IDs: AIR=0, BUILDING=1, GROUND=2, TREE=3\n"
+              << "Wind arrays: wind_speed (m/s), wind_velocity (m/s)" << endl;
 }
 
 } // namespace
@@ -108,8 +109,9 @@ int main(int argc, char *argv[])
             if (voxelInput.size()<=4 || voxelInput.substr(voxelInput.size()-4)!=".xml")
                 throw(string("Voxelization input must be a CitySim .xml file."));
 
-            // Climate data are not required for the static geometry conversion.
-            XmlScene xmlscene(voxelInput,&logStream,false);
+            // The voxel wind field uses the climate speed and direction at
+            // the first simulated hour as its 10 m reference.
+            XmlScene xmlscene(voxelInput,&logStream,true);
             if (!xmlscene.hasVoxelizationRequest())
                 throw(string("Voxelization requested, but the input has no CitySim/Voxelization element."));
             writeVoxelGrid(xmlscene,xmlscene.getVoxelizationOptions(),voxelInput,

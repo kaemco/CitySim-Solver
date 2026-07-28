@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CitySim name="Tree-only terrain inference regression">
     <Simulation beginMonth="1" endMonth="1" beginDay="1" endDay="1"/>
-    <Voxelization deltaX="1" deltaY="1" deltaZ="1"/>
+    <Climate location="../simulations/ClimateFile/DRYCOLD3.cli"/>
+    <Voxelization deltaX="1" deltaY="1" deltaZ="1" roughness="0.1"/>
     <District>
         <Trees>
             <Tree id="1" key="unsupported-tree" leafAreaIndex="1"

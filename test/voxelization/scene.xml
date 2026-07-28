@@ -2,7 +2,7 @@
 <CitySim name="Voxelization regression scene">
     <Simulation beginMonth="1" endMonth="1" beginDay="1" endDay="1"/>
     <Climate location="../simulations/ClimateFile/DRYCOLD3.cli"/>
-    <Voxelization deltaX="1" deltaY="1" deltaZ="1"/>
+    <Voxelization deltaX="1" deltaY="1" deltaZ="1" roughness="0.1"/>
     <District>
         <!-- A closed 2 x 2 x 2 m non-simulated building.  CitySim stores
              these polygons as generic District obstacles. -->
@@ -36,7 +36,7 @@
         </Building>
 
         <Trees>
-            <Tree id="1" key="two-level-canopy" leafAreaIndex="1"
+            <Tree id="1" key="two-level-canopy" leafAreaIndex="1" attenuation="0.3"
                   leafWidth="0.1" leafDistance="1">
                 <Leaf id="20">
                     <V0 x="4" y="1" z="2"/><V1 x="6" y="1" z="2"/>

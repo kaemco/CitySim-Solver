@@ -1,12 +1,14 @@
 #ifndef VOXEL_H
 #define VOXEL_H
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 class XmlScene;
@@ -26,6 +28,13 @@ struct VoxelizationOptions {
     double deltaX = 2.;
     double deltaY = 2.;
     double deltaZ = 2.;
+
+    /**
+     * Aerodynamic roughness length z0 in metres for the neutral log-law wind
+     * profile.  XML input requires this value explicitly.  It must be finite,
+     * positive and smaller than the fixed 10 m climate reference height.
+     */
+    double roughnessLength = std::numeric_limits<double>::quiet_NaN();
 
     /**
      * Number of one-cell morphological closing passes applied independently
@@ -109,11 +118,61 @@ public:
     const std::vector<float>& groundHeights() const { return groundHeights_; }
     std::vector<float>& groundHeights() { return groundHeights_; }
 
+    /**
+     * The unattenuated neutral log-law needs only countZ values in memory.
+     * Actual cell wind additionally applies its owning Tree's attenuation.
+     */
+    bool hasWindProfile() const {
+        return windSpeedByLevel_.size()==countZ_
+                && windVelocityByLevel_.size()==countZ_;
+    }
+    float logLawWindSpeed(std::size_t k) const {
+        return windSpeedByLevel_.at(k);
+    }
+    const std::array<float,3>& logLawWindVelocity(std::size_t k) const {
+        return windVelocityByLevel_.at(k);
+    }
+    float windAttenuation(std::size_t i, std::size_t j, std::size_t k) const {
+        const std::uint32_t cell=static_cast<std::uint32_t>(index(i,j,k));
+        const std::vector<std::uint32_t>::const_iterator found=
+                std::lower_bound(treeWindCellIndices_.begin(),
+                                 treeWindCellIndices_.end(),cell);
+        if (found==treeWindCellIndices_.end() || *found!=cell) return 1.f;
+        return treeWindAttenuations_[
+                static_cast<std::size_t>(found-treeWindCellIndices_.begin())];
+    }
+    float windSpeed(std::size_t i, std::size_t j, std::size_t k) const {
+        return logLawWindSpeed(k)*windAttenuation(i,j,k);
+    }
+    std::array<float,3> windVelocity(std::size_t i, std::size_t j,
+                                     std::size_t k) const {
+        const float attenuation=windAttenuation(i,j,k);
+        const std::array<float,3>& base=logLawWindVelocity(k);
+        return std::array<float,3>{{
+            attenuation*base[0],attenuation*base[1],attenuation*base[2]
+        }};
+    }
+    double referenceWindSpeed() const { return referenceWindSpeed_; }
+    double referenceWindDirection() const { return referenceWindDirection_; }
+    double roughnessLength() const { return roughnessLength_; }
+    double referenceWindHeight() const { return referenceWindHeight_; }
+    std::size_t attenuatedTreeCellCount() const {
+        return treeWindCellIndices_.size();
+    }
+
+    void setLogLawWindProfile(double referenceSpeed,
+                              double meteorologicalDirectionDegrees,
+                              double roughnessLength,
+                              double referenceHeight=10.);
+    void setTreeWindAttenuations(
+            std::vector<std::pair<std::uint32_t,float> > assignments);
+
     VoxelCounts counts() const;
 
     /**
-     * Fast legacy VTK STRUCTURED_POINTS writer.  Materials are unsigned bytes:
-     * 0=AIR, 1=BUILDING, 2=GROUND, 3=TREE.
+     * Fast legacy VTK STRUCTURED_POINTS writer.  Materials are unsigned bytes
+     * (0=AIR, 1=BUILDING, 2=GROUND, 3=TREE).  If configured, wind_speed and
+     * wind_velocity are appended as big-endian float cell arrays.
      */
     void writeLegacyVtk(const std::string& fileName) const;
 
@@ -129,6 +188,14 @@ private:
     std::size_t countZ_ = 0;
     std::vector<std::uint8_t> materials_;
     std::vector<float> groundHeights_;
+    std::vector<float> windSpeedByLevel_;
+    std::vector<std::array<float,3> > windVelocityByLevel_;
+    std::vector<std::uint32_t> treeWindCellIndices_;
+    std::vector<float> treeWindAttenuations_;
+    double referenceWindSpeed_ = std::numeric_limits<double>::quiet_NaN();
+    double referenceWindDirection_ = std::numeric_limits<double>::quiet_NaN();
+    double roughnessLength_ = std::numeric_limits<double>::quiet_NaN();
+    double referenceWindHeight_ = 10.;
 };
 
 class SceneVoxelizer {

@@ -4,6 +4,8 @@
 #include "scene.h"
 #include "util.h"
 
+#include <cmath>
+
 // *** Building class, CitySim *** //
 // *** jerome.kaempf@epfl.ch   *** //
 
@@ -1863,6 +1865,12 @@ Tree::Tree(TiXmlHandle hdl, ostream* pLogStream):logStream(std::cout.rdbuf()) {
     if (hdl.ToElement()->Attribute("deciduous")) deciduous = (hdl.ToElement()->Attribute("leafDistance") == string("true"));
     if (hdl.ToElement()->Attribute("class")) leafClass = hdl.ToElement()->Attribute("class");
 
+    if (hdl.ToElement()->Attribute("attenuation"))
+        windAttenuation=to<float>(hdl.ToElement()->Attribute("attenuation"));
+    if (!isfinite(windAttenuation) || !(windAttenuation>0.f)
+            || !(windAttenuation<1.f))
+        throw string("Tree XML: attribute 'attenuation' must be finite and strictly between zero and one.");
+
     // read the leaves and create subleaves
     unsigned int surfaceIndex = 0;
     while (hdl.ChildElement("Leaf", surfaceIndex).ToElement()) {
@@ -1896,12 +1904,19 @@ Tree::Tree(TiXmlHandle hdl, ostream* pLogStream):logStream(std::cout.rdbuf()) {
         }
     }
 
-    logStream << "Tree with key: " << key << endl;
+    logStream << "Tree with key: " << key
+              << ", wind attenuation=" << windAttenuation << endl;
 
 }
 
 void Tree::writeXML(ofstream& file, string tab){
-    file << tab << "<Tree id=\"" << id << "\" key=\"" << key << "\" leafAreaIndex=\"" << layers << "\" leafWidth=\"" << leafWidth << "\" leafDistance=\"" << layersDistance << "\" deciduous=\"" << (deciduous?"true":"false") << "\" class=\"" << leafClass << "\">" << endl;
+    file << tab << "<Tree id=\"" << id << "\" key=\"" << key
+         << "\" leafAreaIndex=\"" << layers
+         << "\" leafWidth=\"" << leafWidth
+         << "\" leafDistance=\"" << layersDistance
+         << "\" deciduous=\"" << (deciduous?"true":"false")
+         << "\" class=\"" << leafClass
+         << "\" attenuation=\"" << windAttenuation << "\">" << endl;
     string subtab=tab+"\t";
     // leaves
     for (size_t i=0; i < leaves.size(); ++i) {

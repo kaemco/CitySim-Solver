@@ -440,6 +440,7 @@ private:
     float leafWidth = 0.1f; // in meters
     bool deciduous = false;
     string leafClass = "C3";
+    float windAttenuation = 0.5f; // dimensionless V1 canopy multiplier
 
     vector<Surface*> leaves;
     vector<Surface*> subLeaves;
@@ -475,6 +476,8 @@ public:
     bool getDeciduous() { return deciduous; }
     void setLeafClass(string value) { leafClass = value; }
     string getLeafClass() { return leafClass; }
+    void setWindAttenuation(float value) { windAttenuation = value; }
+    float getWindAttenuation() const { return windAttenuation; }
 
     void addSurface(Surface* surface) {
         surface->computeNormalAndArea();

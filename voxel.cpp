@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -17,6 +18,7 @@
 #include "RENIndexedFaceSet.h"
 #include "RENIndexedFaceSetBuilder.h"
 #include "building.h"
+#include "climate.h"
 #include "district.h"
 #include "scene.h"
 #include "surface.h"
@@ -188,12 +190,16 @@ void appendSurfaceTriangles(Surface* surface, vector<Triangle>& destination) {
 }
 
 struct SceneGeometry {
+    struct TreeCanopy {
+        vector<Triangle> leaves;
+        float attenuation=0.5f;
+    };
     vector<vector<Triangle> > buildings;
     vector<Triangle> districtObstacles;
     vector<Triangle> grounds;
     vector<Triangle> floorSupports;
     vector<Vec3> treeGroundSupports;
-    vector<vector<Triangle> > treeLeaves;
+    vector<TreeCanopy> treeCanopies;
     Vec3 minimum;
     Vec3 maximum;
     bool hasBounds=false;
@@ -267,7 +273,10 @@ SceneGeometry collectGeometry(XmlScene& scene, const VoxelizationOptions& option
             appendSurfaceTriangles(tree->getSubLeaves()->at(leafIndex),leaves);
         if (!leaves.empty()) {
             extendBounds(geometry,leaves);
-            geometry.treeLeaves.push_back(move(leaves));
+            SceneGeometry::TreeCanopy canopy;
+            canopy.leaves=move(leaves);
+            canopy.attenuation=tree->getWindAttenuation();
+            geometry.treeCanopies.push_back(move(canopy));
         }
 
         // Trunks remain absent from the material grid, but their lowest
@@ -742,7 +751,7 @@ void fillEnclosedBuildingCells(VoxelGrid& grid, bool hasBuildingShell, int threa
     }
 }
 
-void voxelizeTrees(const vector<vector<Triangle> >& trees,
+void voxelizeTrees(const vector<SceneGeometry::TreeCanopy>& trees,
                    VoxelGrid& grid,int threadCount) {
     const size_t columnCount=grid.countX()*grid.countY();
     vector<float> minimum(columnCount,numeric_limits<float>::infinity());
@@ -752,10 +761,11 @@ void voxelizeTrees(const vector<vector<Triangle> >& trees,
                           .5*(grid.maximumZ()-grid.originZ())+grid.deltaZ()};
     const double columnCentreZ=.5*(grid.maximumZ()+grid.originZ());
     vector<uint8_t>& materials=grid.materials();
+    vector<pair<uint32_t,float> > attenuationAssignments;
 
     for (size_t treeIndex=0;treeIndex<trees.size();++treeIndex) {
         touched.clear();
-        const vector<Triangle>& leaves=trees[treeIndex];
+        const vector<Triangle>& leaves=trees[treeIndex].leaves;
         for (size_t triangleIndex=0;triangleIndex<leaves.size();++triangleIndex) {
             const Triangle& triangle=leaves[triangleIndex];
             const IndexRange xr=xRange(triangle,grid);
@@ -792,12 +802,33 @@ void voxelizeTrees(const vector<vector<Triangle> >& trees,
                 if (materials[index]==AIR_VALUE) materials[index]=TREE_VALUE;
             }
         }
+
+        // Preserve only sparse TREE-cell assignments. Overlapping canopies
+        // are merged later with the strongest (smallest) attenuation.
+        for (size_t touchedIndex=0;touchedIndex<touched.size();++touchedIndex) {
+            const size_t column=touched[touchedIndex];
+            const size_t i=column%grid.countX(),j=column/grid.countX();
+            long long kMinimum=static_cast<long long>(
+                        floor((minimum[column]-grid.originZ())/grid.deltaZ()));
+            long long kMaximum=static_cast<long long>(
+                        floor((maximum[column]-grid.originZ())/grid.deltaZ()));
+            kMinimum=max(0LL,min(kMinimum,static_cast<long long>(grid.countZ())-1));
+            kMaximum=max(0LL,min(kMaximum,static_cast<long long>(grid.countZ())-1));
+            for (long long k=kMinimum;k<=kMaximum;++k) {
+                const size_t cell=grid.index(i,j,static_cast<size_t>(k));
+                if (materials[cell]==TREE_VALUE)
+                    attenuationAssignments.push_back(make_pair(
+                        static_cast<uint32_t>(cell),trees[treeIndex].attenuation));
+            }
+        }
+
         for (size_t touchedIndex=0;touchedIndex<touched.size();++touchedIndex) {
             const size_t column=touched[touchedIndex];
             minimum[column]=numeric_limits<float>::infinity();
             maximum[column]=-numeric_limits<float>::infinity();
         }
     }
+    grid.setTreeWindAttenuations(move(attenuationAssignments));
 }
 
 } // namespace
@@ -812,6 +843,86 @@ VoxelGrid::VoxelGrid(double originX, double originY, double originZ,
       countX_(countX),countY_(countY),countZ_(countZ),
       materials_(countX*countY*countZ,AIR_VALUE),
       groundHeights_(countX*countY,numeric_limits<float>::quiet_NaN()) {}
+
+void VoxelGrid::setLogLawWindProfile(double referenceSpeed,
+                                     double meteorologicalDirectionDegrees,
+                                     double roughnessLength,
+                                     double referenceHeight) {
+    if (!isfinite(referenceSpeed) || referenceSpeed<0.)
+        throw runtime_error("Voxelization: climate reference wind speed must be finite and non-negative.");
+    if (!isfinite(meteorologicalDirectionDegrees))
+        throw runtime_error("Voxelization: climate wind direction must be finite.");
+    if (!isfinite(roughnessLength) || !(roughnessLength>0.)
+            || !isfinite(referenceHeight) || !(referenceHeight>roughnessLength))
+        throw runtime_error("Voxelization: roughness must be finite, positive and below the wind reference height.");
+
+    double direction=fmod(meteorologicalDirectionDegrees,360.);
+    if (direction<0.) direction+=360.;
+    const double radians=direction*acos(-1.)/180.;
+    const double denominator=log1p(referenceHeight/roughnessLength);
+
+    windSpeedByLevel_.resize(countZ_);
+    windVelocityByLevel_.resize(countZ_);
+    for (size_t k=0;k<countZ_;++k) {
+        // The unattenuated V1 profile is horizontally uniform: height is
+        // measured from the lower domain plane at each voxel centre.
+        const double height=(static_cast<double>(k)+.5)*deltaZ_;
+        const double speed=referenceSpeed
+                *log1p(height/roughnessLength)/denominator;
+        windSpeedByLevel_[k]=static_cast<float>(speed);
+        // Climate DD is meteorological: clockwise from North and indicating
+        // where the wind comes from. CitySim x is East and y is North.
+        windVelocityByLevel_[k]={{
+                static_cast<float>(-speed*sin(radians)),
+                static_cast<float>(-speed*cos(radians)),
+                0.f
+        }};
+    }
+
+    referenceWindSpeed_=referenceSpeed;
+    referenceWindDirection_=direction;
+    roughnessLength_=roughnessLength;
+    referenceWindHeight_=referenceHeight;
+}
+
+void VoxelGrid::setTreeWindAttenuations(
+        vector<pair<uint32_t,float> > assignments) {
+    sort(assignments.begin(),assignments.end(),
+         [](const pair<uint32_t,float>& first,
+            const pair<uint32_t,float>& second) {
+        if (first.first!=second.first) return first.first<second.first;
+        return first.second<second.second;
+    });
+
+    treeWindCellIndices_.clear();
+    treeWindAttenuations_.clear();
+    treeWindCellIndices_.reserve(assignments.size());
+    treeWindAttenuations_.reserve(assignments.size());
+    for (size_t assignment=0;assignment<assignments.size();++assignment) {
+        const uint32_t cell=assignments[assignment].first;
+        const float attenuation=assignments[assignment].second;
+        if (cell>=materials_.size() || materials_[cell]!=TREE_VALUE)
+            throw runtime_error("Voxelization: tree wind assignment targets a non-TREE cell.");
+        if (!isfinite(attenuation) || !(attenuation>0.f)
+                || !(attenuation<1.f))
+            throw runtime_error("Voxelization: Tree attenuation must be finite and strictly between zero and one.");
+
+        if (!treeWindCellIndices_.empty()
+                && treeWindCellIndices_.back()==cell) {
+            treeWindAttenuations_.back()=
+                    min(treeWindAttenuations_.back(),attenuation);
+        }
+        else {
+            treeWindCellIndices_.push_back(cell);
+            treeWindAttenuations_.push_back(attenuation);
+        }
+    }
+
+    const size_t treeCells=static_cast<size_t>(
+                count(materials_.begin(),materials_.end(),TREE_VALUE));
+    if (treeWindCellIndices_.size()!=treeCells)
+        throw runtime_error("Voxelization: not every TREE cell received a wind attenuation.");
+}
 
 VoxelCounts VoxelGrid::counts() const {
     VoxelCounts result;
@@ -844,6 +955,63 @@ void VoxelGrid::writeLegacyVtk(const string& fileName) const {
         output.write(reinterpret_cast<const char*>(&materials_[0]),
                      static_cast<streamsize>(materials_.size()));
     output << "\n";
+
+    if (hasWindProfile()) {
+        // Legacy binary VTK requires multi-byte numbers in big-endian order.
+        const auto storeFloat = [](vector<char>& buffer,size_t offset,float value) {
+            uint32_t bits=0;
+            memcpy(&bits,&value,sizeof(bits));
+            buffer[offset]=static_cast<char>((bits>>24)&0xffu);
+            buffer[offset+1]=static_cast<char>((bits>>16)&0xffu);
+            buffer[offset+2]=static_cast<char>((bits>>8)&0xffu);
+            buffer[offset+3]=static_cast<char>(bits&0xffu);
+        };
+        const auto attenuationAt =
+                [this](size_t cell,size_t& treeCursor)->float {
+            if (materials_[cell]!=TREE_VALUE) return 1.f;
+            while (treeCursor<treeWindCellIndices_.size()
+                   && treeWindCellIndices_[treeCursor]<cell)
+                ++treeCursor;
+            if (treeCursor>=treeWindCellIndices_.size()
+                    || treeWindCellIndices_[treeCursor]!=cell)
+                throw runtime_error(
+                    "Voxelization: TREE cell has no wind attenuation.");
+            return treeWindAttenuations_[treeCursor++];
+        };
+
+        output << "SCALARS wind_speed float 1\n"
+               << "LOOKUP_TABLE default\n";
+        vector<char> scalarRow(countX_*sizeof(float));
+        size_t treeCursor=0;
+        for (size_t k=0;k<countZ_;++k) {
+            for (size_t j=0;j<countY_;++j) {
+                for (size_t i=0;i<countX_;++i) {
+                    const size_t cell=index(i,j,k);
+                    const float attenuation=attenuationAt(cell,treeCursor);
+                    storeFloat(scalarRow,i*sizeof(float),
+                               attenuation*windSpeedByLevel_[k]);
+                }
+                output.write(&scalarRow[0],static_cast<streamsize>(scalarRow.size()));
+            }
+        }
+        output << "\nVECTORS wind_velocity float\n";
+        vector<char> vectorRow(countX_*3*sizeof(float));
+        treeCursor=0;
+        for (size_t k=0;k<countZ_;++k) {
+            for (size_t j=0;j<countY_;++j) {
+                for (size_t i=0;i<countX_;++i) {
+                    const size_t cell=index(i,j,k);
+                    const float attenuation=attenuationAt(cell,treeCursor);
+                    for (size_t component=0;component<3;++component)
+                        storeFloat(vectorRow,(i*3+component)*sizeof(float),
+                                   attenuation
+                                   *windVelocityByLevel_[k][component]);
+                }
+                output.write(&vectorRow[0],static_cast<streamsize>(vectorRow.size()));
+            }
+        }
+        output << "\n";
+    }
     if (!output.good()) throw runtime_error("Voxelization: error writing VTK file "+fileName);
 }
 
@@ -860,6 +1028,11 @@ VoxelGrid SceneVoxelizer::voxelize(XmlScene& scene,
         throw runtime_error("Voxelization: groundTileSize must be greater than zero.");
     if (options.threads<0)
         throw runtime_error("Voxelization: threads cannot be negative.");
+    if (!isfinite(options.roughnessLength) || !(options.roughnessLength>0.)
+            || !(options.roughnessLength<10.))
+        throw runtime_error("Voxelization: roughness must be finite, positive and below 10 m.");
+    if (!scene.getClimate())
+        throw runtime_error("Voxelization: a readable Climate file is required for the wind profile.");
 
     log << "Voxelization: triangulating CitySim geometry..." << endl;
     SceneGeometry geometry=collectGeometry(scene,options);
@@ -876,12 +1049,24 @@ VoxelGrid SceneVoxelizer::voxelize(XmlScene& scene,
     VoxelGrid grid(geometry.minimum.x,geometry.minimum.y,geometry.minimum.z,
                    options.deltaX,options.deltaY,options.deltaZ,nx,ny,nz);
     const int threadCount=effectiveThreadCount(options);
+    const unsigned int windDay=scene.getBeginDay();
+    const unsigned int windHour=1;
+    grid.setLogLawWindProfile(
+                scene.getClimate()->getWindSpeed(windDay,windHour),
+                scene.getClimate()->getWindDirection(windDay,windHour),
+                options.roughnessLength,10.);
 
     log << "Voxelization: AABB ["
         << geometry.minimum.x << "," << geometry.minimum.y << "," << geometry.minimum.z
         << "] -> [" << geometry.maximum.x << "," << geometry.maximum.y << "," << geometry.maximum.z
         << "], grid " << nx << "x" << ny << "x" << nz << " = " << cells
         << " cells, threads=" << threadCount << "." << endl;
+    log << "Voxelization: neutral log-law wind at climate day=" << windDay
+        << ", hour=" << windHour
+        << ": U10=" << grid.referenceWindSpeed()
+        << " m/s, direction=" << grid.referenceWindDirection()
+        << " deg meteorological, roughness=" << grid.roughnessLength()
+        << " m." << endl;
 
     const GroundReconstructionStats groundStats=
             voxelizeGround(geometry,grid,options,threadCount);
@@ -898,7 +1083,9 @@ VoxelGrid SceneVoxelizer::voxelize(XmlScene& scene,
     mergeBuildings(geometry,grid,options,threadCount);
     const bool hasBuildingShell=!geometry.buildings.empty() || !geometry.districtObstacles.empty();
     fillEnclosedBuildingCells(grid,hasBuildingShell,threadCount);
-    voxelizeTrees(geometry.treeLeaves,grid,threadCount);
+    voxelizeTrees(geometry.treeCanopies,grid,threadCount);
+    log << "Voxelization: per-Tree wind attenuation assigned to "
+        << grid.attenuatedTreeCellCount() << " TREE cells." << endl;
 
     const VoxelCounts counts=grid.counts();
     const double elapsed=chrono::duration<double>(

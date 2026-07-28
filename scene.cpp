@@ -1555,8 +1555,8 @@ XmlScene::XmlScene(string inputFile, ostream* pLogFileStr, bool climateFileRequi
         if (voxelization->NextSiblingElement("Voxelization"))
             throw(string("Voxelization XML: only one Voxelization element is allowed."));
 
-        const auto readDelta = [voxelization](const char* attributeName,
-                                               double& value) {
+        const auto readPositive = [voxelization](const char* attributeName,
+                                                  double& value) {
             const int status=voxelization->QueryDoubleAttribute(attributeName,&value);
             if (status==TIXML_NO_ATTRIBUTE)
                 throw string("Voxelization XML: missing required attribute '")
@@ -1570,9 +1570,12 @@ XmlScene::XmlScene(string inputFile, ostream* pLogFileStr, bool climateFileRequi
         };
 
         VoxelizationOptions parsed;
-        readDelta("deltaX",parsed.deltaX);
-        readDelta("deltaY",parsed.deltaY);
-        readDelta("deltaZ",parsed.deltaZ);
+        readPositive("deltaX",parsed.deltaX);
+        readPositive("deltaY",parsed.deltaY);
+        readPositive("deltaZ",parsed.deltaZ);
+        readPositive("roughness",parsed.roughnessLength);
+        if (!(parsed.roughnessLength<10.))
+            throw string("Voxelization XML: attribute 'roughness' must be below the 10 m wind reference height.");
         voxelizationOptions=parsed;
         voxelizationRequested=true;
     }
@@ -1957,6 +1960,13 @@ void XmlScene::exportXMLFile(string fileName){
     if(cliFileName.find_last_of("/\\")!=std::string::npos)
         cliFileName=cliFileName.substr(cliFileName.find_last_of("/\\")+1);
     file << "\t<Climate location=\""<< cliFileName << "\" city=\"Unknown\"/>" << endl;
+    if (voxelizationRequested) {
+        file << "\t<Voxelization deltaX=\"" << voxelizationOptions.deltaX
+             << "\" deltaY=\"" << voxelizationOptions.deltaY
+             << "\" deltaZ=\"" << voxelizationOptions.deltaZ
+             << "\" roughness=\"" << voxelizationOptions.roughnessLength
+             << "\"/>" << endl;
+    }
 
     // write scene in .xml file
     pDistrict->writeXML(file, "\t");
