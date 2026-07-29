@@ -126,6 +126,14 @@ public :
     float getGamma(unsigned int day, unsigned int hour) { return 37.*getWindSpeed(day,hour)*694.5/((getToutCelsius(day,hour)+273.15)*(1.+0.34*getWindSpeed(day,hour))); } // Hourly determination of ET0
     static float getSaturatedVapourPressure(float T)           { return 0.611*exp(17.502*T/(T+240.97)); } // saturation vapour pressure kPa (Campbell and Norman, 1998)
     static float getSaturatedVapourPressureDerivative(float T) { return 240.97*17.502*0.611*exp(17.502*T/(T+240.97))/pow((T+240.97),2); } // slope of saturation vapour pressure (kPa/°C)
+
+    /**
+     * Returns the saturation vapour pressure [hPa] using separate correlations over ice below 0 °C and liquid water at or above 0 °C.
+     * This high-accuracy correlation is currently used only by PET. It could also be shared by UTCI in the future, but UTCI intentionally
+     * retains its existing saturation-pressure calculation for now.
+     */
+    static double getSaturatedVapourPressureHpa(double T);
+
     float getVapourPressure(unsigned int day, unsigned int hour) { return getSaturatedVapourPressure(getToutCelsius(day,hour))*getRelativeHumidity(day,hour); } // Vapour pressure (kPa)
     float getVapourPressure(unsigned int step)                   { return getSaturatedVapourPressure(getToutCelsius(step))*getRelativeHumidity(step); } // Vapour pressure (kPa)
     float getVapourDeficit(unsigned int day, unsigned int hour)  { return getSaturatedVapourPressure(getToutCelsius(day,hour))-getVapourPressure(day,hour); } // Difference (kPa)

@@ -6,8 +6,71 @@
 #include "util.h"
 #include "surface.h"
 
+#include <array>
+
 class District;
 class Zone;
+
+/**
+ * Steady Physiological Equivalent Temperature (PET) solver based on the Munich Energy-balance Model for Individuals (MEMI).
+ * The solver first determines the core, skin and clothing temperatures in the actual environment, then finds the temperature
+ * of the PET reference environment that produces the same physiological state.
+ */
+class PET_Solver {
+public:
+    struct Temperatures {
+        double core;
+        double skin;
+        double clothing;
+    };
+
+    /**
+     * @param airTemperature Outdoor air temperature [deg C].
+     * @param meanRadiantTemperature Mean radiant temperature [deg C].
+     * @param relativeHumidity Relative humidity [%].
+     * @param airVelocity Air velocity at the body [m/s].
+     * @param age Age [years].
+     * @param sex 1 for male or 2 for female.
+     * @param height Body height [m].
+     * @param bodyMass Body mass [kg].
+     * @param position 1 for sitting, 2 for standing or 3 for standing with forced convection.
+     * @param activityPower Metabolic activity excluding basal metabolism [W].
+     * @param clothingInsulation Clothing insulation [clo].
+     * @param atmosphericPressure Atmospheric pressure [hPa].
+     */
+    PET_Solver(double airTemperature, double meanRadiantTemperature, double relativeHumidity, double airVelocity, double age, int sex,
+               double height, double bodyMass, int position, double activityPower, double clothingInsulation, double atmosphericPressure = 1013.25);
+
+    double compute() const;
+    Temperatures solvePhysiologicalState() const;
+    double computeReferenceTemperature(const Temperatures& temperatures) const;
+
+private:
+    typedef array<double, 3> TemperatureArray;
+    typedef array<double, 3> BalanceArray;
+
+    double airTemperature;
+    double meanRadiantTemperature;
+    double relativeHumidity;
+    double airVelocity;
+    double age;
+    int sex;
+    double height;
+    double bodyMass;
+    int position;
+    double activityPower;
+    double clothingInsulation;
+    double atmosphericPressure;
+
+    void validateInputs() const;
+
+    BalanceArray balances(const TemperatureArray& temperatures, double dryBulbTemperature, double radiantTemperature, double velocity,
+                          double humidity, double activityPower, double clothing, bool actualEnvironment) const;
+
+    double referenceBalance(const TemperatureArray& temperatures, double referenceTemperature) const;
+
+    static double infinityNorm(const BalanceArray& values);
+};
 
 // *** Building class, CitySim *** //
 // *** jerome.kaempf@epfl.ch   *** //
@@ -71,7 +134,15 @@ private:
     // mrt parameters
     bool mrt = false;
     float mrtEpsilon = 0.97f;
-    vector<float> MRT /*!< MRT (in celsius) */, COMFA /*!< COMFA* (in W/m^2) */, ITS /*!< ITS (in W) */, UTCI /*!< UTCI (in celsius) */;
+    vector<float> MRT /*!< MRT (in celsius) */, COMFA /*!< COMFA* (in W/m^2) */, ITS /*!< ITS (in W) */, UTCI /*!< UTCI (in celsius) */, PET /*!< PET for MEMI (in celsius) */;
+    // PET body parameters. They can be overridden by an optional <Body> child.
+    double petAge = 23.0;             // years
+    int petSex = 1;                   // 1=male, 2=female
+    double petHeight = 1.8;           // m
+    double petBodyMass = 75.0;        // kg
+    int petPosition = 1;              // 1=sitting, 2=standing, 3=standing forced convection
+    double petActivityPower = 80.0;   // W, excluding basal metabolism
+    double petClothing = 0.9;         // clo
 
     // Cognet: Start of added code.
     // Variables for computations at each time step. (HS = hot storage, DHW = domestic hot water, CS = cold storage).
@@ -340,6 +411,22 @@ public:
         return UTCIcount;
     }
     void eraseUTCI() { UTCI.erase(UTCI.begin(),UTCI.end()); }
+    // PET
+    void setPET(float value) { PET.push_back(value); }
+    float getPET(unsigned int step) { return PET.at(step); }
+    unsigned int getPETcount() {
+        // Computes the number of comfortable daytime hours.
+        unsigned int PETcount = 0;
+        for (size_t i=0; i<PET.size(); ++i) {
+            // keep only the values between 8h and 18h
+            if  ( ((i)%24 >= 7) && ((i)%24 <= 17) ) {
+                // PET neutral/comfortable range
+                if (PET.at(i) >= 18.f && PET.at(i) <= 26.f) PETcount++;
+            }
+        }
+        return PETcount;
+    }
+    void erasePET() { PET.erase(PET.begin(), PET.end()); }
 
     // get the eco-indicators
     float getNRE() { return nre; }
@@ -377,6 +464,13 @@ public:
     // gets the mrt parameters
     bool isMRT() { return mrt; }
     float getMRT_Epsilon() { return mrtEpsilon; }
+    double getPETAge() const { return petAge; }
+    int getPETSex() const { return petSex; }
+    double getPETHeight() const { return petHeight; }
+    double getPETBodyMass() const { return petBodyMass; }
+    int getPETPosition() const { return petPosition; }
+    double getPETActivityPower() const { return petActivityPower; }
+    double getPETClothing() const { return petClothing; }
 
     void writeXML(ofstream& file, string tab="");
     void writeGML(ofstream& file, string tab="", const vector<double>& origin={0.,0.,0.});

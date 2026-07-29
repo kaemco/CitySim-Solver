@@ -3438,7 +3438,7 @@ void Model::computeCMIndices(Building* pBuilding, Climate* pClimate, unsigned in
 #endif // DEBUG
 
     // indicators to be computed
-    float MRT /*!< MRT (in celsius) */, COMFA /*!< COMFA* (in W/m^2) */, ITS /*!< ITS (in W) */, UTCI /*!< UTCI (in celsius) */;
+    float MRT /*!< MRT (in celsius) */, COMFA /*!< COMFA* (in W/m^2) */, ITS /*!< ITS (in W) */, UTCI /*!< UTCI (in celsius) */, PET /*!< PET from MEMI (in celsius) */;
 
     // compute the MRT (in celsius) for the building pBuilding
 
@@ -3796,10 +3796,18 @@ void Model::computeCMIndices(Building* pBuilding, Climate* pClimate, unsigned in
         (1.04452989e-03) * va * Pa * Pa * Pa * Pa * Pa +
         (2.47090539e-04) * D_Tmrt * Pa * Pa * Pa * Pa * Pa +
         (1.48348065e-03) * Pa * Pa * Pa * Pa * Pa * Pa;
+    
+    // calculation of PET from MEMI
+    PET_Solver petSolver(pClimate->getToutCelsius(day, hour), MRT, 100.0 * pClimate->getRelativeHumidity(day, hour),
+                            std::max(0.0f, pClimate->getWindSpeed(day, hour)), pBuilding->getPETAge(), pBuilding->getPETSex(),
+                            pBuilding->getPETHeight(), pBuilding->getPETBodyMass(), pBuilding->getPETPosition(),
+                            pBuilding->getPETActivityPower(), pBuilding->getPETClothing(), 0.01 * pClimate->getPatm(day, hour));
+    PET = static_cast<float>(petSolver.compute());
     pBuilding->setUTCI(UTCI);
+    pBuilding->setPET(PET);
 
 #ifdef DEBUG
-    textFile << UTCI;
+    textFile << UTCI << "\t" << PET;
     textFile << endl;
     textFile.close();
 #endif // DEBUG

@@ -214,6 +214,25 @@ Climate::Climate(string filename, ostream* pLogFileStream):logStream(std::cout.r
     computeComplementaryValues();
 }
 
+double Climate::getSaturatedVapourPressureHpa(double temperature) {
+    const double kelvin = temperature + 273.15;
+    if (!(kelvin > 0.0)) {
+        throw string("Error in Climate::getSaturatedVapourPressureHpa: temperature must be above absolute zero.");
+    }
+
+    // Natural logarithm of the saturation pressure in Pa, evaluated over ice below 0 °C and over liquid water otherwise.
+    double logarithm;
+    if (temperature < 0.0) {
+        logarithm = -5674.5359 / kelvin + 6.3925247 + kelvin * (-0.009677843 + kelvin * (0.00000062215701 +
+                    kelvin * (0.0000000020747825 - 0.0000000000009484024 * kelvin))) + 4.1635019 * std::log(kelvin);
+    } else {
+        logarithm = -5800.2206 / kelvin + 1.3914993 + kelvin * (-0.048640239 +
+                    kelvin * (0.000041764768 - 0.000000014452093 * kelvin)) + 6.5459673 * std::log(kelvin);
+    }
+
+    return std::exp(logarithm) / 100.0; // Pa to hPa
+}
+
 void Climate::computeComplementaryValues() {
 
         // calculation of several variables that we use in the radiation model

@@ -1,11 +1,345 @@
 #include "district.h"
 #include "building.h"
+#include "climate.h"
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+
 #include "zone.h"
 #include "scene.h"
 #include "util.h"
 
 // *** Building class, CitySim *** //
 // *** jerome.kaempf@epfl.ch   *** //
+
+// MEMI equations follow the corrected steady PET formulation used by pythermalcomfort (MIT), based on Walther and Goestchel (2018).
+// https://pythermalcomfort.readthedocs.io/en/stable/
+
+namespace {
+
+const double StandardPressure = 1013.25;       // hPa
+const double BloodSpecificHeat = 3640.0;       // J/(kg K)
+const double AirSpecificHeat = 1010.0;         // J/(kg K)
+const double SkinEmissivity = 0.99;
+const double ClothingEmissivity = 0.95;
+const double LatentHeatVapourisation = 2.42e6; // J/kg
+const double StefanBoltzmann = 5.67e-8;        // W/(m2 K4)
+const double ReferenceActivityPower = 80.0;    // W
+const double ReferenceClothing = 0.9;          // clo
+const double ReferenceVelocity = 0.1;          // m/s
+const double ReferenceVapourPressure = 12.0;   // hPa
+const double CoreSetTemperature = 36.6;        // deg C
+const double SkinSetTemperature = 34.0;        // deg C
+
+bool isFinite(double value) { return std::isfinite(value); }
+
+double midpoint(double lower, double upper) { return lower + 0.5 * (upper - lower); }
+
+} // namespace
+
+PET_Solver::PET_Solver(double airTemperature, double meanRadiantTemperature, double relativeHumidity, double airVelocity, double age, int sex,
+                       double height, double bodyMass, int position, double activityPower, double clothingInsulation, double atmosphericPressure)
+    : airTemperature(airTemperature), meanRadiantTemperature(meanRadiantTemperature), relativeHumidity(relativeHumidity), airVelocity(airVelocity),
+      age(age), sex(sex), height(height), bodyMass(bodyMass), position(position), activityPower(activityPower),
+      clothingInsulation(clothingInsulation), atmosphericPressure(atmosphericPressure) {
+    validateInputs();
+}
+
+void PET_Solver::validateInputs() const {
+    if (!isFinite(airTemperature) || airTemperature <= -273.15 || !isFinite(meanRadiantTemperature) || meanRadiantTemperature <= -273.15) {
+        throw string("Error in PET_Solver: temperatures must be finite and above absolute zero.");
+    }
+    if (!isFinite(relativeHumidity) || relativeHumidity < 0.0 || relativeHumidity > 100.0) {
+        throw string("Error in PET_Solver: relative humidity must be between 0 and 100 percent.");
+    }
+    if (!isFinite(airVelocity) || airVelocity < 0.0) {
+        throw string("Error in PET_Solver: air velocity must be finite and non-negative.");
+    }
+    if (!isFinite(atmosphericPressure) || atmosphericPressure <= 0.0) {
+        throw string("Error in PET_Solver: atmospheric pressure must be positive.");
+    }
+    if (!isFinite(age) || age <= 0.0 || !isFinite(height) || height <= 0.2 || !isFinite(bodyMass) || bodyMass <= 0.0) {
+        throw string("Error in PET_Solver: invalid body age, height or mass.");
+    }
+    if (sex != 1 && sex != 2) {
+        throw string("Error in PET_Solver: sex must be 1 (male) or 2 (female).");
+    }
+    if (position != 1 && position != 2 && position != 3) {
+        throw string("Error in PET_Solver: position must be 1 (sitting), 2 (standing) or 3 (standing with forced convection).");
+    }
+    if (!isFinite(activityPower) || activityPower < 0.0) {
+        throw string("Error in PET_Solver: activity power must be finite and non-negative.");
+    }
+    if (!isFinite(clothingInsulation) || clothingInsulation <= 0.0) {
+        throw string("Error in PET_Solver: clothing insulation must be positive.");
+    }
+}
+
+PET_Solver::BalanceArray PET_Solver::balances(const TemperatureArray& temperatures, double dryBulbTemperature, double radiantTemperature,
+                                              double velocity, double humidity, double activityPower, double clothing, bool actualEnvironment) const {
+
+    const double coreTemperature = temperatures[0];
+    const double skinTemperature = temperatures[1];
+    const double clothingTemperature = temperatures[2];
+
+    if (!isFinite(coreTemperature) || !isFinite(skinTemperature) || !isFinite(clothingTemperature)) {
+        throw std::runtime_error("PET: non-finite physiological temperature");
+    }
+
+    const double bodyArea = 0.203 * std::pow(bodyMass, 0.425) * std::pow(height, 0.725);
+
+    const double basalFemale = 3.19 * std::pow(bodyMass, 0.75) *
+        (1.0 + 0.004 * (30.0 - age) + 0.018 * (height * 100.0 / std::pow(bodyMass, 1.0 / 3.0) - 42.1));
+    const double basalMale = 3.45 * std::pow(bodyMass, 0.75) *
+        (1.0 + 0.004 * (30.0 - age) + 0.01 * (height * 100.0 / std::pow(bodyMass, 1.0 / 3.0) - 43.4));
+    const double basalMetabolism = sex == 1 ? basalMale : basalFemale;
+    const double internalEnergy = (activityPower + basalMetabolism) / bodyArea;
+
+    const double clothingAreaFactor = 1.0 + 0.31 * clothing;
+    double clothedFraction = (173.51 * clothing - 2.36 - 100.76 * clothing * clothing + 19.28 * clothing * clothing * clothing) / 100.0;
+    const double clothingArea = bodyArea * clothedFraction + bodyArea * (clothingAreaFactor - 1.0);
+
+    const double effectiveRadiationFactor = position == 2 ? 0.696 : 0.725;
+    const double effectiveRadiationArea = bodyArea * effectiveRadiationFactor;
+
+    const double vapourPressure = actualEnvironment ? humidity / 100.0 * Climate::getSaturatedVapourPressureHpa(dryBulbTemperature) : ReferenceVapourPressure;
+
+    double convectionCoefficient;
+    if (position == 1) {
+        convectionCoefficient = 2.67 + 6.5 * std::pow(velocity, 0.67);
+    } else if (position == 2) {
+        convectionCoefficient = 2.26 + 7.42 * std::pow(velocity, 0.67);
+    } else {
+        convectionCoefficient = 8.6 * std::pow(velocity, 0.513);
+    }
+    const double naturalConvection = 3.0 * pow(atmosphericPressure / StandardPressure, 0.53);
+    convectionCoefficient = max(convectionCoefficient, naturalConvection) * pow(atmosphericPressure / StandardPressure, 0.55);
+
+    const double expiredTemperature = 0.47 * dryBulbTemperature + 21.0;
+    const double pulmonaryVentilation = internalEnergy * 1.44e-6;
+    const double sensibleRespiration = AirSpecificHeat * (dryBulbTemperature - expiredTemperature) * pulmonaryVentilation;
+    const double latentRespiration = 0.623 * LatentHeatVapourisation / atmosphericPressure *
+        (vapourPressure - Climate::getSaturatedVapourPressureHpa(expiredTemperature)) * pulmonaryVentilation;
+    const double respiration = sensibleRespiration + latentRespiration;
+
+    double skinSignal = SkinSetTemperature - skinTemperature;
+    double coreSignal = coreTemperature - CoreSetTemperature;
+    skinSignal = std::max(0.0, skinSignal);
+    coreSignal = std::max(0.0, coreSignal);
+    const double bloodFlow = std::min(90.0, (6.3 + 75.0 * coreSignal) / (1.0 + 0.5 * skinSignal));
+    const double bodyMassDistribution = 0.0417737 + 0.7451833 / (bloodFlow + 0.585417);
+    const double bodyTemperature = bodyMassDistribution * skinTemperature + (1.0 - bodyMassDistribution) * coreTemperature;
+
+    const double clothingResistance = clothing / 6.45;
+    clothedFraction = std::min(clothedFraction, 1.0);
+
+    double clothedHeightFraction;
+    if (clothing >= 2.0) {
+        clothedHeightFraction = 1.0;
+    } else if (clothing > 0.6) {
+        clothedHeightFraction = (height - 0.2) / height;
+    } else if (clothing > 0.3) {
+        clothedHeightFraction = 0.5;
+    } else {
+        clothedHeightFraction = 0.1;
+    }
+
+    const double outerRadius = bodyArea * (clothingAreaFactor - 1.0 + clothedFraction) / (6.28 * height * clothedHeightFraction);
+    const double innerRadius = clothedFraction * bodyArea / (6.28 * height * clothedHeightFraction);
+    const double clothingThickness = outerRadius - innerRadius;
+
+    if (!(bodyArea > 0.0) || !(clothingArea > 0.0) || !(innerRadius > 0.0) || !(outerRadius > innerRadius)) {
+        throw std::runtime_error("PET: clothing parameters produce invalid geometry");
+    }
+
+    const double clothingHeatTransfer = 6.28 * height * clothedHeightFraction * clothingThickness /
+        (clothingResistance * std::log(outerRadius / innerRadius) * clothingArea);
+
+    const double bodySetTemperature = 0.1 * SkinSetTemperature + 0.9 * CoreSetTemperature;
+    const double sweatRate = std::min(500.0, 304.94 * std::max(0.0, bodyTemperature - bodySetTemperature));
+    double sweatEvaporation = LatentHeatVapourisation / 1000.0 * sweatRate / 3600.0;
+
+    const double skinVapourPressure = Climate::getSaturatedVapourPressureHpa(skinTemperature);
+    const double lewisRatio = 1.67;
+    const double diffusionCoefficient = convectionCoefficient * lewisRatio;
+    const double clothingEfficiency = 1.0 / (1.0 + 0.92 * convectionCoefficient * clothingResistance);
+    double maximumEvaporation = diffusionCoefficient * clothingEfficiency * (skinVapourPressure - vapourPressure);
+    if (maximumEvaporation == 0.0) {
+        maximumEvaporation = 0.001;
+    }
+
+    double skinWettedness = sweatEvaporation / maximumEvaporation;
+    if (skinWettedness > 1.0) {
+        skinWettedness = 1.0;
+        if (sweatEvaporation - maximumEvaporation < 0.0) {
+            sweatEvaporation = maximumEvaporation;
+        }
+    }
+    sweatEvaporation = std::max(0.0, sweatEvaporation);
+
+    const double woodcockRatio = 0.38;
+    const double evaporativeClothingResistance = (1.0 / (clothingAreaFactor * convectionCoefficient) + clothingResistance) /
+        (lewisRatio * woodcockRatio);
+    const double diffusionEvaporation = (1.0 - skinWettedness) * (skinVapourPressure - vapourPressure) / evaporativeClothingResistance;
+    const double evaporation = -(diffusionEvaporation + sweatEvaporation);
+
+    const double bareRadiation = effectiveRadiationArea * (1.0 - clothedFraction) * SkinEmissivity * StefanBoltzmann *
+        (std::pow(radiantTemperature + 273.15, 4.0) - std::pow(skinTemperature + 273.15, 4.0)) / bodyArea;
+    const double clothingRadiation = effectiveRadiationFactor * clothingArea * ClothingEmissivity * StefanBoltzmann *
+        (std::pow(radiantTemperature + 273.15, 4.0) - std::pow(clothingTemperature + 273.15, 4.0)) / bodyArea;
+
+    const double bareConvection = convectionCoefficient * (dryBulbTemperature - skinTemperature) * (1.0 - clothedFraction);
+    const double clothingConvection = convectionCoefficient * (dryBulbTemperature - clothingTemperature) * clothingArea / bodyArea;
+
+    const double bloodHeatTransfer = bloodFlow / 3600.0 * BloodSpecificHeat + 5.28;
+    const double coreToSkin = bloodHeatTransfer * (coreTemperature - skinTemperature);
+    const double skinToClothing = clothingHeatTransfer * (skinTemperature - clothingTemperature);
+
+    BalanceArray result = {{internalEnergy + respiration - coreToSkin,
+                            bareRadiation + bareConvection + evaporation + coreToSkin - skinToClothing,
+                            clothingConvection + clothingRadiation + skinToClothing}};
+
+    if (!isFinite(result[0]) || !isFinite(result[1]) || !isFinite(result[2])) {
+        throw std::runtime_error("PET: non-finite MEMI energy balance");
+    }
+    return result;
+}
+
+double PET_Solver::infinityNorm(const BalanceArray& values) {
+    return std::max(std::fabs(values[0]), std::max(std::fabs(values[1]), std::fabs(values[2])));
+}
+
+PET_Solver::Temperatures PET_Solver::solvePhysiologicalState() const {
+    TemperatureArray temperatures = {{36.7, 34.0, 0.5 * (airTemperature + meanRadiantTemperature)}};
+
+    const double residualTolerance = 1e-7;
+    const double stepTolerance = 1e-8;
+
+    for (int iteration = 0; iteration < 100; ++iteration) {
+        const BalanceArray residual = balances(temperatures, airTemperature, meanRadiantTemperature, airVelocity,
+                                               relativeHumidity, activityPower, clothingInsulation, true);
+        const double residualNorm = infinityNorm(residual);
+        if (residualNorm <= residualTolerance) {
+            return Temperatures{temperatures[0], temperatures[1], temperatures[2]};
+        }
+
+        // LAPACK uses column-major storage: the derivative of equation i with respect to variable j is stored at i + 3*j.
+        double jacobian[9];
+        for (int variable = 0; variable < 3; ++variable) {
+            const double increment = 1e-4 * std::max(1.0, std::fabs(temperatures[variable]));
+            TemperatureArray higher = temperatures;
+            TemperatureArray lower = temperatures;
+            higher[variable] += increment;
+            lower[variable] -= increment;
+
+            const BalanceArray higherResidual = balances(higher, airTemperature, meanRadiantTemperature, airVelocity,
+                                                         relativeHumidity, activityPower, clothingInsulation, true);
+            const BalanceArray lowerResidual = balances(lower, airTemperature, meanRadiantTemperature, airVelocity,
+                                                        relativeHumidity, activityPower, clothingInsulation, true);
+
+            for (int equation = 0; equation < 3; ++equation) {
+                jacobian[equation + 3 * variable] = (higherResidual[equation] - lowerResidual[equation]) / (2.0 * increment);
+            }
+        }
+
+        double newtonStep[3] = {-residual[0], -residual[1], -residual[2]};
+        try {
+            solve_Ax_equal_b(jacobian, newtonStep, 3);
+        } catch (const string&) {
+            throw string("PET solving: singular MEMI Jacobian");
+        }
+        if (!isFinite(newtonStep[0]) || !isFinite(newtonStep[1]) || !isFinite(newtonStep[2])) {
+            throw string("PET solving: non-finite MEMI Newton step");
+        }
+
+        const double fullStepNorm = std::max(std::fabs(newtonStep[0]), std::max(std::fabs(newtonStep[1]), std::fabs(newtonStep[2])));
+        if (fullStepNorm <= stepTolerance) {
+            if (residualNorm <= 1e-5) {
+                return Temperatures{temperatures[0], temperatures[1], temperatures[2]};
+            }
+            throw string("PET solving: MEMI solver stagnated");
+        }
+
+        bool accepted = false;
+        double damping = 1.0;
+        for (int lineSearch = 0; lineSearch < 16; ++lineSearch) {
+            TemperatureArray candidate = temperatures;
+            for (int variable = 0; variable < 3; ++variable) {
+                candidate[variable] += damping * newtonStep[variable];
+            }
+
+            try {
+                const BalanceArray candidateResidual = balances(candidate, airTemperature, meanRadiantTemperature, airVelocity,
+                                                                relativeHumidity, activityPower, clothingInsulation, true);
+                if (infinityNorm(candidateResidual) < residualNorm) {
+                    temperatures = candidate;
+                    accepted = true;
+                    break;
+                }
+            } catch (const string&) {
+                // Retry with a smaller Newton step.
+            } catch (const std::runtime_error&) {
+                // Retry with a smaller Newton step.
+            }
+            damping *= 0.5;
+        }
+
+        if (!accepted) {
+            throw string("PET solving: MEMI line search failed");
+        }
+    }
+
+    throw string("PET solving: MEMI physiological state did not converge");
+}
+
+double PET_Solver::referenceBalance(const TemperatureArray& temperatures, double referenceTemperature) const {
+    const BalanceArray vectorBalance = balances(temperatures, referenceTemperature, referenceTemperature, ReferenceVelocity,
+                                                50.0, ReferenceActivityPower, ReferenceClothing, false);
+    return vectorBalance[0] + vectorBalance[1] + vectorBalance[2];
+}
+
+double PET_Solver::computeReferenceTemperature(const Temperatures& temperatures) const {
+    const TemperatureArray stable = {{temperatures.core, temperatures.skin, temperatures.clothing}};
+
+    double lower = -100.0;
+    double upper = 100.0;
+    double lowerBalance = referenceBalance(stable, lower);
+    double upperBalance = referenceBalance(stable, upper);
+
+    if (lowerBalance == 0.0) {
+        return lower;
+    }
+    if (upperBalance == 0.0) {
+        return upper;
+    }
+    if (std::signbit(lowerBalance) == std::signbit(upperBalance)) {
+        throw string("PET solving: reference environment does not bracket a root");
+    }
+
+    const double temperatureTolerance = 1e-6;
+    for (int iteration = 0; iteration < 200; ++iteration) {
+        const double middle = midpoint(lower, upper);
+        if (upper - lower <= temperatureTolerance || middle == lower || middle == upper) {
+            return middle;
+        }
+
+        const double middleBalance = referenceBalance(stable, middle);
+        if (middleBalance == 0.0) {
+            return middle;
+        }
+        if (std::signbit(middleBalance) == std::signbit(lowerBalance)) {
+            lower = middle;
+            lowerBalance = middleBalance;
+        } else {
+            upper = middle;
+            upperBalance = middleBalance;
+        }
+    }
+
+    throw string("PET solving: reference temperature did not converge");
+}
+
+double PET_Solver::compute() const { return computeReferenceTemperature(solvePhysiologicalState()); }
 
 XmlScene* Building::getScene(){ return getDistrict()->getScene();}
 
@@ -33,6 +367,41 @@ Building::Building(TiXmlHandle hdl, District* pDistrict):pDistrict(pDistrict),lo
     // load the MRT specifications
     if (hdl.ToElement()->Attribute("mrt")) mrt = (hdl.ToElement()->Attribute("mrt") == string("true"));
     if (hdl.ToElement()->Attribute("mrtEpsilon")) mrtEpsilon = to<float>(hdl.ToElement()->Attribute("mrtEpsilon"));
+
+    // Load optional body parameters used by the PET/MEMI calculation.
+    if (TiXmlElement* body = hdl.FirstChildElement("Body").ToElement()) {
+        if (body->Attribute("age")) petAge = to<double>(body->Attribute("age"));
+
+        if (body->Attribute("sex")) {
+            if (body->QueryIntAttribute("sex", &petSex) != TIXML_SUCCESS || (petSex != 1 && petSex != 2)) {
+                throw string("Error in Building ") + toString(id) + ": Body sex must be 1 (male) or 2 (female).";
+            }
+        }
+
+        const char* heightAttribute = body->Attribute("height") ? body->Attribute("height") : body->Attribute("ht");
+        if (heightAttribute) petHeight = to<double>(heightAttribute);
+
+        const char* massAttribute = body->Attribute("weight");
+        if (!massAttribute) massAttribute = body->Attribute("bodyMass");
+        if (!massAttribute) massAttribute = body->Attribute("mbody");
+        if (massAttribute) petBodyMass = to<double>(massAttribute);
+
+        if (body->Attribute("position")) {
+            if (body->QueryIntAttribute("position", &petPosition) != TIXML_SUCCESS || (petPosition != 1 && petPosition != 2 && petPosition != 3)) {
+                throw string("Error in Building ") + toString(id) + ": Body position must be 1 (sitting), 2 (standing) or 3 (standing with forced convection).";
+            }
+        }
+
+        if (body->Attribute("activityPower")) petActivityPower = to<double>(body->Attribute("activityPower"));
+
+        const char* clothingAttribute = body->Attribute("clothing") ? body->Attribute("clothing") : body->Attribute("icl");
+        if (clothingAttribute) petClothing = to<double>(clothingAttribute);
+
+        if (petAge <= 0.0 || petHeight <= 0.2 || petBodyMass <= 0.0 || (petSex != 1 && petSex != 2) ||
+            (petPosition != 1 && petPosition != 2 && petPosition != 3) || petActivityPower < 0.0 || petClothing <= 0.0) {
+            throw string("Building ") + toString(id) + ": invalid Body parameters";
+        }
+    }
 
     // load the parameters for the HVAC system
     if (hdl.ChildElement("HVAC", 0).ToElement()) {
@@ -1168,10 +1537,17 @@ void Building::writeXML(ofstream& file, string tab){
     file << tab << "<Building id=\"" << id << "\" key=\"" << key << "\" Vi=\"" << getVolume();
 
     file << "\" Ninf=\""<< getNinf() << "\" BlindsLambda=\"" << blindsLambda << "\" BlindsIrradianceCutOff=\"" << blindsIrradianceCutOff;
-    file << "\" Simulate=\"true\">" << endl;
+    file << "\" Simulate=\"true\"";
+    if (mrt)
+        file << " mrt=\"true\" mrtEpsilon=\"" << mrtEpsilon << "\"";
+    file << ">" << endl;
 
     // Energy system not considered
     string subtab=tab+"\t";
+    if (mrt) {
+        file << subtab << "<Body age=\"" << petAge << "\" sex=\"" << petSex << "\" height=\"" << petHeight << "\" weight=\"" << petBodyMass
+             << "\" position=\"" << petPosition << "\" activityPower=\"" << petActivityPower << "\" clothing=\"" << petClothing << "\"/>" << endl;
+    }
     if (heatStock) heatStock->writeXML(file,"HeatTank",subtab);
     if (coldStock) coldStock->writeXML(file,"CoolTank",subtab);
     if (heatingUnit) {

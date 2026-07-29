@@ -3938,6 +3938,7 @@ void XmlScene::eraseResults(unsigned int keepValue, bool eraseAllResults) {
             pDistrict->getBuilding(j)->eraseCOMFA();
             pDistrict->getBuilding(j)->eraseITS();
             pDistrict->getBuilding(j)->eraseUTCI();
+            pDistrict->getBuilding(j)->erasePET();
         }
 
         for (unsigned int zone=0; zone<pDistrict->getBuilding(j)->getnZones();++zone) {
@@ -4873,7 +4874,8 @@ void XmlScene::writeCMHeaderText(string fileOut) {
             textFile << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":MRT(celsius)\t"
                      << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":COMFA*(W/m²)\t"
                      << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":ITS(W)\t"
-                     << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":UTCI(celsius)\t";
+                     << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":UTCI(celsius)\t"
+                     << pDistrict->getBuilding(j)->getId() << "(" << pDistrict->getBuilding(j)->getKey() << ")" << ":PET(celsius)\t";
     }
 
     textFile << endl;
@@ -4897,6 +4899,7 @@ void XmlScene::writeCMResultsText(string fileOut) {
             textFile << pDistrict->getBuilding(j)->getCOMFA(i) << "\t";
             textFile << pDistrict->getBuilding(j)->getITS(i) << "\t";
             textFile << pDistrict->getBuilding(j)->getUTCI(i) << "\t";
+            textFile << pDistrict->getBuilding(j)->getPET(i) << "\t";
 
         }
         textFile << endl;
@@ -5250,7 +5253,7 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
     float ubp = 0.f;
     // MRT indicator
     double mrt = 0.;
-    unsigned int MRTcount=0, COMFAcount=0, ITScount=0, UTCIcount=0;
+    unsigned int MRTcount=0, COMFAcount=0, ITScount=0, UTCIcount=0, PETcount=0;
     // KPI
     float totalThermalLoss = 0.f;
     float totalHeatingUnsatisfied = 0.f;
@@ -5283,6 +5286,8 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
             COMFAcount += pDistrict->getBuilding(j)->getCOMFAcount();
             // computes the number of hours of comfort for UTCI
             UTCIcount += pDistrict->getBuilding(j)->getUTCIcount();
+            // computes the number of hours of comfort for Physiological Equivalent Temperature (PET) using MEMI
+            PETcount += pDistrict->getBuilding(j)->getPETcount();
             // increments the number of MRT individuals
             MRTcount++;
         }
@@ -5318,6 +5323,7 @@ void XmlScene::writeYearlyResultsText(string fileOut) {
         textFile << "ITS (h):\t" << ITScount/MRTcount << endl;
         textFile << "COMFA (h):\t" << COMFAcount/MRTcount << endl;
         textFile << "UTCI (h):\t" << UTCIcount/MRTcount << endl;
+        textFile << "PET (h):\t" << PETcount/MRTcount << endl;
     }
     textFile << "DHNTotalThermalLosses (Wh):\t" << totalThermalLoss << endl; //Added by Max
     textFile << "DHNElectricPump (J):\t" << electricPump << endl; //Added by Max
@@ -5705,9 +5711,9 @@ size_t XmlScene::memoryUsage() {                    // DP: modified to take into
     // add for the buildings EMPTIED vectors of double (2x stockT)
     bytes += pDistrict->getnBuildings()*sizeof(double)*2*(timeStepsSimulated+preTimeStepsSimulated);
     for (size_t buildingIndex=0; buildingIndex<pDistrict->getnBuildings(); ++buildingIndex) {
-        // add for the buildings NOT EMPTIED vectors of float (MRT,COMFA,ITS,UTCI)
+        // add for the buildings NOT EMPTIED vectors of float (MRT,COMFA,ITS,UTCI,PET)
         if (pDistrict->getBuilding(buildingIndex)->isMRT())
-            bytes += sizeof(float)*4*(timeStepsSimulated+preTimeStepsSimulated+simulationIndex);
+            bytes += sizeof(float)*5*(timeStepsSimulated+preTimeStepsSimulated+simulationIndex);
         // for each zone sum of NOT EMPTIED vectors of double (heating, cooling)
         bytes += pDistrict->getBuilding(buildingIndex)->getnZones()*sizeof(double)*2*(timeStepsSimulated+preTimeStepsSimulated+simulationIndex);
         // for each zone sum of EMPTIED vectors of double (Qs)
