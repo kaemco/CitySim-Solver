@@ -41,6 +41,7 @@ private:
     vector<ActivityType*> activityTypes;
 
     vector<DistrictEnergyCenter*> districtEnergyCenters;
+    DECSimulationConfig decSimulationConfig;
 
 public:
 
@@ -140,6 +141,7 @@ public:
     //beginning of contents added by Dapeng
     unsigned int getnDECs() { return districtEnergyCenters.size(); }
     DistrictEnergyCenter* getDEC(unsigned int i) {return districtEnergyCenters[i]; }
+    const DECSimulationConfig& getDECSimulationConfig() const { return decSimulationConfig; }
     //end of contents added by Dapeng
 
 };
