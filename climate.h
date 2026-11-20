@@ -74,6 +74,7 @@ public :
     float getToutCelsius(int step)                              { return (step >= 0) ? Tout[step] : Tout[step + Tout.size()]; }
 
     float getTgroundCelsius(unsigned int day, unsigned int hour, float depth=0.f, float alpha=(0.25e-6f/(0.89f*1.6f))*24.f*3600.f, float depthMax=0.f); // default alpha value taken for clay (Arya, 2001) in m²/day
+    float getDECPipeSoilToutCelcius(unsigned int day, unsigned int hour) { return Tground[(day-1)*24 + hour -1]; }
 
     float getWindSpeed(unsigned int day, unsigned int hour)     { return windSpeed[(day-1)*24 + hour -1]; }
     float getWindSpeed(unsigned int step)                       { return windSpeed.at(step); }

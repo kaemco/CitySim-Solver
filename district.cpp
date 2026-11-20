@@ -68,6 +68,122 @@ District::District(TiXmlHandle XMLHandler, XmlScene* pScene):pScene(pScene),occu
             activityTypes.push_back(new ActivityType(XMLHandler.FirstChild("District").ChildElement("ActivityType",i++), &logStream));
         }
 
+        TiXmlElement* decConfigElement = XMLHandler.FirstChild("District").FirstChildElement("DECSimulationConfig").ToElement();
+        if (decConfigElement) {
+            decSimulationConfig.defined = true;
+
+            if (decConfigElement->QueryStringAttribute("thermalModel", &decSimulationConfig.thermalModel)) {
+                throw string("Error in the XML file: DECSimulationConfig must define thermalModel.");
+            }
+            if (decSimulationConfig.thermalModel != "steady-state" &&
+                decSimulationConfig.thermalModel != "fixedDt" &&
+                decSimulationConfig.thermalModel != "fixedDV") {
+                throw string("Error in the XML file: DECSimulationConfig thermalModel must be one of: steady-state, fixedDt, fixedDV.");
+            }
+
+            if (!decConfigElement->QueryUnsignedAttribute("steadyStepInSeconds", &decSimulationConfig.steadyStepInSeconds)) {
+                decSimulationConfig.hasSteadyStepInSeconds = true;
+                if (decSimulationConfig.steadyStepInSeconds == 0u) {
+                    throw string("Error in the XML file: DECSimulationConfig steadyStepInSeconds must be > 0.");
+                }
+            }
+            if (!decConfigElement->QueryUnsignedAttribute("fixedDt", &decSimulationConfig.fixedDt)) {
+                decSimulationConfig.hasFixedDt = true;
+                if (decSimulationConfig.fixedDt == 0u) {
+                    throw string("Error in the XML file: DECSimulationConfig fixedDt must be > 0.");
+                }
+            }
+
+            if (!decConfigElement->QueryFloatAttribute("fixedDV", &decSimulationConfig.fixedDV)) {
+                decSimulationConfig.hasFixedDV = true;
+                if (decSimulationConfig.fixedDV <= 0.f) {
+                    throw string("Error in the XML file: DECSimulationConfig fixedDV must be > 0 m3.");
+                }
+            }
+
+            if (decSimulationConfig.thermalModel != "steady-state" && !decSimulationConfig.hasSteadyStepInSeconds) {
+                throw string("Error in the XML file: DECSimulationConfig dynamic models require steadyStepInSeconds.");
+            }
+            if (decSimulationConfig.thermalModel == "fixedDt" && !decSimulationConfig.hasFixedDt) {
+                throw string("Error in the XML file: DECSimulationConfig thermalModel=fixedDt requires fixedDt.");
+            }
+            if (decSimulationConfig.thermalModel == "fixedDV" && !decSimulationConfig.hasFixedDV) {
+                throw string("Error in the XML file: DECSimulationConfig thermalModel=fixedDV requires fixedDV.");
+            }
+
+
+            if (decConfigElement->QueryBoolAttribute("hydraulicControlOuterLoop", &decSimulationConfig.hydraulicControlOuterLoop)) {
+                decSimulationConfig.hydraulicControlOuterLoop = true;
+            }
+
+
+
+            string balanceDtMode = "maxDtMode";
+            decConfigElement->QueryStringAttribute("balanceDtMode", &balanceDtMode);
+
+            if (balanceDtMode == "maxDtMode") {
+                decSimulationConfig.balanceDtMode = DECSimulationConfig::BALANCE_DT_MAX;
+            }
+            else if (balanceDtMode == "userCap") {
+                decSimulationConfig.balanceDtMode = DECSimulationConfig::BALANCE_DT_USER_CAP;
+                decConfigElement->QueryUnsignedAttribute("balanceDtUserCapSeconds", &decSimulationConfig.balanceDtUserCapSeconds);
+                if (decSimulationConfig.balanceDtUserCapSeconds == 0u) {
+                    throw string("Error in the XML file: DECSimulationConfig balanceDtMode=userCap requires balanceDtUserCapSeconds > 0.");
+                }
+            }
+            else if (balanceDtMode == "percentile") {
+                decSimulationConfig.balanceDtMode = DECSimulationConfig::BALANCE_DT_PERCENTILE;
+                decConfigElement->QueryFloatAttribute("balanceDtPercentile", &decSimulationConfig.balanceDtPercentile);
+                if (decSimulationConfig.balanceDtPercentile <= 0.f || decSimulationConfig.balanceDtPercentile > 100.f) {
+                    throw string("Error in the XML file: DECSimulationConfig balanceDtPercentile must be in (0,100].");
+                }
+            }
+            else {
+                throw string("Error in the XML file: DECSimulationConfig balanceDtMode must be one of: maxDtMode, userCap, percentile.");
+            }
+
+            // Optional sub-hourly temperature trace, to resolve transport phase within the hour.
+            decConfigElement->QueryStringAttribute("subHourlyDiagnosticFile", &decSimulationConfig.subHourlyDiagnosticFile);
+            decConfigElement->QueryUnsignedAttribute("subHourlyDiagnosticPeriod", &decSimulationConfig.subHourlyDiagnosticPeriod);
+            if (decSimulationConfig.subHourlyDiagnosticPeriod == 0u) {
+                throw string("Error in the XML file: DECSimulationConfig subHourlyDiagnosticPeriod must be > 0.");
+            }
+            string subHourlyDiagnosticNodes = "";
+            if (!decConfigElement->QueryStringAttribute("subHourlyDiagnosticNodes", &subHourlyDiagnosticNodes)) {
+                stringstream nodeIdStream(subHourlyDiagnosticNodes);
+                string nodeIdToken;
+                while (getline(nodeIdStream, nodeIdToken, ',')) {
+                    if (nodeIdToken.find_first_not_of(" \t") == string::npos) { continue; }
+                    decSimulationConfig.subHourlyDiagnosticNodeIds.push_back(static_cast<unsigned int>(stoul(nodeIdToken)));
+                }
+            }
+
+            string heatTransportEquation = "threeNode";
+            if (!decConfigElement->QueryStringAttribute("heatTransportEquation", &heatTransportEquation)) {
+                if (heatTransportEquation == "threeNode") {
+                    decSimulationConfig.heatTransportEquation = DECSimulationConfig::HEAT_TRANSPORT_THREE_NODE;
+                }
+                else if (heatTransportEquation == "threeNodeFull" ||
+                         heatTransportEquation == "3Node-Full") {
+                    decSimulationConfig.heatTransportEquation = DECSimulationConfig::HEAT_TRANSPORT_THREE_NODE_FULL;
+                }
+                else {
+                    throw string("Error in the XML file: DECSimulationConfig heatTransportEquation must be one of: threeNode, threeNodeFull.");
+                }
+            }
+
+            logStream << "DECSimulationConfig: thermalModel=" << decSimulationConfig.thermalModel
+                      << ", steadyStepInSeconds=" << decSimulationConfig.steadyStepInSeconds
+                      << ", fixedDt=" << decSimulationConfig.fixedDt
+                      << ", fixedDV=" << decSimulationConfig.fixedDV
+                      << ", hydraulicControlOuterLoop=" << (decSimulationConfig.hydraulicControlOuterLoop ? "true" : "false")
+                      << ", balanceDtMode=" << balanceDtMode
+                      << ", balanceDtUserCapSeconds=" << decSimulationConfig.balanceDtUserCapSeconds
+                      << ", balanceDtPercentile=" << decSimulationConfig.balanceDtPercentile
+                      << ", heatTransportEquation=" << heatTransportEquation
+                      << endl << flush;
+        }
+
         // Cognet: Start of code moved to here, to initialize the DistrictEnergyCenters before the Substations.
         logStream << "Loading district energy center(s) : " << endl << flush;
         i=0;

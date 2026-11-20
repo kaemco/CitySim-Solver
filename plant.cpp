@@ -1,5 +1,13 @@
 #include "plant.h"
 #include "district.h" //added by Dapeng
+#include <chrono>
+#include <ctime>
+
+// Added by Dubon here to access the number of core
+#ifndef DEBUG
+  #include <omp.h>
+#endif
+#include <limits>
 
 // *** Plant class, CitySim  *** //
 // *** jerome.kaempf@epfl.ch *** //
@@ -3010,7 +3018,7 @@ void SimpleMCR::updateThermalStationSlaveClock(vector<float> PrevCurrentStages){
     }
 }
 
-vector<string> DistrictEnergyCenter::muPossibilities = { "0.0004", "Vogel-Fulcher-Tammann" }; // 0.0004 is a constant value in Pa*s, Vogel-Fulcher-Tammann in an empirical formula.
+vector<string> DistrictEnergyCenter::muPossibilities = { "0.0004", "Vogel-Fulcher-Tammann", "IAPWS-SR6-08" }; // 0.0004 is a constant value in Pa*s, Vogel-Fulcher-Tammann in an empirical formula.
 
 DistrictEnergyCenter::DistrictEnergyCenter(TiXmlHandle hdl, District* pDistrict, ostream* pLogStr) :
     pDistrict(pDistrict), thermalStations(0), pipelineNetwork(nullptr), totalThermalLossRecord(0), logStream(std::cout.rdbuf()) {
@@ -3024,11 +3032,21 @@ DistrictEnergyCenter::DistrictEnergyCenter(TiXmlHandle hdl, District* pDistrict,
         if ( hdl.ToElement()->QueryDoubleAttribute("rho", &rho) )   { throw string("Error in the XML file: a DistrictEnergyCenter doesn't have attribute: 'rho' [kg/m^3]."); }
         if ( hdl.ToElement()->QueryStringAttribute("mu", &mu) )   { /*throw string(*/ cout << "A DistrictEnergyCenter has the default attribute mu = " << mu << "."/*)*/;}
 
+        const DECSimulationConfig& simulationConfig = pDistrict->getDECSimulationConfig();
+
         if ( cp<=0 )  { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has Cp<=0."); }
         if ( rho<=0 ) { throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has rho<=0."); }
 
-        logStream << "District energy center: id=" << id << ", Cp=" << cp << ", rho=" << rho << endl;
+        if (simulationConfig.thermalModel == "fixedDt") {
+            if (simulationConfig.steadyStepInSeconds % simulationConfig.fixedDt != 0) {
+                throw string("Error in the XML file: DistrictEnergyCenter id="+to_string(id)+" has steady-state step not multiple of the dynamic step.");
+            }
+        }
+        else if ( simulationConfig.thermalModel == "fixedDV") {
+            if ( simulationConfig.fixedDV <= 0.f ) throw string("Error in Network::dynamicForwardPassFixedDV, fixedDV must be > 0 m3.");
+        }
 
+        logStream << "District energy center: id=" << id << ", Cp(water)=" << cp << ", rho(water)=" << rho << ", thermal model=" << simulationConfig.thermalModel << " with " << simulationConfig.steadyStepInSeconds << "s steady-state step." << endl;
 
         try {
             if(hdl.FirstChildElement("Network").ToElement() ) { pipelineNetwork = new Network(hdl.FirstChildElement("Network"), this, &(this->logStream)); }
@@ -3066,11 +3084,14 @@ void DistrictEnergyCenter::deleteDynAllocated() {
 
 double DistrictEnergyCenter::getMu(double temp) {
 
-    if (mu==muPossibilities[1]) {
+    if (mu==muPossibilities[1]) { // Vogel-Fulcher-Tammann
         if(temp<0.f) {temp = 0.f;} //Added by Max
         else if(temp>100.f) {temp = 100.f;}
 
-        return 0.00002939*exp( 507.88/(temp-(149.3-273.15)) );
+        return 0.00002939*exp( 507.88/(temp-(149.3-273.15)) ); // Semi-empirical Vogel-Fulcher-Tammann relation, giving dynamic viscosity in Pa*s.
+    }
+    else if (mu==muPossibilities[2]) {
+        return computeDynamicViscosityWaterIAPWS(temp);
     }
     else { // fixed value given in the XML file
         return to<float>(mu);
@@ -3080,10 +3101,11 @@ double DistrictEnergyCenter::getMu(double temp) {
 
 float DistrictEnergyCenter::getYearlyTotalThermalLoss(){
     float yearlyTotalThermalLoss(0.f);
+    const float stepInHours = static_cast<float>(pDistrict->getDECSimulationConfig().steadyStepInSeconds) / 3600.f;
     for(size_t i(0); i < totalThermalLossRecord.size();++i){
-        yearlyTotalThermalLoss += totalThermalLossRecord[i];
+        yearlyTotalThermalLoss += totalThermalLossRecord[i] * stepInHours;
     }
-        return yearlyTotalThermalLoss;
+    return yearlyTotalThermalLoss;
 }
 
 void DistrictEnergyCenter::recordTimeStep(Climate* pClim, unsigned int day, unsigned int hour) {
@@ -3102,8 +3124,21 @@ void DistrictEnergyCenter::eraseRecords_back() {
 }
 
 void DistrictEnergyCenter::convergeToEquilibrium(Climate *pClim, unsigned int day, unsigned int hour) {
-    pipelineNetwork->convergeToEquilibrium(mcr, rho, cp, pClim, day, hour);
-    recordTimeStep(pClim, day, hour);
+    const DECSimulationConfig& simulationConfig = pDistrict->getDECSimulationConfig();
+    if (simulationConfig.thermalModel == "fixedDt")
+    {
+        pipelineNetwork->dynamicForwardPassFixedDt(mcr, rho, cp, pClim, day, hour);
+        recordTimeStep(pClim, day, hour);
+    }
+    else if (simulationConfig.thermalModel == "fixedDV")
+    {
+        pipelineNetwork->dynamicForwardPassFixedDV(mcr, rho, cp, pClim, day, hour);
+        recordTimeStep(pClim, day, hour);
+    }
+    else {
+        pipelineNetwork->convergeToEquilibrium(mcr, rho, cp, pClim, day, hour);
+        recordTimeStep(pClim, day, hour);
+    }
 }
 
 
@@ -3159,8 +3194,19 @@ Network::Network(TiXmlHandle hdl, DistrictEnergyCenter *pDEC, ostream *pLogStr) 
 
         if (soilkValue<=0) { throw string("Error in the XML file: Network of DistrictEnergyCenter id="+to_string(pDEC->getId())+" has soilkValue<=0."); }
 
-        if ( hdl.ToElement()->QueryFloatAttribute("roughness", &roughness) ) { logStream << "Warning: using default roughness." << endl; }
+        if ( hdl.ToElement()->QueryFloatAttribute("airConvectiveCoefficient", &airHValue) ) {
+            logStream << "Using default air convective coefficient value: 8 W/m2/K, change with airConvectiveCoefficient key." << endl;
+        }
+
+        if ( hdl.ToElement()->QueryFloatAttribute("roughness", &roughness) ) { logStream << "Warning: using default roughness or overriden by pipes defined roughness." << endl; }
         logStream << "Absolute roughness: " << roughness << " m" << endl;
+
+        // maxThreads="0" (default if absent) means auto-select based on hardware and network size.
+        // May be useful for HPC or server-cpu based deployements
+        if ( hdl.ToElement()->QueryUnsignedAttribute("maxThreads", &maxThreadsFromXml) )
+        {
+            maxThreadsFromXml = 0u; // absent → auto
+        }
 
         try {
             string name = "NodePair";
@@ -3202,7 +3248,9 @@ Network::Network(TiXmlHandle hdl, DistrictEnergyCenter *pDEC, ostream *pLogStr) 
             if ( not xmlEl ) { throw string("Error in the XML file: a Network doesn't have any '"+name+"' child elements."); }
             else {
                 while( xmlEl ) {
-                    pipePairs.push_back( new PipePair( xmlEl, this ) );
+                    PipePair* npairPipe = new PipePair( xmlEl, this );
+                    npairPipe->setRoughnessFromNetwork(roughness);
+                    pipePairs.push_back( npairPipe );
                     xmlEl = xmlEl->NextSiblingElement(name); // Go to next pipe pair.
                 }
             }
@@ -3362,6 +3410,17 @@ void Network::substationsConstructionFinished() {
         if (node->substationNotSet()) { throw string("Error in the XML file: SubstationNodePair of id="+to_string(node->getId())+" has no Substation pointing to it."); }
     }
 
+    // Stable indexing used by the direction-aware transport schedule.
+    allNodePairs.clear();
+    allNodePairs.reserve(separateNodePairs.size() + thermalStationNodePairs.size()
+                         + substationNodePairs.size() + valveNodePairs.size());
+    for (auto node : separateNodePairs)      { allNodePairs.push_back(node); }
+    for (auto node : thermalStationNodePairs){ allNodePairs.push_back(node); }
+    for (auto node : substationNodePairs)    { allNodePairs.push_back(node); }
+    for (auto node : valveNodePairs)         { allNodePairs.push_back(node); }
+    for (size_t i = 0; i < allNodePairs.size(); i++) { allNodePairs[i]->setTransportIndex(static_cast<unsigned int>(i)); }
+    for (size_t i = 0; i < pipePairs.size(); i++) { pipePairs[i]->setNetworkIndex(static_cast<unsigned int>(i)); }
+
     map<PipePair*,size_t> edgeIdxPipe;
     map<NodePairConnectingSupplyReturn*,size_t> edgeIdxNode;
     size_t nbEdges;
@@ -3374,6 +3433,60 @@ void Network::substationsConstructionFinished() {
     if (regulatedPathMatrix.size()!=regulatingElements.size()) { throw string("Error in Network::checkSubstationsFound(), regulatedPathMatrix.size()!=regulatingElements.size()."); }
 
     initializeMassFlows();
+
+    // Otherwise use default values, no OMP anyway
+#ifndef DEBUG
+    initDynamicParallelism();
+#endif
+}
+
+void Network::initDynamicParallelism()
+{
+    // Can be tuned and improved if necessary
+    // - Get first available threads
+    // - Cap at the maximum useful thread count: ceil(numPipes / MIN_PIPES_PER_THREAD).
+    //      Below MIN_PIPES_PER_THREAD pipes per thread, the OMP barrier overhead
+    //      exceeds the parallelism gain (empirical threshold for our pipe-advection cost).
+    // - Respect the optional user-supplied maxThreads XML attribute (useful for
+    //      cloud deployments or shared HPC nodes)
+    // - Compute guided-schedule minimum chunk = max(1, numPipes / (4 × threads)).
+    //      The factor of 4 gives ≥4 scheduling "waves" per thread, balancing load vs overhead.
+    //      schedule(guided, N) outperforms dynamic (O(log n) vs O(n) sync calls) and
+    //      adapts to heterogeneous pipe element counts unlike pure static.
+
+    unsigned int numPipes = static_cast<unsigned int>(pipePairs.size());
+
+    unsigned int hwThreads = 1u;
+#ifndef DEBUG
+    // 1. Hardware ceiling.
+    hwThreads = static_cast<unsigned int>(omp_get_max_threads());
+#endif
+
+
+    // 2. Work-based ceiling: never spawn more threads than the work justifies.
+    unsigned int workCeiling = (numPipes >= MIN_PIPES_PER_THREAD)
+                             ? (numPipes / MIN_PIPES_PER_THREAD)
+                             : 1u;
+
+    numDynamicThreads = min(hwThreads, workCeiling);
+
+    // 3. Honour optional user cap (maxThreads=0 means no cap).
+    if (maxThreadsFromXml > 0u) {
+        numDynamicThreads = min(numDynamicThreads, maxThreadsFromXml);
+    }
+    numDynamicThreads = max(1u, numDynamicThreads); // always at least 1 thread
+
+    // 4. Guided-schedule minimum chunk size.
+    // Starts at ~numPipes/numDynamicThreads, tapers to dynamicPipeChunkSize.
+    dynamicPipeChunkSize = max(1u, numPipes / (4u * numDynamicThreads));
+
+    logStream << "DHC dynamic parallelism: "
+              << numPipes << " pipes, "
+              << hwThreads << " HW threads available, "
+              << numDynamicThreads << " threads selected"
+              << " (maxThreads=" << (maxThreadsFromXml == 0u ? "auto" : to_string(maxThreadsFromXml)) << ")"
+              << ", guided chunk min=" << dynamicPipeChunkSize
+              << endl;
 }
 
 NodePair* Network::pointerOfNodeWithId(unsigned int nodeId) {
@@ -3814,14 +3927,99 @@ void Network::matDiagMatTransposedMult(vector<vector<float>> const& mat, vector<
     }
 }
 
-float Network::computeDynamicViscosityWater(float const& temp) {
-    return 0.00002939f*exp(507.88f/(temp+123.85f)); // Semi-empirical Vogel-Fulcher-Tammann relation, giving dynamic viscosity in Pa*s.
+float DistrictEnergyCenter::computeDynamicViscosityWaterIAPWS(float const& temp) {
+    // μ(T)=[280.68Tr(−1.9)​+511.45Tr(−7.7)​+61.131Tr(−19.6)​+0.45903Tr(−40.0)​]μ [Pa⋅s]
+    float tempTilde = (max(min(110.0f, (temp)), -20.0f) + 273.15f) / 300.0f;
+    return (280.68*pow(tempTilde, -1.9) + 511.45*pow(tempTilde, -7.7) + 61.131*pow(tempTilde, -19.6) + 0.45903*pow(tempTilde, -40.0))*1e-6;
 }
 
-float Network::computeDarcyFrictionFactor(float const& massFlow, float const& radius, float const& temp) {
+float DistrictEnergyCenter::computeWaterThermalConductivityIAPWS(float const& temp){
+    // Formula from https://doi.org/10.1063/1.4738955 (Hubert et al., New International Formulation for the Thermal Conductivity of H2O, Eq 21)
+    // Validity from 0°C to 110°C
+    float tempTilde = (max(min(110.0f, temp), 0.0f) + 273.15f) / 300.0f;
+    return 1.6630*pow(tempTilde, -1.15) - 1.7781*pow(tempTilde, -3.4) + 1.1567*pow(tempTilde, -6.0) - 0.432115*pow(tempTilde, -7.6) * 1.0;// in W/m/K
+}
+
+
+// Fast table-lookup replacements for the IAPWS property functions.
+// Table values computed from the corresponding IAPWS formulas at 10°C intervals.
+// Linear interpolation gives < 0.3% error over the DHC operating range (0–120°C).
+// These are used for the single per-pipe representative-temperature computation
+// in the Lagrangian hot loop, replacing O(N_elem) IAPWS calls with O(1).
+float DistrictEnergyCenter::computeKFast(float temp)
+{
+    // k(T) [W/(m·K)] — valid 0°C to 110°C, clamped outside that range.
+    // Tabulated from IAPWS (Hubert 2012, Eq. 21) at 0, 10, ..., 110°C.
+    static const float kTable[12] = {
+        0.5574f, 0.5800f, 0.5986f, 0.6153f,
+        0.6305f, 0.6435f, 0.6550f, 0.6639f,
+        0.6718f, 0.6773f, 0.6805f, 0.6807f
+    };
+    temp = max(0.f, min(110.f, temp));
+    float fi = temp * 0.1f;
+    int   i  = static_cast<int>(fi);
+    if (i >= 11) return kTable[11];
+    return kTable[i] + (fi - i) * (kTable[i + 1] - kTable[i]);
+}
+
+float DistrictEnergyCenter::computeMuFast(float temp)
+{
+    // μ(T) [Pa·s] — valid −20°C to 110°C, clamped outside that range.
+    // Tabulated from IAPWS viscosity formula at −20, −10, 0, ..., 110°C.
+    static const float muTable[14] = {
+        4404e-6f, 2643e-6f, 1787e-6f, 1307e-6f,
+        1002e-6f, 797.5e-6f, 652.9e-6f, 546.9e-6f,
+        466.5e-6f, 404.2e-6f, 354.4e-6f, 315.0e-6f,
+        282.2e-6f, 254.4e-6f
+    };
+    temp = max(-20.f, min(110.f, temp));
+    float fi = (temp + 20.f) * 0.1f;
+    int   i  = static_cast<int>(fi);
+    if (i >= 13) return muTable[13];
+    return muTable[i] + (fi - i) * (muTable[i + 1] - muTable[i]);
+}
+
+float Network::computeLaminarNusseltNumber(float const& length, float const& radius, float const& reynolds, float const& prandtl){
+    float lByD = (2.0f*radius) / length;
+    if (lByD < 10.0f) { // use Hansen correlation
+        return 3.66f + ((0.0668f*lByD*reynolds*prandtl)/(1.0f + 0.04f*(pow(lByD*reynolds*prandtl, 2.0f / 3.0f))));
+    }
+    else {
+        return 3.66f;
+    }
+}
+
+float Network::computeTurbulentNusseltNumber(float const& length, float const& radius, float const& reynolds, float const& prandtl){
+    float fDarcyByEight = pow((0.79f * log(reynolds) - 1.64f), -2.0f) / 8.0f; // may be changed
+    return (fDarcyByEight * (reynolds - 1000.0f) * prandtl) / (1.0f + 12.7f * pow(fDarcyByEight, 0.5f)*(pow(prandtl, 2.0f / 3.0f) - 1.0f));
+}
+
+float Network::computeTransitionNusseltNumber(float const& length, float const& radius, float const& reynolds, float const& prandtl){
+    float nu2300 = Network::computeLaminarNusseltNumber(length, radius, reynolds, prandtl);
+    float nu3000 = Network::computeTurbulentNusseltNumber(length, radius, reynolds, prandtl);
+    return nu2300 + (nu3000 - nu2300) * (reynolds - 2300.0f) / (3000.0f - 2300.0f);
+}
+
+
+float Network::computeNusseltNumber(float const& massFlow, float const& innerRadius, float const& length, float const& waterTemp, float const& kWater, float const& muWater, float const& cpWater){
+    float reynolds (0.63662f*massFlow/(innerRadius*muWater));
+    float prandtl = max(0.5f, min(cpWater * muWater / kWater, 2000.0f)); // verified !
+
+    if (reynolds < 2300.0f) {
+        return Network::computeLaminarNusseltNumber(length, innerRadius, reynolds, prandtl);
+    }
+    else if (reynolds >= 3000.0f) { // Gnielinski correlation, carreful valid only 0.5 <= prandtl <= 2000
+        return Network::computeTurbulentNusseltNumber(length, innerRadius, reynolds, prandtl);
+    }
+    else {
+        return Network::computeTransitionNusseltNumber(length, innerRadius, reynolds, prandtl);
+    }
+}
+
+float Network::computeDarcyFrictionFactor(float const& massFlow, float const& radius, float const& temp, float const& roughness) {
 //    float mu = 0.0004; // Dynamic viscocity of water [Pa*s] TODO improve this formula.
     float mu = pDEC->getMu(temp);
-    float roughness = pDEC->getNetwork()->getRoughness();
+    // float roughness = pDEC->getNetwork()->getRoughness();
     float reynolds (0.63662*massFlow/(radius*mu)); // 2*massflow/(pi*radius*mu) [ ]
     float eps_diam = roughness/(2.f*radius); // Relative roughness = absolute roughness/diameter [ ]
 
@@ -3839,6 +4037,7 @@ float Network::computeDarcyFrictionFactor(float const& massFlow, float const& ra
         darcyFricFact = darcy2320 + (darcy4000-darcy2320)*(reynolds-2320.f)*0.00059524f; // Linear interpolation, since 0.00059524=1/(4000-2320)
 
     }
+
     return darcyFricFact;
 }
 
@@ -3851,12 +4050,12 @@ void Network::computePressureDiff(vector<float> const& massFlows, float const& r
 
         size_t idx = 2*i;
         float massFlow ( massFlows[idx] );
-        dDeltaP_dm[idx] = abs(massFlow)*computeDarcyFrictionFactor(abs(massFlow), r, pipePairs[i]->getSupplyPipe()->getDownstreamTemp())*tmp; // Usually the fluid stays longer close to the downstream temperature then the upstream temperature. This could be improve.
+        dDeltaP_dm[idx] = abs(massFlow)*computeDarcyFrictionFactor(abs(massFlow), r, pipePairs[i]->getSupplyPipe()->getDownstreamTemp(), pipePairs[i]->getSupplyPipe()->getPipeProperty("Roughness"))*tmp; // Usually the fluid stays longer close to the downstream temperature then the upstream temperature. This could be improve.
         deltaP[idx] = 0.5f*massFlow*dDeltaP_dm[idx] + altitudePressureLoss;
 
         idx = 2*i+1;
         massFlow = massFlows[idx];
-        dDeltaP_dm[idx] = abs(massFlow)*computeDarcyFrictionFactor(abs(massFlow), r, pipePairs[i]->getReturnPipe()->getDownstreamTemp())*tmp; // Usually the fluid stays longer close to the downstream temperature then the upstream temperature. This could be improve.
+        dDeltaP_dm[idx] = abs(massFlow)*computeDarcyFrictionFactor(abs(massFlow), r, pipePairs[i]->getReturnPipe()->getDownstreamTemp(), pipePairs[i]->getReturnPipe()->getPipeProperty("Roughness"))*tmp; // Usually the fluid stays longer close to the downstream temperature then the upstream temperature. This could be improve.
         deltaP[idx] = 0.5f*massFlow*dDeltaP_dm[idx] + altitudePressureLoss;
     }
 
@@ -4101,6 +4300,726 @@ void Network::convergeHydraulic(float rho) {
     }
 }
 
+void Network::solveSteadyStateHydraulic(MCR* mcr, float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour)
+{
+    float sumErrM, sumDesiredM = 0.f/*, relErrM = 1.f, derivRelErrM = -1.f*/, sumDeltaKv, sumKv/*, relFluctuationKv = 1.f, derivRelErrP = -1.f*/;
+    vector<float> prevRelErrM (0), prevRelErrP (0);
+    float sumErrP, sumDesiredP/*, relErrP = 1.f*/, sumDeltaRpm, sumRpm/*, relFluctuationRpm = 1.f*/;
+    for (auto& ssnp : substationNodePairs) { sumDesiredM += ssnp->getDesiredMassFlow(); } // Substations update valve positions.
+
+    updateDesiredMassFlow(cp, pClim, day, hour); // Inform prosumers, so that they can determine the supply target temperature.
+    updateOperationMode(); // Inform thermal stations whether they must switch to storage mode.
+
+    size_t nLoops = 0;
+    bool hasConverged;
+
+    vector<float> relErr (substationNodePairs.size()+thermalStationNodePairs.size()); // debug
+    vector<float> absErr (substationNodePairs.size()+thermalStationNodePairs.size()); // debug Added by Max. Useful in order to shorten the time of simulation when we have very small mass flows.
+
+    vector<float> prevCurrentStages{0.f};
+    for(size_t i(1); i<mcr->getThermalStations().size();++i){ // Starts at one since the '0' index is the master ThermalStation
+        prevCurrentStages.push_back(mcr->getThermalStations()[i]->getCurrentStage());
+    }
+
+    // Solving the steady-state hydraulic
+    do {
+
+        #ifdef DEBUG
+            cout<<"  hour "<< hour << ", iteration "<< nLoops << "/150"<< endl;
+        #endif // DEBUG
+
+        float learningRate = pow(1.f+nLoops, -0.75); // Similar to a step-size or learning rate in gradient descent. This fulfills the Robbins-Monroe condition. //        float learningRate = pow(1.f+nLoops, -0.75); // Similar to a step-size or learning rate in gradient descent. This fulfills the Robbins-Monroe condition.
+
+        sumDeltaKv = 0.f; sumKv = 0.f;
+        sumDeltaRpm = 0.f; sumRpm = 0.f;
+        sumErrM = 0.f;
+        sumErrP = 0.f; sumDesiredP = 0.f;
+
+        float massFlowSupplyToReturn = computeMassFlowSupplyToReturn(); // debug
+        for (auto& ssnp : substationNodePairs) { ssnp->updateControlVariable(rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate, massFlowSupplyToReturn); } // Substations update the control variable (Mostly valve position. Can be pump rotation if prosumer feeding in heat).
+        for (auto& tsnp : thermalStationNodePairs) {
+            tsnp->updateControlVariable(rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate);
+        } // Thermal stations update the control variable (Mostly pump rotational speed. Can be valve position if in storage mode).
+        for (auto& vsnp : valveNodePairs) { vsnp->updateControlVariable(rho, sumDeltaRpm, sumRpm, sumDeltaKv, sumKv, learningRate); } // Valves position update. (Max)
+        convergeHydraulic(rho);
+
+        mcr->MasterControlSlave(rho, cp, pClim, day, hour, prevCurrentStages); // Need to choose between two possibilities.
+        updateDesiredMassFlow(cp, pClim, day, hour);
+        updateOperationMode();
+        for (size_t i=0; i<substationNodePairs.size(); i++) { substationNodePairs[i]->errorMassFlow(relErr[i], absErr[i], sumErrM);}
+        for (size_t i=0; i<thermalStationNodePairs.size(); i++) { thermalStationNodePairs[i]->errorPressureDiff(relErr[substationNodePairs.size()+i], absErr[substationNodePairs.size()+i], sumErrP, sumDesiredP);}
+
+        if(nLoops==149){
+            cout<<"The system did not converge on the day "+to_string(day)+", hour "+to_string(hour)+"."<<endl;
+        }
+
+        // DEBUG: dump per-element errors on the last iteration to identify stuck elements
+        #ifdef DEBUG
+        for (size_t i=0; i<substationNodePairs.size(); i++) {
+            if ( !(abs(relErr[i])<0.02f || abs(absErr[i])<0.002f) ) {
+                cout << "  ---- NOT converged: SubstationNodePair id=" << substationNodePairs[i]->getId()
+                     << " relErr=" << relErr[i] << " absErr=" << absErr[i]
+                     << " actualMassFlow=" << substationNodePairs[i]->getMassFlow()
+                     << " desiredMassFlow=" << substationNodePairs[i]->getDesiredMassFlow()
+                     << " deltaP=" << substationNodePairs[i]->getPressureDiff()
+                     << endl;
+            }
+        }
+        for (size_t i=0; i<thermalStationNodePairs.size(); i++) {
+            size_t idx = substationNodePairs.size()+i;
+            if ( !(abs(relErr[idx])<0.02f || abs(absErr[idx])<0.002f) ) {
+                float mf = thermalStationNodePairs[i]->getMassFlow();
+                float dp = thermalStationNodePairs[i]->getPressureDiff();
+                float pn = thermalStationNodePairs[i]->getThermalStation()->getPump()->getn();
+                float dm_pump, dp_pump;
+                thermalStationNodePairs[i]->getThermalStation()->computePressureDiff(mf, 1000.f, dp_pump, dm_pump);
+                cout << "  ---- NOT converged: ThermalStationNodePair id=" << thermalStationNodePairs[i]->getId()
+                    << " relErr=" << relErr[idx] << " absErr=" << absErr[idx]
+                    << " actualMassFlow=" << mf
+                    << " actualDeltaP=" << dp
+                    << " pump_deltaP_at_mf=" << dp_pump
+                    << " pump_n=" << pn
+                    << endl;
+            }
+        }
+        #endif // DEBUG
+
+        nLoops++;
+        // Check for convergence (if substation massflows, and thermal station pressures, are within two percent of the setpoint values)
+        hasConverged = true;
+        for (size_t i=0; hasConverged and (i<relErr.size()); i++) {
+            hasConverged = hasConverged and ( abs(relErr[i])<0.02f or abs(absErr[i])<0.002f); // Added by Max
+        }
+
+    } while ( pDEC->getDistrict()->getDECSimulationConfig().hydraulicControlOuterLoop and nLoops<150 and (not hasConverged) );
+
+    // The TimeClock of the slave thermalStations need to be updated.
+    mcr->updateThermalStationSlaveClock(prevCurrentStages);
+}
+
+void Network::updateNodesTemperatures(float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour)
+{
+    // Then, computes all nodes out temperature (Tss for heat producers, Trc for consumers, Tr+DeltaTValve for valve)
+    for (unsigned int tsnpi=0; tsnpi < (unsigned int)thermalStationNodePairs.size(); tsnpi++)
+    {
+        ThermalStationNodePair* pThrmlStationNP = thermalStationNodePairs[tsnpi];
+        float mssf = pThrmlStationNP->getMassFlow(); // Injected mass flow or consumed
+
+        if (mssf >= 0.f)
+        {
+            pThrmlStationNP->computeAndSetTemperature(0.0f, 0.0f, false); // set return node
+            pThrmlStationNP->computeThermal(rho, cp, pClim, day, hour, false); // returnToSupply
+            pThrmlStationNP->computeAndSetTemperature(mssf * pThrmlStationNP->getThermalStation()->getOutputTemperature(), mssf, true); // set supply
+        }
+        else
+        {
+            // behaving as consumer or slack: takes from supply, injects cooled water into return.
+            pThrmlStationNP->computeAndSetTemperature(0.0f, 0.0f, true); // clear supply node (input side)
+            pThrmlStationNP->computeThermal(rho, cp, pClim, day, hour, true); // supply to return, computes outputTemperature
+            // Fix: output goes to the RETURN node (false), not supply. Mirrors the substation consumer pattern.
+            pThrmlStationNP->computeAndSetTemperature(-1.0f * mssf * pThrmlStationNP->getThermalStation()->getOutputTemperature(), -1.0f * mssf, false); // set return node
+        }
+    }
+
+    for (unsigned int vnpi=0; vnpi < (unsigned int)valveNodePairs.size(); vnpi++)
+    {
+        ValveNodePair* pValveNP = valveNodePairs[vnpi];
+        float mwf = pValveNP->getMassFlow();
+
+        if (mwf >= 0.f)
+        {
+            pValveNP->computeAndSetTemperature(0.0, 0.0, true);
+            pValveNP->computeThermal(cp, rho, pClim, day, hour, true); // supply to return
+            pValveNP->computeAndSetTemperature(mwf * pValveNP->getOutputTemp(), mwf, false);
+        }
+        else
+        {
+            pValveNP->computeAndSetTemperature(0.0, 0.0, false);
+            pValveNP->computeThermal(cp, rho, pClim, day, hour, false); // return to supply
+            pValveNP->computeAndSetTemperature(-1.0f * mwf * pValveNP->getOutputTemp(), -1.0f * mwf, true);
+        }
+    }
+
+    for (unsigned int snpi=0; snpi < (unsigned int)substationNodePairs.size(); snpi++)
+    {
+        SubstationNodePair* pSubstationNP = substationNodePairs[snpi];
+        float mcf = pSubstationNP->getMassFlow(); // Primary mass flow rate
+
+        if (mcf <= 0.f)
+        {
+            // behaving as producer without consumption
+            pSubstationNP->computeAndSetTemperature(0.0, 0.0, false); // set return temp first
+            pSubstationNP->computeThermal(cp, rho, pClim, day, hour, false); // returnToSupply = false
+            pSubstationNP->computeAndSetTemperature(-1.0f * mcf * pSubstationNP->getPrimarySideOutputTemperature(), -1.0f * mcf, true); // then set supply temperature
+        }
+        else
+        {
+            // behaving as consumer, set first supply temperature without prod
+            pSubstationNP->computeAndSetTemperature(0.0, 0.0, true);
+            pSubstationNP->computeThermal(cp, rho, pClim, day, hour, true); // supplyToReturn = true, compute primary outtemp
+            pSubstationNP->computeAndSetTemperature(mcf * pSubstationNP->getPrimarySideOutputTemperature(), mcf, false); // compute node tr
+        }
+    }
+
+    for (unsigned int snpi=0; snpi < (unsigned int)separateNodePairs.size(); snpi++)
+    {
+        NodePair* pNodePair = separateNodePairs[snpi];
+        pNodePair->computeAndSetTemperature(0.0f, 0.0f, true);
+        pNodePair->computeAndSetTemperature(0.0f, 0.0f, false);
+    }
+}
+
+void Network::dynamicForwardPassFixedDV(MCR* mcr, float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour)
+{
+    // Starting by solving the steady-state hydraulic
+    solveSteadyStateHydraulic(mcr, rho, cp, pClim, day, hour);
+
+    const std::clock_t thermalCpuStart = std::clock();
+    const std::chrono::steady_clock::time_point thermalWallStart = std::chrono::steady_clock::now();
+    unsigned int thermalAdvancements = 0u;
+    unsigned int balanceDtCap = 0u; // node synchronisation interval, set once the pipe intervals are known
+    auto logThermalSolverStats = [&]() {
+        const double thermalWallSeconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - thermalWallStart).count();
+        const double thermalCpuSeconds = static_cast<double>(std::clock() - thermalCpuStart) / CLOCKS_PER_SEC;
+        logStream << "ThermalSolverStats model=fixedDV day=" << day << " hour=" << hour
+                  << " advancements=" << thermalAdvancements
+                  << " thermalCpuSeconds=" << thermalCpuSeconds
+                  << " thermalWallSeconds=" << thermalWallSeconds
+                  << " syncDt=" << balanceDtCap << endl << flush;
+    };
+
+    struct PipeSideStep {
+        PipePair* pipePair;
+        Pipe* pipe;
+        bool isSupply;
+        unsigned int characteristicDt;
+    };
+
+    const DECSimulationConfig& simulationConfig = pDEC->getDistrict()->getDECSimulationConfig();
+    unsigned int steadyStep = simulationConfig.steadyStepInSeconds;
+    unsigned int fixedDVSynchronizationCap = max(1u, steadyStep / 2u);
+    unsigned int maxDtDynamic = 0u;
+    vector<PipeSideStep> pipeSteps;
+    vector<unsigned int> activePipeDts;
+    pipeSteps.reserve(2u * pipePairs.size());
+    activePipeDts.reserve(2u * pipePairs.size());
+
+    auto computeFixedDVPipeDt = [&](Pipe* pipe) -> unsigned int {
+        float massFlowAbs = abs(pipe->getMassFlow());
+        if (massFlowAbs <= 0.f) { return 0u; }
+
+        float pipeDtFloat = rho * simulationConfig.fixedDV / massFlowAbs;
+        if (!(pipeDtFloat > 0.f)) { return 1u; }
+
+        unsigned int pipeDt = max(1u, static_cast<unsigned int>(floor(pipeDtFloat)));
+        return min(pipeDt, fixedDVSynchronizationCap);
+    };
+
+    float largestMassFlow = 0.f;
+    for (auto pipePair : pipePairs)
+    {
+        largestMassFlow = max(largestMassFlow, max(fabs(pipePair->getSupplyPipe()->getMassFlow()),
+                                                   fabs(pipePair->getReturnPipe()->getMassFlow())));
+    }
+    const float significantMassFlow = FIXED_DV_SIGNIFICANT_FLOW_FRACTION * largestMassFlow;
+
+    for (auto pipePair : pipePairs)
+    {
+        for (unsigned int side = 0u; side < 2u; side++)
+        {
+            bool isSupply = (side == 0u);
+            Pipe* pipe = pipePair->getPipe(isSupply);
+            unsigned int pipeDt = computeFixedDVPipeDt(pipe);
+            if (pipeDt > 0u)
+            {
+                if (fabs(pipe->getMassFlow()) >= significantMassFlow) { maxDtDynamic = max(maxDtDynamic, pipeDt); }
+                activePipeDts.push_back(pipeDt);
+            }
+
+            PipeSideStep step = { pipePair, pipe, isSupply, pipeDt };
+            pipeSteps.push_back(step);
+        }
+    }
+
+    if (maxDtDynamic == 0u) { maxDtDynamic = fixedDVSynchronizationCap; }
+    balanceDtCap = maxDtDynamic;
+
+    if (simulationConfig.balanceDtMode == DECSimulationConfig::BALANCE_DT_USER_CAP)
+    {
+        // The user sets the synchronisation interval. Taking the smaller of it and the slowest pipe
+        // quietly synchronised a network of fast pipes far more often than asked.
+        balanceDtCap = min(max(1u, simulationConfig.balanceDtUserCapSeconds), steadyStep);
+    }
+    else if (simulationConfig.balanceDtMode == DECSimulationConfig::BALANCE_DT_PERCENTILE && !activePipeDts.empty())
+    {
+        float rank = simulationConfig.balanceDtPercentile / 100.f * static_cast<float>(activePipeDts.size());
+        unsigned int percentileIdx = max(1u, static_cast<unsigned int>(ceil(rank))) - 1u;
+        percentileIdx = min(percentileIdx, static_cast<unsigned int>(activePipeDts.size() - 1u));
+        nth_element(activePipeDts.begin(), activePipeDts.begin() + percentileIdx, activePipeDts.end());
+        balanceDtCap = activePipeDts[percentileIdx];
+    }
+    balanceDtCap = max(1u, balanceDtCap);
+
+    // The mass flows are fixed for this steady step, so the flow graph is too.
+    buildTransportSchedules();
+    for (size_t i = 0; i < allNodePairs.size(); i++) { allNodePairs[i]->primeCrossInjection(); }
+    resetTransportAverages();
+
+    if (simulationConfig.heatTransportEquation == DECSimulationConfig::HEAT_TRANSPORT_THREE_NODE_FULL)
+    {
+        unsigned int steadyElapsed = 0u;
+        unsigned int numPipes = static_cast<unsigned int>(pipePairs.size());
+        vector<float> supplyLossTimeIntegral(numPipes, 0.f);
+        vector<float> returnLossTimeIntegral(numPipes, 0.f);
+        unsigned int currentSyncDt = 0u;
+
+        // The supply and return parcels of a pair exchange heat with each other, so that part is
+        // applied to the pair over the whole synchronisation interval before either side moves.
+        // Each side then keeps its own characteristic sub-stepping, in flow order.
+        function<void(PipePair*, bool)> advectPipeSide =
+            [&](PipePair* pipePair, bool isSupply)
+        {
+            const unsigned int pipeIndex = pipePair->getNetworkIndex();
+            unsigned int supplyDt = pipeSteps[2u * pipeIndex].characteristicDt;
+            unsigned int returnDt = pipeSteps[2u * pipeIndex + 1u].characteristicDt;
+            unsigned int localDt = currentSyncDt;
+            if (supplyDt > 0u && returnDt > 0u) { localDt = min(supplyDt, returnDt); }
+            else if (supplyDt > 0u) { localDt = supplyDt; }
+            else if (returnDt > 0u) { localDt = returnDt; }
+
+            Pipe* pipe = pipePair->getPipe(isSupply);
+            unsigned int elapsed = 0u;
+            float outletTempTimeIntegral = 0.f;
+            float thermalLossTimeIntegral = 0.f;
+
+            while (elapsed < currentSyncDt)
+            {
+                unsigned int subDt = min(localDt, currentSyncDt - elapsed);
+                pipePair->advectSide(isSupply, subDt);
+                elapsed += subDt;
+                outletTempTimeIntegral += pipe->getDownstreamTemp() * static_cast<float>(subDt);
+                thermalLossTimeIntegral += pipe->getThermalLoss() * static_cast<float>(subDt);
+            }
+
+            if (elapsed > 0u)
+            {
+                float invElapsed = 1.f / static_cast<float>(elapsed);
+                pipe->setDownstreamTemp(outletTempTimeIntegral * invElapsed);
+                pipe->setThermalLoss(thermalLossTimeIntegral * invElapsed);
+                if (isSupply) { supplyLossTimeIntegral[pipeIndex] += thermalLossTimeIntegral; }
+                else          { returnLossTimeIntegral[pipeIndex] += thermalLossTimeIntegral; }
+            }
+        };
+
+        while (steadyElapsed < steadyStep)
+        {
+            unsigned int remainingSteady = steadyStep - steadyElapsed;
+            currentSyncDt = min(balanceDtCap, remainingSteady);
+
+            advanceTransportInterval(currentSyncDt, rho, cp, pClim, day, hour, advectPipeSide, true);
+
+            steadyElapsed += currentSyncDt;
+            writeSubHourlyDiagnostic(day, hour, steadyElapsed);
+            ++thermalAdvancements;
+        }
+
+        const float invSteadyStep = 1.f / static_cast<float>(steadyStep);
+        #pragma omp parallel for num_threads(numDynamicThreads) schedule(static)
+        for (unsigned int i = 0; i < numPipes; i++)
+        {
+            pipePairs[i]->getSupplyPipe()->setThermalLoss(supplyLossTimeIntegral[i] * invSteadyStep);
+            pipePairs[i]->getReturnPipe()->setThermalLoss(returnLossTimeIntegral[i] * invSteadyStep);
+        }
+        applyTransportAverages();
+        logThermalSolverStats();
+        return;
+    }
+
+    unsigned int steadyElapsed = 0u;
+    unsigned int numPipeSides = static_cast<unsigned int>(pipeSteps.size());
+    vector<float> pipeSideLossTimeIntegral(numPipeSides, 0.f);
+    unsigned int currentSyncDt = 0u;
+
+    // Uncoupled heat transport: each pipe side keeps exactly the sub-step sequence it had, only
+    // the order in which the sides are visited changes, so that a side is advected once the node
+    // feeding it is final for this synchronisation interval.
+    function<void(PipePair*, bool)> advectPipeSide =
+        [&](PipePair* pipePair, bool isSupply)
+    {
+        const unsigned int stepIndex = 2u * pipePair->getNetworkIndex() + (isSupply ? 0u : 1u);
+        PipeSideStep& step = pipeSteps[stepIndex];
+        unsigned int elapsed = 0u;
+        float outletTempTimeIntegral = 0.f;
+        float thermalLossTimeIntegral = 0.f;
+        unsigned int localDt = (step.characteristicDt > 0u) ? step.characteristicDt : currentSyncDt;
+
+        float exteriorTemp = step.pipe->getIsAirPipe()
+                           ? pClim->getToutCelsius(day, hour)
+                           : pClim->getDECPipeSoilToutCelcius(day, hour);
+
+        while (elapsed < currentSyncDt)
+        {
+            unsigned int subDt = min(localDt, currentSyncDt - elapsed);
+            pipePair->applyHeatTransportAndAdvectSide(isSupply, subDt, exteriorTemp);
+            elapsed += subDt;
+            outletTempTimeIntegral += step.pipe->getDownstreamTemp() * static_cast<float>(subDt);
+            thermalLossTimeIntegral += step.pipe->getThermalLoss() * static_cast<float>(subDt);
+        }
+
+        if (elapsed > 0u)
+        {
+            step.pipe->setDownstreamTemp(outletTempTimeIntegral / static_cast<float>(elapsed));
+            step.pipe->setThermalLoss(thermalLossTimeIntegral / static_cast<float>(elapsed));
+            pipeSideLossTimeIntegral[stepIndex] += thermalLossTimeIntegral;
+        }
+    };
+
+    while (steadyElapsed < steadyStep)
+    {
+        unsigned int remainingSteady = steadyStep - steadyElapsed;
+        currentSyncDt = min(balanceDtCap, remainingSteady);
+
+        advanceTransportInterval(currentSyncDt, rho, cp, pClim, day, hour, advectPipeSide, false);
+
+        steadyElapsed += currentSyncDt;
+        writeSubHourlyDiagnostic(day, hour, steadyElapsed);
+        ++thermalAdvancements;
+    }
+
+    const float invSteadyStep = 1.f / static_cast<float>(steadyStep);
+    #pragma omp parallel for num_threads(numDynamicThreads) schedule(static)
+    for (unsigned int i = 0; i < numPipeSides; i++)
+    {
+        pipeSteps[i].pipe->setThermalLoss(pipeSideLossTimeIntegral[i] * invSteadyStep);
+    }
+    applyTransportAverages();
+    logThermalSolverStats();
+}
+
+void Network::buildTransportSchedule(bool isSupply, TransportSchedule& schedule)
+{
+    schedule.levels.clear();
+    schedule.stagnantPipes.clear();
+    schedule.nbBackEdges = 0u;
+    schedule.nbActivePipes = 0u;
+    schedule.sweepThreads = 1u;
+
+    const size_t nbNodes = allNodePairs.size();
+    const size_t nbPipes = pipePairs.size();
+
+    // Directed flow graph of this side: one edge per pipe carrying flow, from its inlet node to
+    // its outlet node. A pipe with no flow transports nothing and constrains no ordering.
+    vector<vector<size_t>> pipesLeaving(nbNodes);      // node index -> pipe indices it feeds
+    vector<size_t> pipeTargetNode(nbPipes, nbNodes);   // pipe index -> outlet node index
+    vector<unsigned int> unresolvedInDegree(nbNodes, 0u);
+
+    for (size_t i = 0; i < nbPipes; i++) {
+        PipePair* pipePair = pipePairs[i];
+        const float massFlow = pipePair->getPipe(isSupply)->getMassFlow();
+        if (massFlow == 0.f) { schedule.stagnantPipes.push_back(pipePair); continue; }
+
+        NodePair* inletNode  = massFlow > 0.f ? pipePair->getTailNode() : pipePair->getHeadNode();
+        NodePair* outletNode = massFlow > 0.f ? pipePair->getHeadNode() : pipePair->getTailNode();
+        pipesLeaving[inletNode->getTransportIndex()].push_back(i);
+        pipeTargetNode[i] = outletNode->getTransportIndex();
+        unresolvedInDegree[outletNode->getTransportIndex()]++;
+        schedule.nbActivePipes++;
+    }
+
+    // Kahn levelling: a node is final once every pipe flowing into it has been advected.
+    vector<bool> scheduled(nbNodes, false);
+    size_t nbScheduled = 0u;
+    vector<size_t> currentLevel;
+    for (size_t n = 0; n < nbNodes; n++) { if (unresolvedInDegree[n] == 0u) { currentLevel.push_back(n); } }
+
+    while (nbScheduled < nbNodes) {
+        if (currentLevel.empty()) {
+            // A mesh the flow directions turned into a cycle. Break it where the least
+            // information is lost: the unscheduled node with the fewest unresolved inflows. Its
+            // remaining upstream pipes keep the value of the previous sub-step, which is what the
+            // whole network did before this schedule existed.
+            size_t bestNode = nbNodes;
+            unsigned int bestDegree = numeric_limits<unsigned int>::max();
+            for (size_t n = 0; n < nbNodes; n++) {
+                if (!scheduled[n] && unresolvedInDegree[n] < bestDegree) { bestDegree = unresolvedInDegree[n]; bestNode = n; }
+            }
+            if (bestNode == nbNodes) { break; } // Cannot happen: nbScheduled < nbNodes.
+            schedule.nbBackEdges += bestDegree;
+            unresolvedInDegree[bestNode] = 0u;
+            currentLevel.push_back(bestNode);
+        }
+
+        TransportLevel level;
+        level.nodes.reserve(currentLevel.size());
+        vector<size_t> nextLevel;
+        for (size_t n : currentLevel) {
+            if (scheduled[n]) { continue; }
+            scheduled[n] = true;
+            nbScheduled++;
+            level.nodes.push_back(allNodePairs[n]);
+            for (size_t pipeIdx : pipesLeaving[n]) {
+                level.pipes.push_back(pipePairs[pipeIdx]);
+                const size_t target = pipeTargetNode[pipeIdx];
+                if (!scheduled[target] && unresolvedInDegree[target] > 0u) {
+                    if (--unresolvedInDegree[target] == 0u) { nextLevel.push_back(target); }
+                }
+            }
+        }
+        schedule.levels.push_back(level);
+        currentLevel.swap(nextLevel);
+    }
+
+    // A deep network gives thin levels; below a few pipes per thread the barriers cost more than
+    // the advection they overlap, so the sweep is better off serial.
+    const size_t nbLevels = max<size_t>(1u, schedule.levels.size());
+    const unsigned int pipesPerLevel = static_cast<unsigned int>((schedule.nbActivePipes + nbLevels - 1u) / nbLevels);
+    schedule.sweepThreads = max(1u, min(numDynamicThreads, pipesPerLevel / MIN_PIPES_PER_LEVEL_THREAD));
+}
+
+void Network::buildTransportSchedules()
+{
+    buildTransportSchedule(true, supplyTransport);
+    buildTransportSchedule(false, returnTransport);
+
+    if (!transportSchedulesLogged) {
+        transportSchedulesLogged = true;
+        logStream << "DHC direction-aware transport schedule: "
+                  << supplyTransport.levels.size() << " supply levels ("
+                  << supplyTransport.nbActivePipes << " flowing pipes, "
+                  << supplyTransport.nbBackEdges << " loop back edges), "
+                  << returnTransport.levels.size() << " return levels ("
+                  << returnTransport.nbActivePipes << " flowing pipes, "
+                  << returnTransport.nbBackEdges << " loop back edges)." << endl << flush;
+    }
+}
+
+void Network::initSubHourlyDiagnostic()
+{
+    subHourlyDiagnosticReady = true;
+    const DECSimulationConfig& config = pDEC->getDistrict()->getDECSimulationConfig();
+    if (config.subHourlyDiagnosticFile.empty()) { return; }
+
+    if (config.subHourlyDiagnosticNodeIds.empty()) {
+        for (auto node : thermalStationNodePairs) { subHourlyDiagnosticNodes.push_back(node); }
+        for (auto node : substationNodePairs) { subHourlyDiagnosticNodes.push_back(node); }
+    }
+    else {
+        for (unsigned int nodeId : config.subHourlyDiagnosticNodeIds) {
+            NodePair* node = pointerOfNodeWithId(nodeId);
+            if (node == nullptr) { throw string("Error in the XML file: subHourlyDiagnosticNodes refers to unknown NodePair id="+to_string(nodeId)+"."); }
+            subHourlyDiagnosticNodes.push_back(node);
+        }
+    }
+
+    const string fileName = config.subHourlyDiagnosticFile;
+    subHourlyDiagnosticStream.open(fileName.c_str(), ios::out | ios::binary | ios::trunc);
+    if (!subHourlyDiagnosticStream.is_open()) { throw string("Error: cannot open the sub-hourly diagnostic file "+fileName+"."); }
+    subHourlyDiagnosticStream << "day,hour,elapsed_s,node_id,supply_temperature_C,return_temperature_C\n";
+    subHourlyDiagnosticEnabled = true;
+
+    // Companion file giving the depth of every node in the two flow graphs. The depth is what
+    // used to set the artificial delay: the old coupling lagged a node by depth x dt.
+    fstream levelStream((fileName + ".levels.csv").c_str(), ios::out | ios::binary | ios::trunc);
+    if (levelStream.is_open()) {
+        vector<int> supplyLevel(allNodePairs.size(), -1), returnLevel(allNodePairs.size(), -1);
+        for (size_t l = 0; l < supplyTransport.levels.size(); l++) {
+            for (auto node : supplyTransport.levels[l].nodes) { supplyLevel[node->getTransportIndex()] = static_cast<int>(l); }
+        }
+        for (size_t l = 0; l < returnTransport.levels.size(); l++) {
+            for (auto node : returnTransport.levels[l].nodes) { returnLevel[node->getTransportIndex()] = static_cast<int>(l); }
+        }
+        levelStream << "node_id,kind,supply_level,return_level\n";
+        for (size_t i = 0; i < allNodePairs.size(); i++) {
+            NodePair* node = allNodePairs[i];
+            string kind = "node";
+            if (dynamic_cast<SubstationNodePair*>(node) != nullptr) { kind = "substation"; }
+            else if (dynamic_cast<ThermalStationNodePair*>(node) != nullptr) { kind = "thermalStation"; }
+            else if (dynamic_cast<ValveNodePair*>(node) != nullptr) { kind = "valve"; }
+            levelStream << node->getId() << ',' << kind << ','
+                        << supplyLevel[i] << ',' << returnLevel[i] << '\n';
+        }
+        levelStream.close();
+    }
+    logStream << "DHC sub-hourly diagnostic: writing " << subHourlyDiagnosticNodes.size()
+              << " node(s) to " << fileName << " every " << max(1u, config.subHourlyDiagnosticPeriod)
+              << " synchronisation step(s)." << endl << flush;
+}
+
+void Network::writeSubHourlyDiagnostic(unsigned int day, unsigned int hour, unsigned int elapsedSeconds)
+{
+    if (!subHourlyDiagnosticReady) { initSubHourlyDiagnostic(); }
+    if (!subHourlyDiagnosticEnabled) { return; }
+
+    const DECSimulationConfig& config = pDEC->getDistrict()->getDECSimulationConfig();
+    const unsigned int period = max(1u, config.subHourlyDiagnosticPeriod);
+    if ((subHourlyDiagnosticCounter++ % period) != 0u) { return; }
+
+    for (size_t i = 0; i < subHourlyDiagnosticNodes.size(); i++) {
+        NodePair* node = subHourlyDiagnosticNodes[i];
+        subHourlyDiagnosticStream << day << ',' << hour << ',' << elapsedSeconds << ','
+                                  << node->getId() << ','
+                                  << fixed << setprecision(4) << node->getSupplyTemperature() << ','
+                                  << fixed << setprecision(4) << node->getReturnTemperature() << '\n';
+    }
+}
+
+void Network::sweepTransportDirection(bool isSupply, float rho, float cp, Climate *pClim,
+                                      unsigned int day, unsigned int hour,
+                                      function<void(PipePair*, bool)> const& advectPipeSide)
+{
+    const TransportSchedule& schedule = isSupply ? supplyTransport : returnTransport;
+    const int nbStagnant = static_cast<int>(schedule.stagnantPipes.size());
+    const size_t nbLevels = schedule.levels.size();
+
+    if (schedule.sweepThreads <= 1u) {
+        // Levels too thin to pay for a thread team: the depth of the network, not the number of
+        // pipes, is what limits this sweep.
+        for (int i = 0; i < nbStagnant; i++) { advectPipeSide(schedule.stagnantPipes[i], isSupply); }
+        for (size_t levelIdx = 0; levelIdx < nbLevels; levelIdx++) {
+            const TransportLevel& level = schedule.levels[levelIdx];
+            for (size_t i = 0; i < level.nodes.size(); i++) {
+                level.nodes[i]->transportUpdate(isSupply, rho, cp, pClim, day, hour);
+            }
+            for (size_t i = 0; i < level.pipes.size(); i++) { advectPipeSide(level.pipes[i], isSupply); }
+        }
+        return;
+    }
+
+    // One thread team for the whole sweep. Creating a team per level would cost far more than the
+    // dozen pipes a level typically holds. The implicit barriers of omp for and omp single are
+    // what enforce the ordering: nodes of a level are final before its pipes move, and those
+    // pipes are advected before the next level's nodes mix them.
+    #pragma omp parallel num_threads(schedule.sweepThreads)
+    {
+        // Pipes with no flow are outside the graph but still exchange heat with the ground and
+        // must expose the temperature of their stagnant column.
+        #pragma omp for schedule(guided, dynamicPipeChunkSize)
+        for (int i = 0; i < nbStagnant; i++) { advectPipeSide(schedule.stagnantPipes[i], isSupply); }
+
+        for (size_t levelIdx = 0; levelIdx < nbLevels; levelIdx++) {
+            const TransportLevel& level = schedule.levels[levelIdx];
+
+            // Nodes stay serial: they drive the substation, valve and thermal station models,
+            // whose internal state is not thread safe, and they are far cheaper than the pipes.
+            #pragma omp single
+            {
+                for (size_t i = 0; i < level.nodes.size(); i++) {
+                    level.nodes[i]->transportUpdate(isSupply, rho, cp, pClim, day, hour);
+                }
+            }
+
+            // Every pipe of a level starts from a node that is now final, so they are independent.
+            const int nbLevelPipes = static_cast<int>(level.pipes.size());
+            #pragma omp for schedule(guided, dynamicPipeChunkSize)
+            for (int i = 0; i < nbLevelPipes; i++) { advectPipeSide(level.pipes[i], isSupply); }
+        }
+    }
+}
+
+void Network::advanceTransportInterval(unsigned int syncDt, float rho, float cp, Climate *pClim,
+                                       unsigned int day, unsigned int hour,
+                                       function<void(PipePair*, bool)> const& advectPipeSide,
+                                       bool pairHeatTransportPrePass)
+{
+    if (pairHeatTransportPrePass) {
+        // The coupled heat transport equations exchange between the supply and return parcels of
+        // the same pair, so they have to be applied before either side moves. They are local to
+        // the pair, hence independent of the order in which the nodes are then updated.
+        const int nbPipes = static_cast<int>(pipePairs.size());
+        #pragma omp parallel for num_threads(numDynamicThreads) schedule(guided, dynamicPipeChunkSize)
+        for (int i = 0; i < nbPipes; i++) { pipePairs[i]->applyHeatTransportStep(pClim, syncDt, day, hour); }
+    }
+
+    // Supply first, from the producers down to the consumers: every substation reached this way
+    // ends the sweep with its transfer evaluated, so the return sweep of the SAME interval starts
+    // from it. Only the elements injecting back into the supply (thermal stations, prosumers)
+    // keep a one-interval lag, which is a control lag and does not grow with the network depth.
+    sweepTransportDirection(true, rho, cp, pClim, day, hour, advectPipeSide);
+    sweepTransportDirection(false, rho, cp, pClim, day, hour, advectPipeSide);
+    accumulateTransportAverages(syncDt);
+}
+
+void Network::resetTransportAverages()
+{
+    for (auto ssnp : substationNodePairs) { ssnp->getSubstation()->resetTransportAverage(); }
+    for (auto tsnp : thermalStationNodePairs) { tsnp->getThermalStation()->resetTransportAverage(); }
+}
+
+void Network::accumulateTransportAverages(unsigned int dt)
+{
+    const double dtSeconds = static_cast<double>(dt);
+    for (auto ssnp : substationNodePairs) { ssnp->getSubstation()->accumulateTransportAverage(dtSeconds); }
+    for (auto tsnp : thermalStationNodePairs) { tsnp->getThermalStation()->accumulateTransportAverage(dtSeconds); }
+}
+
+void Network::applyTransportAverages()
+{
+    for (auto ssnp : substationNodePairs) { ssnp->getSubstation()->applyTransportAverage(); }
+    for (auto tsnp : thermalStationNodePairs) { tsnp->getThermalStation()->applyTransportAverage(); }
+}
+
+void Network::dynamicForwardPassFixedDt(MCR* mcr, float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour)
+{
+    // Starting by solving the steady-state hydraulic
+    solveSteadyStateHydraulic(mcr, rho, cp, pClim, day, hour);
+
+
+    const std::clock_t thermalCpuStart = std::clock();
+    const std::chrono::steady_clock::time_point thermalWallStart = std::chrono::steady_clock::now();
+
+    const DECSimulationConfig& simulationConfig = pDEC->getDistrict()->getDECSimulationConfig();
+    unsigned int dtDynamic = simulationConfig.fixedDt;
+
+    unsigned int numPipes = (unsigned int)pipePairs.size();
+    vector<float> supplyLossTimeIntegral(numPipes, 0.f);
+    vector<float> returnLossTimeIntegral(numPipes, 0.f);
+
+    // The mass flows are now fixed for this steady step, so the flow graph is too.
+    buildTransportSchedules();
+    for (size_t i = 0; i < allNodePairs.size(); i++) { allNodePairs[i]->primeCrossInjection(); }
+    resetTransportAverages();
+
+    // Every pipe advances over the same dt here, and heat transport only touches the parcels of
+    // its own pipe, so applying it to the whole network first leaves each pipe with exactly the
+    // heat-then-advect sequence it had. That keeps the expensive, parcel-bound part fully parallel
+    // while only the advection has to follow the (necessarily sequential) flow order.
+    function<void(PipePair*, bool)> advectPipeSide =
+        [&](PipePair* pipePair, bool isSupply)
+    {
+        pipePair->advectSide(isSupply, dtDynamic);
+        const unsigned int pipeIndex = pipePair->getNetworkIndex();
+        const float loss = pipePair->getPipe(isSupply)->getThermalLoss();
+        if (isSupply) { supplyLossTimeIntegral[pipeIndex] += loss * static_cast<float>(dtDynamic); }
+        else          { returnLossTimeIntegral[pipeIndex] += loss * static_cast<float>(dtDynamic); }
+    };
+
+    // Solving the dynamic thermal
+    unsigned int numberOfDynamicStepsPerSteadyStep = simulationConfig.steadyStepInSeconds / simulationConfig.fixedDt;
+    for (unsigned int i=0; i<numberOfDynamicStepsPerSteadyStep; i++)
+    {
+        advanceTransportInterval(dtDynamic, rho, cp, pClim, day, hour, advectPipeSide, true);
+        writeSubHourlyDiagnostic(day, hour, (i + 1u) * dtDynamic);
+    }
+
+    const float invSteadyStep = 1.f / static_cast<float>(simulationConfig.steadyStepInSeconds);
+    #pragma omp parallel for num_threads(numDynamicThreads) schedule(static)
+    for (unsigned int i = 0; i < numPipes; i++)
+    {
+        pipePairs[i]->getSupplyPipe()->setThermalLoss(supplyLossTimeIntegral[i] * invSteadyStep);
+        pipePairs[i]->getReturnPipe()->setThermalLoss(returnLossTimeIntegral[i] * invSteadyStep);
+    }
+    applyTransportAverages();
+
+    const double thermalWallSeconds = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - thermalWallStart).count();
+    const double thermalCpuSeconds = static_cast<double>(std::clock() - thermalCpuStart) / CLOCKS_PER_SEC;
+    logStream << "ThermalSolverStats model=fixedDt day=" << day << " hour=" << hour
+              << " advancements=" << numberOfDynamicStepsPerSteadyStep
+              << " thermalCpuSeconds=" << thermalCpuSeconds
+              << " thermalWallSeconds=" << thermalWallSeconds << endl << flush;
+}
+
 void Network::convergeToEquilibrium(MCR* mcr, float rho, float cp, Climate *pClim, unsigned int day, unsigned int hour) {
 
     float sumErrM, sumDesiredM = 0.f/*, relErrM = 1.f, derivRelErrM = -1.f*/, sumDeltaKv, sumKv/*, relFluctuationKv = 1.f, derivRelErrP = -1.f*/;
@@ -4156,7 +5075,7 @@ void Network::convergeToEquilibrium(MCR* mcr, float rho, float cp, Climate *pCli
             hasConverged = hasConverged and ( abs(relErr[i])<0.02f or abs(absErr[i])<0.002f); // Added by Max
         }
 
-    } while ( nLoops<150 and (not hasConverged) );
+    } while ( pDEC->getDistrict()->getDECSimulationConfig().hydraulicControlOuterLoop and nLoops<150 and (not hasConverged) ); // This outer loop is done one if no outer loop control imposed
 
     // The TimeClock of the slave thermalStations need to be updated.
     mcr->updateThermalStationSlaveClock(prevCurrentStages);
@@ -4193,9 +5112,9 @@ void Network::convergeToEquilibrium(MCR* mcr, float rho, float cp, Climate *pCli
             oss << "pipePair_" << pP->getId() << "_Supply_DarcyFrictionFactor\tpipePair_" << pP->getId() << "_Return_DarcyFrictionFactor";
         }
         // supply pipe first
-        oss << computeDarcyFrictionFactor(abs(pP->getSupplyPipe()->getMassFlow()), pP->getInnerRadius(), pP->getSupplyPipe()->getDownstreamTemp()) << "\t";
+        oss << computeDarcyFrictionFactor(abs(pP->getSupplyPipe()->getMassFlow()), pP->getInnerRadius(), pP->getSupplyPipe()->getDownstreamTemp(), pP->getSupplyPipe()->getPipeProperty("Roughness")) << "\t";
         // return pipe in second
-        oss << computeDarcyFrictionFactor(abs(pP->getReturnPipe()->getMassFlow()), pP->getInnerRadius(), pP->getReturnPipe()->getDownstreamTemp()) << "\t";
+        oss << computeDarcyFrictionFactor(abs(pP->getReturnPipe()->getMassFlow()), pP->getInnerRadius(), pP->getReturnPipe()->getDownstreamTemp(), pP->getReturnPipe()->getPipeProperty("Roughness")) << "\t";
     }
     oss << endl;
     save(string("dhn_debug.dat"),oss,false);
@@ -4376,16 +5295,57 @@ void NodePair::computeAndSetTemperature(float initSumTM, float initSumM, bool is
     } // Else do nothing, so keep the old temperature.
 }
 
+void NodePair::transportUpdate(bool isSupply, float rho, float cp, Climate* pClim, unsigned int day, unsigned int hour) {
+    // A plain junction has no storage: it is the mass-flow weighted mix of what just arrived.
+    (void)rho; (void)cp; (void)pClim; (void)day; (void)hour;
+    computeAndSetTemperature(0.f, 0.f, isSupply);
+}
+
+void SubstationNodePair::transportUpdate(bool isSupply, float rho, float cp, Climate* pClim, unsigned int day, unsigned int hour) {
+    if (isSupply == outletSideIsSupply()) {
+        // Outlet side: the substation transfer was already evaluated when its inlet side was
+        // finalised, so inject that enthalpy and mix it with any pipe still flowing in here.
+        computeAndSetTemperature(crossInjectionSumTM, crossInjectionSumM, isSupply);
+        return;
+    }
+    // Inlet side: mix the arriving flows, then transfer to the secondary side straight away so
+    // that the other sweep of this same interval can start from the result.
+    computeAndSetTemperature(0.f, 0.f, isSupply);
+    computeThermal(cp, rho, pClim, day, hour, isSupply); // supplyToReturn == isSupply
+    const float m = fabs(getMassFlow());
+    crossInjectionSumTM = m * getPrimarySideOutputTemperature();
+    crossInjectionSumM = m;
+}
+
+void ThermalStationNodePair::transportUpdate(bool isSupply, float rho, float cp, Climate* pClim, unsigned int day, unsigned int hour) {
+    if (isSupply == outletSideIsSupply()) {
+        computeAndSetTemperature(crossInjectionSumTM, crossInjectionSumM, isSupply);
+        return;
+    }
+    computeAndSetTemperature(0.f, 0.f, isSupply);
+    computeThermal(rho, cp, pClim, day, hour, isSupply); // supplyToReturn == isSupply
+    const float m = fabs(getMassFlow());
+    crossInjectionSumTM = m * getThermalStation()->getOutputTemperature();
+    crossInjectionSumM = m;
+}
+
+void ValveNodePair::transportUpdate(bool isSupply, float rho, float cp, Climate* pClim, unsigned int day, unsigned int hour) {
+    if (isSupply == outletSideIsSupply()) {
+        computeAndSetTemperature(crossInjectionSumTM, crossInjectionSumM, isSupply);
+        return;
+    }
+    computeAndSetTemperature(0.f, 0.f, isSupply);
+    computeThermal(cp, rho, pClim, day, hour, isSupply); // supplyToReturn == isSupply
+    const float m = fabs(getMassFlow());
+    crossInjectionSumTM = m * getOutputTemp();
+    crossInjectionSumM = m;
+}
+
 void NodePair::propagateDownstream(Climate* pClim, float cp, bool isSupply, unsigned int day, unsigned int hour) {// Modified by Max
     // Compute heat losses in ouflowing pipes.
     for (auto pipe : connectedPipes) { // Loop on outflowing pipes (compute their thermal losses).
         if (not pipe->massFlowsToMe(this, isSupply)) { // Flow is outgoing.
-            // Added by Max. In order to be at the correct depth for each pipes.
-            float depth(0.f);
-            if(isSupply){
-                depth = pipe->getSupplyPipe()->getBuriedDepth();
-            }else{depth = pipe->getReturnPipe()->getBuriedDepth();}
-            float soilTemp = pClim->getTgroundCelsius(day,hour,depth);//
+            float soilTemp = pipe->getPipe(isSupply)->getIsAirPipe() ? pClim->getToutCelsius(day, hour) : pClim->getDECPipeSoilToutCelcius(day, hour); // Jerome needs to verify this. This overrides the soil model if we impose soil temperature
             pipe->computeThermalLoss(soilTemp, cp, isSupply);
             pipe->setAlreadyTraversed(true); // It is important that all these flags are set before doing pipe->getOtherNode(this)->propagateNetwork
         }
@@ -4899,7 +5859,7 @@ void ValveNodePair::writeTHResultsText(fstream& textFile, unsigned int i) {
 
 vector<unsigned int> PipePair::ids = {};
 
-PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
+PipePair::PipePair(TiXmlHandle hdl, Network* net) : parentNetwork(net), alreadyTraversed(false) {
 
     if(hdl.ToElement() ) {
 
@@ -4912,8 +5872,8 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         if ( hdl.ToElement()->QueryUnsignedAttribute("id", &id) )                               { throw string("Error in the XML file: a PipePair doesn't have attribute: 'id'."); }
         if ( hdl.ToElement()->QueryUnsignedAttribute("node1", &node1Id) )             { throw string("Error in the XML file: a PipePair doesn't have attribute: 'node1'."); }
         if ( hdl.ToElement()->QueryUnsignedAttribute("node2", &node2Id) )           { throw string("Error in the XML file: a PipePair doesn't have attribute: 'node2'."); }
-        if ( hdl.ToElement()->QueryFloatAttribute("length", &length) )                          { throw string("Error in the XML file: a PipePair doesn't have attribute: 'length' in meters."); }
-        if ( hdl.ToElement()->QueryFloatAttribute("innerRadius", &innerRadius) )                { throw string("Error in the XML file: a PipePair doesn't have attribute: 'innerRadius' in meters."); }
+        if ( hdl.ToElement()->QueryFloatAttribute("length", &length) )                          { } // not mandatory but has to be defined either in the pairpipe or at the pipe
+        if ( hdl.ToElement()->QueryFloatAttribute("innerRadius", &innerRadius) )                { }
         if ( hdl.ToElement()->QueryFloatAttribute("interPipeDistance", &interPipeDistance) ) {
 			cout << "Warning: PipePair id=" << id << " doesn't have attribute: 'interPipeDistance' in meters. Not considering interactions." << endl;
 			interPipeDistance = 0; // will not be used
@@ -4935,35 +5895,32 @@ PipePair::PipePair(TiXmlHandle hdl, Network* net) : alreadyTraversed(false) {
         connectedNodes[1]->addConnectedPipe(this);
         connectedNodes[0]->addConnectedPipeOut(this); //Added by Max
 
-        // Sanity check.
-        if ( length<=0 )            { throw string("Error in the XML file: PipePair id="+to_string(id)+" has length<=0."); }
-        if ( innerRadius<=0 )       { throw string("Error in the XML file: PipePair id="+to_string(id)+" has innerRadius<=0."); }
+        // Sanity check
+        // Length and innerRadius is descended down to the pipe, keep the argument here for retrocompatibility
         if ( interPipeDistance<0)   { throw string("Error in the XML file: PipePair id="+to_string(id)+" has interPipeDistance<0."); }
 
         float initDownstreamTemp = 0.5f*(getHeadNode()->getSupplyTemperature()+getTailNode()->getSupplyTemperature()); // Arbitrarily set downstream temperature to average between the two node temperatures.
         TiXmlElement* supplyPipeHdl = hdl.ToElement()->FirstChildElement( "SupplyPipe" );
         if ( not supplyPipeHdl ) { throw string("Error in the XML file: a PipePair doesn't have any 'SupplyPipe' child element."); }
-        else { supplyPipe = new Pipe( supplyPipeHdl, this, net->getSoilkValue(), initDownstreamTemp ); }
+        else { supplyPipe = new Pipe( supplyPipeHdl, this, net->getSoilkValue(), initDownstreamTemp, net->getAirHValue() ); }
 
         initDownstreamTemp = 0.5f*(getHeadNode()->getReturnTemperature()+getTailNode()->getReturnTemperature()); // Arbitrarily set downstream temperature to average between the two node temperatures.
         TiXmlElement* returnPipeHdl = hdl.ToElement()->FirstChildElement( "ReturnPipe" );
         if ( not returnPipeHdl ) { throw string("Error in the XML file: a PipePair doesn't have any 'ReturnPipe' child element."); }
-        else { returnPipe = new Pipe( returnPipeHdl, this, net->getSoilkValue(), initDownstreamTemp ); }
+        else { returnPipe = new Pipe( returnPipeHdl, this, net->getSoilkValue(), initDownstreamTemp, net->getAirHValue() ); }
 
-        interPipeThermalResistance = supplyPipe->computeInsulationResistance(innerRadius) + returnPipe->computeInsulationResistance(innerRadius) + computeInterPipeSoilThermalResistance(supplyPipe, returnPipe, interPipeDistance, innerRadius, net->getSoilkValue());
-        if (isnan(interPipeThermalResistance))
+        // Dubon adapted this part for new logic of coding
+        // The physical logic is not changed.
+        if (interPipeDistance > 0.0f)
         {
-            if (supplyPipe->computeInsulationResistance(innerRadius)<0.f || isnan(supplyPipe->computeInsulationResistance(innerRadius))) {
-                throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic insulation resistance in the supply pipe."));
-            }
-            else if (returnPipe->computeInsulationResistance(innerRadius)<0.f || isnan(returnPipe->computeInsulationResistance(innerRadius))) {
-                throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic insulation resistance in the return pipe."));
-            }
-            else if (isnan(computeInterPipeSoilThermalResistance(supplyPipe, returnPipe, interPipeDistance, innerRadius, net->getSoilkValue()))) {
-                cout << "Warning: PipePair id=" << this->getId() << ", unrealistic inter-pipe soil thermal resistance. Neglecting it." << endl;
-            }
-            else {
-                throw(string("PipePair id=")+toString(this->getId())+string(", unrealistic physical characteristics."));
+            interPipeThermalResistance = supplyPipe->getEquivalentThermalResistanceToOuterCasing()
+                                        + returnPipe->getEquivalentThermalResistanceToOuterCasing()
+                                        + computeInterPipeSoilThermalResistance();
+
+            if (isnan(interPipeThermalResistance))
+            {
+                // Ca ne devrait jamais se produire
+                throw(string("PipePair id=")+toString(this->getId())+string(", InterPipeThermalResistance is nan."));
             }
         }
 
@@ -4989,11 +5946,24 @@ unsigned int PipePair::getPipePairsIdx(){ // Added by Max
     throw "Error the id given in the function getPipePairsIdx is not found in the vector PipePairs";
 }
 
-float PipePair::computeInterPipeSoilThermalResistance(Pipe* p1, Pipe* p2, float interPipeDistance, float innerRadius, float soilConductivity) {
-    float OuterRad1 = innerRadius + p1->getInsulationThick();
-    float OuterRad2 = innerRadius + p2->getInsulationThick();
-    float x = (interPipeDistance*interPipeDistance - OuterRad1*OuterRad1 - OuterRad2*OuterRad2)/(2*OuterRad1*OuterRad2); // Or maybe if the interPipeDistance is the horizontal distance, then we should also take into account the difference in buried depth, so real distance between the pipes is sqrt(interpipehorizontaldist^2+diffBuriedDepth^2)
-    return log(x + pow(x*x-1, 0.5)) / (2*3.14*soilConductivity);
+float PipePair::computeInterPipeSoilThermalResistance() {
+
+    float soilConductivity = parentNetwork->getSoilkValue();
+    float supplyPipeOuterCasingRadius = supplyPipe->getPipeProperty("InnerRadius")
+                                        + supplyPipe->getPipeProperty("PipeWallThickness")
+                                        + supplyPipe->getPipeProperty("PipeInsulationThickness")
+                                        + supplyPipe->getPipeProperty("PipeCasingThickness");
+    float returnPipeOuterCasingRadius = returnPipe->getPipeProperty("InnerRadius")
+                                        + returnPipe->getPipeProperty("PipeWallThickness")
+                                        + returnPipe->getPipeProperty("PipeInsulationThickness")
+                                        + returnPipe->getPipeProperty("PipeCasingThickness");
+
+    float x = (interPipeDistance*interPipeDistance
+               - supplyPipeOuterCasingRadius*supplyPipeOuterCasingRadius
+               - returnPipeOuterCasingRadius*returnPipeOuterCasingRadius
+               )/(2*supplyPipeOuterCasingRadius*returnPipeOuterCasingRadius); // Or maybe if the interPipeDistance is the horizontal distance, then we should also take into account the difference in buried depth, so real distance between the pipes is sqrt(interpipehorizontaldist^2+diffBuriedDepth^2)
+
+    return log(x + pow(x*x-1, 0.5)) / (2*Model::defaultPI*soilConductivity);
 }
 
 
@@ -5051,41 +6021,142 @@ void PipePair::hydraulicConverged(float const& supplyMassFlow, float const& supp
     returnPipe->hydraulicConverged(returnMassFlow, returnDeltaP, rho, length, altitudePressureLoss);
 }
 
+void PipePair::setRoughnessFromNetwork(float value) {
+    if (supplyPipe->getPipeProperty("Roughness") <= 0.f) {
+        supplyPipe->setRoughness(value);
+        returnPipe->setRoughness(value);
+    }
+}
+
 
 
 float Pipe::computeSoilResistance(float pipeRadius, float soilThermalConductivity) {
     float x = buriedDepth/pipeRadius;
-    if (x<=3) {
-        return log(x + pow(x*x-1, 0.5)) / (2*3.14*soilThermalConductivity);
+    if (x<=3.0) {
+        return log(x + pow(x*x-1.0, 0.5)) / (2*3.14159f*soilThermalConductivity);
     } else {
-        return log(2*x) / (2*3.14*soilThermalConductivity);
+        return log(2.0*x) / (2*3.14159f*soilThermalConductivity);
     }
 }
 
-float Pipe::computeInsulationResistance(float pipeRadius) {
-    return log((pipeRadius+insulationThick)/pipeRadius) / (2*3.14*insulationkValue);
-}
-
-Pipe::Pipe(TiXmlHandle hdl, PipePair* parent, const float& soilThermalConductivity, const float& downstreamTemp) :
+Pipe::Pipe(TiXmlHandle hdl, PipePair* parent, const float& soilThermalConductivity, const float& downstreamTemp, const float& airThermalConductivity) :
     massFlow(0.f), pressureDiff(0.f), thermalLoss(0.f), downstreamTemp(downstreamTemp), pressureLossHeat(0.f), massFlowRecord(0), pressureDiffRecord(0), thermalLossRecord(0) {
     if(hdl.ToElement() ) {
-        if ( hdl.ToElement()->QueryFloatAttribute("insulationThick", &insulationThick) )        { throw string("Error in the XML file: a Pipe doesn't have attribute: 'insulationThick' in meters."); }
+
+        unsigned int id = parent->getId();
+
+        // Dubon adapt
+        if ( hdl.ToElement()->QueryFloatAttribute("length", &length))                           { length = parent->getLength(); }
+        if ( hdl.ToElement()->QueryFloatAttribute("innerRadius", &innerRadius))                 { innerRadius = parent->getInnerRadius(); }
+
+        // Sanity check
+        if ((length <= 0.0f)) { throw string("Error in the XML file: Length of pipe "+to_string(id)+" <= 0m"); }
+        if ((innerRadius <= 0.0f)) { throw string("Error in the XML file: Inner radius of pipe "+to_string(id)+" <= 0m"); }
+
+        innerVolume = Model::defaultPI * pow(innerRadius, 2.0f) * length;
+
+        // Kept for retrocompatibility
+        if ( hdl.ToElement()->QueryFloatAttribute("insulationThick", &insulationThickness) )    { throw string("Error in the XML file: a Pipe doesn't have attribute: 'insulationThick' in meters."); }
         if ( hdl.ToElement()->QueryFloatAttribute("insulationkValue", &insulationkValue) )      { throw string("Error in the XML file: a Pipe doesn't have attribute: 'insulationkValue' in W/(K*m)."); }
         if ( hdl.ToElement()->QueryFloatAttribute("buriedDepth", &buriedDepth) )                { throw string("Error in the XML file: a Pipe doesn't have attribute: 'buriedDepth' in meters."); }
 
+        if ( hdl.ToElement()->QueryFloatAttribute("insulationCp", &insulationCp) )              { } // Used only in dynamic model, may be included in the steady-state as well
+        if ( hdl.ToElement()->QueryFloatAttribute("insulationRho", &insulationRho) )            { } // Do not throw error for retrocompatibility
+        if ( hdl.ToElement()->QueryFloatAttribute("wallRho", &wallRho) )                        { }
+        if ( hdl.ToElement()->QueryFloatAttribute("wallCp", &wallCp) )                          { }
+        if ( hdl.ToElement()->QueryFloatAttribute("wallThick", &wallThickness) )                { }
+        if ( hdl.ToElement()->QueryFloatAttribute("wallkValue", &wallkValue) )                  { }
+        if ( hdl.ToElement()->QueryFloatAttribute("casingkValue", &casingkValue) )              { }
+        if ( hdl.ToElement()->QueryFloatAttribute("casingRho", &casingRho) )                    { }
+        if ( hdl.ToElement()->QueryFloatAttribute("casingCp", &casingCp) )                      { }
+        if ( hdl.ToElement()->QueryFloatAttribute("casingThick", &casingThickness) )            { }
+
+        if ( hdl.ToElement()->QueryBoolAttribute("airPipe", &isAirPipe) )                       { isAirPipe = false; }
+        if ( hdl.ToElement()->QueryFloatAttribute("airConvectiveCoefficient", &airConvectiveCoefficient) )       { airConvectiveCoefficient = airThermalConductivity; }
+
+        if ( hdl.ToElement()->QueryFloatAttribute("roughness", &roughness) )                    { }
+
         // Sanity check.
-        unsigned int id = parent->getId();
-        if ( insulationThick<=0 )   { throw string("Error in the XML file: PipePair id="+to_string(id)+" has a Pipe with insulationThick<=0."); }
+        if ( insulationThickness<=0 )   { throw string("Error in the XML file: PipePair id="+to_string(id)+" has a Pipe with insulationThick<=0."); }
         if ( insulationkValue<=0 )  { throw string("Error in the XML file: PipePair id="+to_string(id)+" has a Pipe with insulationkValue<=0."); }
         if ( buriedDepth<=0 )       { throw string("Error in the XML file: PipePair id="+to_string(id)+" has a Pipe with buriedDepth<=0."); }
-        if ( buriedDepth <= parent->getInnerRadius() + insulationThick ) { throw string("Error in the XML file: a PipePair id="+to_string(id)+" has: buriedDepth<=innerRadius+insulationThick"); }
 
-        thermalResistance = computeSoilResistance(parent->getInnerRadius()+insulationThick, soilThermalConductivity) + computeInsulationResistance(parent->getInnerRadius());
+        // Note that only < considered for retrocompatibility, it allows 0 values
+        // Add here for all properties
+
+        float casingOuterRadius = innerRadius + wallThickness + insulationThickness + casingThickness;
+
+        if ( buriedDepth <= casingOuterRadius ) { throw string("Error in the XML file: a PipePair id="+to_string(id)+" has: buriedDepth<=innerRadius+insulationThickness+wallThickness+casingThickness"); }
+
+        thermalResistance = getEquivalentThermalResistanceToOuterCasing();
+
+        if (not isAirPipe) {
+            thermalResistance += computeSoilResistance(casingOuterRadius, soilThermalConductivity);
+        }
+        else {
+            thermalResistance += 1.0f / (airConvectiveCoefficient * 2.0f * 3.14159f * casingOuterRadius);
+        }
+
+        thermalSegmentCount = max(1u, min(200u, static_cast<unsigned int>(ceil(length / 5.f))));
+        thermalSegmentLength = length / static_cast<float>(thermalSegmentCount);
+        thermalSegmentVolume = innerVolume / static_cast<float>(thermalSegmentCount);
+        pipeWallTemperatureSegments.assign(thermalSegmentCount, downstreamTemp);
+        casingTemperatureSegments.assign(thermalSegmentCount, downstreamTemp);
+        newPipeWallTemperatureSegments.resize(thermalSegmentCount);
+        newCasingTemperatureSegments.resize(thermalSegmentCount);
+        segmentSumGWaterWall.resize(thermalSegmentCount);
+        segmentSumGWaterWallTimesWaterResponse.resize(thermalSegmentCount);
+        segmentRhsPipeWallFromWater.resize(thermalSegmentCount);
+        waterVolumeScratch.reserve(thermalSegmentCount + 4u);
+
+        // Initialise Lagrangian buffer with one element spanning the full pipe volume.
+        waterVolumes.push_back({downstreamTemp, innerVolume});
     }
     else {
         // throw error ?
     }
+}
 
+float Pipe::getEquivalentThermalResistanceToOuterCasing()
+{
+    float wallOuterRadius = innerRadius + wallThickness;
+    float insulationOuterRadius = wallOuterRadius + insulationThickness;
+    float casingOuterRadius = insulationOuterRadius + casingThickness;
+
+    return log((wallOuterRadius)/innerRadius) / (2.0f*3.14159f*wallkValue)
+            + log((insulationOuterRadius)/(wallOuterRadius)) / (2.0f*3.14159f*insulationkValue)
+            + log((casingOuterRadius)/(insulationOuterRadius)) / (2.0f*3.14159f*casingkValue);
+}
+
+float Pipe::getPipeProperty(string propertyName){
+    if (propertyName == "PipeLength") { return length; }
+    else if (propertyName == "PipeInnerRadius") { return innerRadius; }
+    else if (propertyName == "PipeInternalVolume") { return innerVolume; }
+
+    // Wall Properties
+    else if (propertyName == "PipeWallRho") { return wallRho; }
+    else if (propertyName == "PipeWallCp") { return wallCp; }
+    else if (propertyName == "PipeWallkValue") { return wallkValue; }
+    else if (propertyName == "PipeWallThickness") { return wallThickness; }
+
+    // Insulation Properties
+    else if (propertyName == "PipeInsulationRho") { return insulationRho; }
+    else if (propertyName == "PipeInsulationCp") { return insulationCp; }
+    else if (propertyName == "PipeInsulationkValue") { return insulationkValue; }
+    else if (propertyName == "PipeInsulationThickness") { return insulationThickness; }
+
+    // Casing Properties
+    else if (propertyName == "PipeCasingkValue") { return casingkValue; }
+    else if (propertyName == "PipeCasingRho") { return casingRho; }
+    else if (propertyName == "PipeCasingCp") { return casingCp; }
+    else if (propertyName == "PipeCasingThickness") { return casingThickness; }
+
+    else if (propertyName == "PipeRoughness") { return roughness; }
+
+    else if (propertyName == "PipeBuriedDepth") { return buriedDepth; }
+
+    // Fallback if no property matches
+    return 0.0f;
 }
 
 void Pipe::computeThermalLoss(float inputTemp, float twinNearInputTemp, float twinNearOutputTemp, float soilTemp, float cp, float length, float interPipeThermalResistance) {
@@ -5115,9 +6186,551 @@ void Pipe::hydraulicConverged(float const& massFlow_, float const& deltaP, float
     pressureLossHeat = abs( massFlow*(deltaP-altitudePressureLoss)/(rho*length) );
 }
 
+float Pipe::computeCylindricalResistance(float innerRadius, float outerRadius, float kValue) {
+    if (outerRadius <= innerRadius) { return 0.f; }
+    return log(outerRadius / innerRadius) / (2.0f * Model::defaultPI * kValue);
+}
 
+void Pipe::applyHeatTransportToWaterVolumes(DistrictEnergyCenter* pDEC, float const& exteriorTemp, unsigned int dt)
+{
+    if (pDEC->getDistrict()->getDECSimulationConfig().heatTransportEquation == DECSimulationConfig::HEAT_TRANSPORT_THREE_NODE) {
+        applyThreeNodeHeatTransportToWaterVolumes(pDEC, exteriorTemp, dt);
+    }
+}
 
+void Pipe::applyThreeNodeHeatTransportToWaterVolumes(DistrictEnergyCenter* pDEC, float const& exteriorTemp, unsigned int dt)
+{
+    if (wallThickness <= 0.f || casingThickness <= 0.f) {
+        throw string("Error in Pipe::applyThreeNodeHeatTransportToWaterVolumes: heatTransportEquation=\"threeNode\" requires wallThick>0 and casingThick>0.");
+    }
+    if (wallRho <= 0.f || wallCp <= 0.f || casingRho <= 0.f || casingCp <= 0.f) {
+        throw string("Error in Pipe::applyThreeNodeHeatTransportToWaterVolumes: wall and casing rho/Cp must be > 0.");
+    }
 
+    float cpWater = pDEC->getCp();
+    float rhoWater = pDEC->getRho();
+    float exteriorLoss = 0.f;
+    float crossSectionArea = Model::defaultPI * innerRadius * innerRadius;
 
+    float T_rep;
+    {
+        float sumVT = 0.f, sumV = 0.f;
+        for (unsigned int i = 0u; i < waterVolumes.size(); i++) {
+            sumVT += waterVolumes[i].volume * waterVolumes[i].temperature;
+            sumV  += waterVolumes[i].volume;
+        }
+        T_rep = (sumV > 0.f) ? sumVT / sumV : exteriorTemp;
+    }
+
+    float ri = innerRadius;
+    float rWallOuter = ri + wallThickness;
+    float rWallMid = 0.5f * (ri + rWallOuter);
+    float rInsOuter = rWallOuter + insulationThickness;
+    float rCasingOuter = rInsOuter + casingThickness;
+    float rCasingMid = 0.5f * (rInsOuter + rCasingOuter);
+
+    float kWater = DistrictEnergyCenter::computeKFast(T_rep);
+    float muWater = DistrictEnergyCenter::computeMuFast(T_rep);
+    float NuPipe = Network::computeNusseltNumber(fabsf(massFlow), innerRadius, length, T_rep, kWater, muWater, cpWater);
+
+    float RwaterWall = 1.0f / (NuPipe * kWater * Model::defaultPI)
+                     + computeCylindricalResistance(ri, rWallMid, wallkValue);
+    float RwallCasing = computeCylindricalResistance(rWallMid, rWallOuter, wallkValue)
+                      + computeCylindricalResistance(rWallOuter, rInsOuter, insulationkValue)
+                      + computeCylindricalResistance(rInsOuter, rCasingMid, casingkValue);
+    float Rce = computeCylindricalResistance(rCasingMid, rCasingOuter, casingkValue);
+    if (isAirPipe) {
+        Rce += 1.0f / (airConvectiveCoefficient * 2.0f * Model::defaultPI * rCasingOuter);
+    }
+    else {
+        Rce += computeSoilResistance(rCasingOuter, pDEC->getNetwork()->getSoilkValue());
+    }
+
+    float GwaterWall = 1.0f / RwaterWall; // [W/(m.K)]
+    float GwallCasing = 1.0f / RwallCasing;
+    float Gce = 1.0f / Rce;
+
+    float dtf = static_cast<float>(dt);
+    float invDt = 1.f / dtf;
+    float insulationCapacity = insulationRho * insulationCp * Model::defaultPI * (rInsOuter*rInsOuter - rWallOuter*rWallOuter);
+    float Cs = (wallRho * wallCp * Model::defaultPI * (rWallOuter*rWallOuter - ri*ri) + 0.5f * insulationCapacity) * thermalSegmentLength;
+    float Cc = (casingRho * casingCp * Model::defaultPI * (rCasingOuter*rCasingOuter - rInsOuter*rInsOuter) + 0.5f * insulationCapacity) * thermalSegmentLength;
+    float GwallCasingSegment = GwallCasing * thermalSegmentLength;
+    float GceSegment = Gce * thermalSegmentLength;
+
+    fill(segmentSumGWaterWall.begin(), segmentSumGWaterWall.end(), 0.f);
+    fill(segmentSumGWaterWallTimesWaterResponse.begin(), segmentSumGWaterWallTimesWaterResponse.end(), 0.f);
+    fill(segmentRhsPipeWallFromWater.begin(), segmentRhsPipeWallFromWater.end(), 0.f);
+
+    ThermalSegmentCursor waterCursor(thermalSegmentCount, thermalSegmentVolume);
+    for (unsigned int i = 0u; i < waterVolumes.size(); i++)
+    {
+        WaterVolume& wV = waterVolumes[i];
+        float remainingVolume = wV.volume;
+        while (remainingVolume > 0.f)
+        {
+            float volumeInSegment = waterCursor.nextSlice(remainingVolume);
+            unsigned int segmentIdx = waterCursor.segment();
+
+            float lengthInSegment = volumeInSegment / crossSectionArea;
+            float Cw = rhoWater * cpWater * volumeInSegment;
+            float GwaterWallSegment = GwaterWall * lengthInSegment;
+            float waterImplicitDenominator = Cw * invDt + GwaterWallSegment;
+            float waterResponseToPipeWall = GwaterWallSegment / waterImplicitDenominator;
+            float waterRhs = (Cw * invDt * wV.temperature + pressureLossHeat * lengthInSegment) / waterImplicitDenominator;
+
+            segmentSumGWaterWall[segmentIdx] += GwaterWallSegment;
+            segmentSumGWaterWallTimesWaterResponse[segmentIdx] += GwaterWallSegment * waterResponseToPipeWall;
+            segmentRhsPipeWallFromWater[segmentIdx] += GwaterWallSegment * waterRhs;
+
+            waterCursor.consume(volumeInSegment);
+            remainingVolume -= volumeInSegment;
+        }
+    }
+
+    for (unsigned int segmentIdx = 0u; segmentIdx < thermalSegmentCount; segmentIdx++)
+    {
+        float a11 = Cs * invDt + segmentSumGWaterWall[segmentIdx] + GwallCasingSegment - segmentSumGWaterWallTimesWaterResponse[segmentIdx];
+        float a12 = -GwallCasingSegment;
+        float a21 = -GwallCasingSegment;
+        float a22 = Cc * invDt + GwallCasingSegment + GceSegment;
+        float b1 = Cs * invDt * pipeWallTemperatureSegments[segmentIdx] + segmentRhsPipeWallFromWater[segmentIdx];
+        float b2 = Cc * invDt * casingTemperatureSegments[segmentIdx] + GceSegment * exteriorTemp;
+
+        float det = a11*a22 - a12*a21;
+        if (fabsf(det) < 1e-20f) {
+            throw string("Error in Pipe::applyThreeNodeHeatTransportToWaterVolumes: singular segmented 3-node implicit heat transport matrix.");
+        }
+
+        newPipeWallTemperatureSegments[segmentIdx] = (b1*a22 - a12*b2) / det;
+        newCasingTemperatureSegments[segmentIdx] = (a11*b2 - b1*a21) / det;
+        exteriorLoss += GceSegment * (newCasingTemperatureSegments[segmentIdx] - exteriorTemp) * dtf;
+    }
+
+    waterVolumeScratch.clear();
+    if (waterVolumeScratch.capacity() < waterVolumes.size() + thermalSegmentCount + 4u) {
+        waterVolumeScratch.reserve(waterVolumes.size() + thermalSegmentCount + 4u);
+    }
+
+    ThermalParcelAverager<WaterVolume> parcelAverager(waterVolumeScratch);
+    ThermalSegmentCursor heatedCursor(thermalSegmentCount, thermalSegmentVolume);
+    for (unsigned int i = 0u; i < waterVolumes.size(); i++)
+    {
+        WaterVolume& wV = waterVolumes[i];
+        float remainingVolume = wV.volume;
+        parcelAverager.beginParcel(wV);
+        while (remainingVolume > 0.f)
+        {
+            float volumeInSegment = heatedCursor.nextSlice(remainingVolume);
+            unsigned int segmentIdx = heatedCursor.segment();
+
+            float oldWater = wV.temperature;
+            float lengthInSegment = volumeInSegment / crossSectionArea;
+            float Cw = rhoWater * cpWater * volumeInSegment;
+            float GwaterWallSegment = GwaterWall * lengthInSegment;
+            // Same implicit update written as an increment: a sub-second step changes the water by
+            // ~1e-4 K, which the absolute form loses to float rounding of ~60 C sums.
+            float Tw = oldWater + (GwaterWallSegment * (newPipeWallTemperatureSegments[segmentIdx] - oldWater) + pressureLossHeat * lengthInSegment) / (Cw * invDt + GwaterWallSegment);
+            parcelAverager.addSlice(volumeInSegment, Tw);
+
+            heatedCursor.consume(volumeInSegment);
+            remainingVolume -= volumeInSegment;
+        }
+        parcelAverager.endParcel();
+    }
+
+    pipeWallTemperatureSegments.swap(newPipeWallTemperatureSegments);
+    casingTemperatureSegments.swap(newCasingTemperatureSegments);
+
+    waterVolumes.clear();
+    for (unsigned int i = 0u; i < waterVolumeScratch.size(); i++) {
+        waterVolumes.push_back(waterVolumeScratch[i]);
+    }
+    thermalLoss = exteriorLoss / dtf;
+}
+
+static bool solveLinearSystem4(float a[4][4], float b[4], float x[4])
+{
+    for (unsigned int col = 0u; col < 4u; col++)
+    {
+        unsigned int pivot = col;
+        float pivotAbs = fabsf(a[col][col]);
+        for (unsigned int row = col + 1u; row < 4u; row++)
+        {
+            float candidateAbs = fabsf(a[row][col]);
+            if (candidateAbs > pivotAbs) {
+                pivot = row;
+                pivotAbs = candidateAbs;
+            }
+        }
+        if (pivotAbs < 1e-20f) { return false; }
+        if (pivot != col)
+        {
+            for (unsigned int j = col; j < 4u; j++) { swap(a[col][j], a[pivot][j]); }
+            swap(b[col], b[pivot]);
+        }
+        float invPivot = 1.f / a[col][col];
+        for (unsigned int row = col + 1u; row < 4u; row++)
+        {
+            float factor = a[row][col] * invPivot;
+            a[row][col] = 0.f;
+            for (unsigned int j = col + 1u; j < 4u; j++) { a[row][j] -= factor * a[col][j]; }
+            b[row] -= factor * b[col];
+        }
+    }
+
+    for (int row = 3; row >= 0; row--)
+    {
+        float rhs = b[row];
+        for (unsigned int j = static_cast<unsigned int>(row + 1); j < 4u; j++) { rhs -= a[row][j] * x[j]; }
+        x[row] = rhs / a[row][row];
+    }
+    return true;
+}
+
+float PipePair::computeInterPipeMediumThermalResistance(float supplyOuterRadius, float returnOuterRadius)
+{
+    if (interPipeDistance <= 0.f) { return 0.f; }
+
+    float distance = max(interPipeDistance, supplyOuterRadius + returnOuterRadius + 1e-6f);
+    if (!supplyPipe->getIsAirPipe() && !returnPipe->getIsAirPipe())
+    {
+        float x = (distance*distance - supplyOuterRadius*supplyOuterRadius - returnOuterRadius*returnOuterRadius)
+                / (2.f * supplyOuterRadius * returnOuterRadius);
+        x = max(x, 1.000001f);
+        return log(x + sqrtf(x*x - 1.f)) / (2.f * Model::defaultPI * parentNetwork->getSoilkValue());
+    }
+
+    float gapFactor = max(1.f, distance / max(1e-6f, supplyOuterRadius + returnOuterRadius));
+    float h = max(1e-6f, 0.5f * (supplyPipe->airConvectiveCoefficient + returnPipe->airConvectiveCoefficient));
+    return gapFactor * (1.f / (h * 2.f * Model::defaultPI * supplyOuterRadius)
+                      + 1.f / (h * 2.f * Model::defaultPI * returnOuterRadius));
+}
+
+float PipePair::computeCasingCenterToCasingCenterResistance()
+{
+    float rSupplyInsOuter = supplyPipe->innerRadius + supplyPipe->wallThickness + supplyPipe->insulationThickness;
+    float rSupplyCasingOuter = rSupplyInsOuter + supplyPipe->casingThickness;
+    float rSupplyCasingMid = 0.5f * (rSupplyInsOuter + rSupplyCasingOuter);
+
+    float rReturnInsOuter = returnPipe->innerRadius + returnPipe->wallThickness + returnPipe->insulationThickness;
+    float rReturnCasingOuter = rReturnInsOuter + returnPipe->casingThickness;
+    float rReturnCasingMid = 0.5f * (rReturnInsOuter + rReturnCasingOuter);
+
+    return supplyPipe->computeCylindricalResistance(rSupplyCasingMid, rSupplyCasingOuter, supplyPipe->casingkValue)
+         + computeInterPipeMediumThermalResistance(rSupplyCasingOuter, rReturnCasingOuter)
+         + returnPipe->computeCylindricalResistance(rReturnCasingMid, rReturnCasingOuter, returnPipe->casingkValue);
+}
+
+void PipePair::applyThreeNodeFullHeatTransportToWaterVolumes(DistrictEnergyCenter* pDEC, float const& exteriorTempS, float const& exteriorTempR, unsigned int dt)
+{
+    if (supplyPipe->thermalSegmentCount != returnPipe->thermalSegmentCount) {
+        throw string("Error in PipePair::applyThreeNodeFullHeatTransportToWaterVolumes: supply and return pipes must use the same thermal segment count.");
+    }
+    if (fabsf(supplyPipe->thermalSegmentLength - returnPipe->thermalSegmentLength) > 1e-4f) {
+        throw string("Error in PipePair::applyThreeNodeFullHeatTransportToWaterVolumes: supply and return pipes must use aligned thermal segment lengths.");
+    }
+
+    Pipe* pipes[2] = {supplyPipe, returnPipe};
+    float exteriorTemps[2] = {exteriorTempS, exteriorTempR};
+    float cpWater = pDEC->getCp();
+    float rhoWater = pDEC->getRho();
+    float dtf = static_cast<float>(dt);
+    float invDt = 1.f / dtf;
+    float exteriorLoss[2] = {0.f, 0.f};
+
+    float rCasingCasing = computeCasingCenterToCasingCenterResistance();
+    float gCasingCasingSegment = (interPipeDistance > 0.f && rCasingCasing > 0.f)
+                               ? supplyPipe->thermalSegmentLength / rCasingCasing
+                               : 0.f;
+
+    float gWaterWall[2], gWallCasing[2], gCasingExterior[2];
+    float cWall[2], cCasing[2];
+    float gWallCasingSegment[2], gCasingExteriorSegment[2];
+
+    for (unsigned int side = 0u; side < 2u; side++)
+    {
+        Pipe* pipe = pipes[side];
+        if (pipe->wallThickness <= 0.f || pipe->casingThickness <= 0.f) {
+            throw string("Error in PipePair::applyThreeNodeFullHeatTransportToWaterVolumes: heatTransportEquation=\"threeNodeFull\" requires wallThick>0 and casingThick>0.");
+        }
+        if (pipe->wallRho <= 0.f || pipe->wallCp <= 0.f || pipe->casingRho <= 0.f || pipe->casingCp <= 0.f) {
+            throw string("Error in PipePair::applyThreeNodeFullHeatTransportToWaterVolumes: wall and casing rho/Cp must be > 0.");
+        }
+
+        float sumVT = 0.f, sumV = 0.f;
+        for (unsigned int i = 0u; i < pipe->waterVolumes.size(); i++) {
+            sumVT += pipe->waterVolumes[i].volume * pipe->waterVolumes[i].temperature;
+            sumV += pipe->waterVolumes[i].volume;
+        }
+        float tRep = (sumV > 0.f) ? sumVT / sumV : exteriorTemps[side];
+
+        float ri = pipe->innerRadius;
+        float rWallOuter = ri + pipe->wallThickness;
+        float rWallMid = 0.5f * (ri + rWallOuter);
+        float rInsOuter = rWallOuter + pipe->insulationThickness;
+        float rCasingOuter = rInsOuter + pipe->casingThickness;
+        float rCasingMid = 0.5f * (rInsOuter + rCasingOuter);
+
+        float kWater = DistrictEnergyCenter::computeKFast(tRep);
+        float muWater = DistrictEnergyCenter::computeMuFast(tRep);
+        float nuPipe = Network::computeNusseltNumber(fabsf(pipe->massFlow), pipe->innerRadius, pipe->length, tRep, kWater, muWater, cpWater);
+        float rWaterWall = 1.f / (nuPipe * kWater * Model::defaultPI)
+                         + pipe->computeCylindricalResistance(ri, rWallMid, pipe->wallkValue);
+        float rWallCasing = pipe->computeCylindricalResistance(rWallMid, rWallOuter, pipe->wallkValue)
+                          + pipe->computeCylindricalResistance(rWallOuter, rInsOuter, pipe->insulationkValue)
+                          + pipe->computeCylindricalResistance(rInsOuter, rCasingMid, pipe->casingkValue);
+        float rCasingExterior = pipe->computeCylindricalResistance(rCasingMid, rCasingOuter, pipe->casingkValue);
+        if (pipe->isAirPipe) {
+            rCasingExterior += 1.f / (pipe->airConvectiveCoefficient * 2.f * Model::defaultPI * rCasingOuter);
+        }
+        else {
+            rCasingExterior += pipe->computeSoilResistance(rCasingOuter, pDEC->getNetwork()->getSoilkValue());
+        }
+
+        float insulationCapacity = pipe->insulationRho * pipe->insulationCp * Model::defaultPI * (rInsOuter*rInsOuter - rWallOuter*rWallOuter);
+        cWall[side] = (pipe->wallRho * pipe->wallCp * Model::defaultPI * (rWallOuter*rWallOuter - ri*ri) + 0.5f * insulationCapacity) * pipe->thermalSegmentLength;
+        cCasing[side] = (pipe->casingRho * pipe->casingCp * Model::defaultPI * (rCasingOuter*rCasingOuter - rInsOuter*rInsOuter) + 0.5f * insulationCapacity) * pipe->thermalSegmentLength;
+        gWaterWall[side] = 1.f / rWaterWall;
+        gWallCasing[side] = 1.f / rWallCasing;
+        gCasingExterior[side] = 1.f / rCasingExterior;
+        gWallCasingSegment[side] = gWallCasing[side] * pipe->thermalSegmentLength;
+        gCasingExteriorSegment[side] = gCasingExterior[side] * pipe->thermalSegmentLength;
+
+        fill(pipe->segmentSumGWaterWall.begin(), pipe->segmentSumGWaterWall.end(), 0.f);
+        fill(pipe->segmentSumGWaterWallTimesWaterResponse.begin(), pipe->segmentSumGWaterWallTimesWaterResponse.end(), 0.f);
+        fill(pipe->segmentRhsPipeWallFromWater.begin(), pipe->segmentRhsPipeWallFromWater.end(), 0.f);
+
+        ThermalSegmentCursor waterCursor(pipe->thermalSegmentCount, pipe->thermalSegmentVolume);
+        for (unsigned int i = 0u; i < pipe->waterVolumes.size(); i++)
+        {
+            WaterVolume& wV = pipe->waterVolumes[i];
+            float remainingVolume = wV.volume;
+            while (remainingVolume > 0.f)
+            {
+                float volumeInSegment = waterCursor.nextSlice(remainingVolume);
+                unsigned int segmentIdx = waterCursor.segment();
+
+                float lengthInSegment = volumeInSegment / (Model::defaultPI * pipe->innerRadius * pipe->innerRadius);
+                float cWater = rhoWater * cpWater * volumeInSegment;
+                float gWaterWallSegment = gWaterWall[side] * lengthInSegment;
+                float waterImplicitDenominator = cWater * invDt + gWaterWallSegment;
+                float waterResponseToPipeWall = gWaterWallSegment / waterImplicitDenominator;
+                float waterRhs = (cWater * invDt * wV.temperature + pipe->pressureLossHeat * lengthInSegment) / waterImplicitDenominator;
+
+                pipe->segmentSumGWaterWall[segmentIdx] += gWaterWallSegment;
+                pipe->segmentSumGWaterWallTimesWaterResponse[segmentIdx] += gWaterWallSegment * waterResponseToPipeWall;
+                pipe->segmentRhsPipeWallFromWater[segmentIdx] += gWaterWallSegment * waterRhs;
+
+                waterCursor.consume(volumeInSegment);
+                remainingVolume -= volumeInSegment;
+            }
+        }
+    }
+
+    for (unsigned int segmentIdx = 0u; segmentIdx < supplyPipe->thermalSegmentCount; segmentIdx++)
+    {
+        float a[4][4] = {};
+        float b[4] = {};
+        float x[4] = {};
+
+        for (unsigned int side = 0u; side < 2u; side++)
+        {
+            Pipe* pipe = pipes[side];
+            unsigned int wallRow = 2u * side;
+            unsigned int casingRow = wallRow + 1u;
+            unsigned int twinCasingColumn = (side == 0u) ? 3u : 1u;
+
+            a[wallRow][wallRow] = cWall[side] * invDt + pipe->segmentSumGWaterWall[segmentIdx]
+                                + gWallCasingSegment[side] - pipe->segmentSumGWaterWallTimesWaterResponse[segmentIdx];
+            a[wallRow][casingRow] = -gWallCasingSegment[side];
+            b[wallRow] = cWall[side] * invDt * pipe->pipeWallTemperatureSegments[segmentIdx]
+                       + pipe->segmentRhsPipeWallFromWater[segmentIdx];
+
+            a[casingRow][wallRow] = -gWallCasingSegment[side];
+            a[casingRow][casingRow] = cCasing[side] * invDt + gWallCasingSegment[side]
+                                    + gCasingExteriorSegment[side] + gCasingCasingSegment;
+            a[casingRow][twinCasingColumn] = -gCasingCasingSegment;
+            b[casingRow] = cCasing[side] * invDt * pipe->casingTemperatureSegments[segmentIdx]
+                         + gCasingExteriorSegment[side] * exteriorTemps[side];
+        }
+
+        if (!solveLinearSystem4(a, b, x)) {
+            throw string("Error in PipePair::applyThreeNodeFullHeatTransportToWaterVolumes: singular segmented 3-node-full implicit heat transport matrix.");
+        }
+
+        supplyPipe->newPipeWallTemperatureSegments[segmentIdx] = x[0];
+        supplyPipe->newCasingTemperatureSegments[segmentIdx] = x[1];
+        returnPipe->newPipeWallTemperatureSegments[segmentIdx] = x[2];
+        returnPipe->newCasingTemperatureSegments[segmentIdx] = x[3];
+
+        exteriorLoss[0] += gCasingExteriorSegment[0] * (x[1] - exteriorTempS) * dtf;
+        exteriorLoss[1] += gCasingExteriorSegment[1] * (x[3] - exteriorTempR) * dtf;
+    }
+
+    for (unsigned int side = 0u; side < 2u; side++)
+    {
+        Pipe* pipe = pipes[side];
+        pipe->waterVolumeScratch.clear();
+        if (pipe->waterVolumeScratch.capacity() < pipe->waterVolumes.size() + pipe->thermalSegmentCount + 4u) {
+            pipe->waterVolumeScratch.reserve(pipe->waterVolumes.size() + pipe->thermalSegmentCount + 4u);
+        }
+
+        float crossSectionArea = Model::defaultPI * pipe->innerRadius * pipe->innerRadius;
+        ThermalParcelAverager<WaterVolume> parcelAverager(pipe->waterVolumeScratch);
+        ThermalSegmentCursor heatedCursor(pipe->thermalSegmentCount, pipe->thermalSegmentVolume);
+        for (unsigned int i = 0u; i < pipe->waterVolumes.size(); i++)
+        {
+            WaterVolume& wV = pipe->waterVolumes[i];
+            float remainingVolume = wV.volume;
+            parcelAverager.beginParcel(wV);
+            while (remainingVolume > 0.f)
+            {
+                float volumeInSegment = heatedCursor.nextSlice(remainingVolume);
+                unsigned int segmentIdx = heatedCursor.segment();
+
+                float oldWater = wV.temperature;
+                float lengthInSegment = volumeInSegment / crossSectionArea;
+                float cWater = rhoWater * cpWater * volumeInSegment;
+                float gWaterWallSegment = gWaterWall[side] * lengthInSegment;
+                float tWater = oldWater + (gWaterWallSegment * (pipe->newPipeWallTemperatureSegments[segmentIdx] - oldWater)
+                                         + pipe->pressureLossHeat * lengthInSegment) / (cWater * invDt + gWaterWallSegment);
+                parcelAverager.addSlice(volumeInSegment, tWater);
+
+                heatedCursor.consume(volumeInSegment);
+                remainingVolume -= volumeInSegment;
+            }
+            parcelAverager.endParcel();
+        }
+
+        pipe->pipeWallTemperatureSegments.swap(pipe->newPipeWallTemperatureSegments);
+        pipe->casingTemperatureSegments.swap(pipe->newCasingTemperatureSegments);
+        pipe->waterVolumes.clear();
+        for (unsigned int i = 0u; i < pipe->waterVolumeScratch.size(); i++) {
+            pipe->waterVolumes.push_back(pipe->waterVolumeScratch[i]);
+        }
+        pipe->thermalLoss = exteriorLoss[side] / dtf;
+    }
+}
+
+void PipePair::injectAndAdvectWaterVolumes(Climate* pClimate, unsigned int dtDynamic, unsigned int day, unsigned int hour)
+{
+    float outsideTemperatureS = supplyPipe->getIsAirPipe() ? pClimate->getToutCelsius(day, hour) : pClimate->getDECPipeSoilToutCelcius(day, hour);
+    float outsideTemperatureR = returnPipe->getIsAirPipe() ? pClimate->getToutCelsius(day, hour) : pClimate->getDECPipeSoilToutCelcius(day, hour);
+    float incomingNodeSupplyTemperature = supplyPipe->getMassFlow() > 0.f ? getTailNode()->getTemperature(true) : getHeadNode()->getTemperature(true);
+    float incomingNodeReturnTemperature = returnPipe->getMassFlow() > 0.f ? getTailNode()->getTemperature(false) : getHeadNode()->getTemperature(false);
+
+    const DECSimulationConfig& simulationConfig = getParentNetwork()->getDEC()->getDistrict()->getDECSimulationConfig();
+    if (simulationConfig.heatTransportEquation == DECSimulationConfig::HEAT_TRANSPORT_THREE_NODE_FULL) {
+        applyThreeNodeFullHeatTransportToWaterVolumes(getParentNetwork()->getDEC(), outsideTemperatureS, outsideTemperatureR, dtDynamic);
+        float rhoWater = getParentNetwork()->getDEC()->getRho();
+        supplyPipe->advectWaterVolumes(rhoWater, incomingNodeSupplyTemperature, dtDynamic);
+        returnPipe->advectWaterVolumes(rhoWater, incomingNodeReturnTemperature, dtDynamic);
+    }
+    else {
+        supplyPipe->injectAndAdvectWaterVolumes(getParentNetwork()->getDEC(), outsideTemperatureS, incomingNodeSupplyTemperature, dtDynamic);
+        returnPipe->injectAndAdvectWaterVolumes(getParentNetwork()->getDEC(), outsideTemperatureR, incomingNodeReturnTemperature, dtDynamic);
+    }
+}
+
+void PipePair::applyHeatTransportStep(Climate* pClimate, unsigned int dt, unsigned int day, unsigned int hour)
+{
+    float outsideTemperatureS = supplyPipe->getIsAirPipe() ? pClimate->getToutCelsius(day, hour) : pClimate->getDECPipeSoilToutCelcius(day, hour);
+    float outsideTemperatureR = returnPipe->getIsAirPipe() ? pClimate->getToutCelsius(day, hour) : pClimate->getDECPipeSoilToutCelcius(day, hour);
+
+    const DECSimulationConfig& config = getParentNetwork()->getDEC()->getDistrict()->getDECSimulationConfig();
+    if (config.heatTransportEquation == DECSimulationConfig::HEAT_TRANSPORT_THREE_NODE_FULL) {
+        applyThreeNodeFullHeatTransportToWaterVolumes(getParentNetwork()->getDEC(), outsideTemperatureS, outsideTemperatureR, dt);
+    }
+    else {
+        supplyPipe->applyHeatTransportToWaterVolumes(getParentNetwork()->getDEC(), outsideTemperatureS, dt);
+        returnPipe->applyHeatTransportToWaterVolumes(getParentNetwork()->getDEC(), outsideTemperatureR, dt);
+    }
+}
+
+void PipePair::advectSide(bool isSupply, unsigned int dt)
+{
+    DistrictEnergyCenter* pDEC = getParentNetwork()->getDEC();
+    Pipe* pipe = getPipe(isSupply);
+
+    // The inlet node is final for this interval, so this is the temperature that physically
+    // enters the pipe now, not the one it had one sub-step ago.
+    float incomingNodeTemperature = pipe->getMassFlow() > 0.f
+                                  ? getTailNode()->getTemperature(isSupply)
+                                  : getHeadNode()->getTemperature(isSupply);
+
+    pipe->advectWaterVolumes(pDEC->getRho(), incomingNodeTemperature, dt);
+}
+
+void PipePair::applyHeatTransportAndAdvectSide(bool isSupply, unsigned int dt, float exteriorTemp)
+{
+    DistrictEnergyCenter* pDEC = getParentNetwork()->getDEC();
+    Pipe* pipe = getPipe(isSupply);
+
+    float incomingNodeTemperature = pipe->getMassFlow() > 0.f
+                                  ? getTailNode()->getTemperature(isSupply)
+                                  : getHeadNode()->getTemperature(isSupply);
+
+    pipe->applyHeatTransportToWaterVolumes(pDEC, exteriorTemp, dt);
+    pipe->advectWaterVolumes(pDEC->getRho(), incomingNodeTemperature, dt);
+}
+
+void Pipe::injectAndAdvectWaterVolumes(DistrictEnergyCenter* pDEC, float const& exteriorTemp, float const& tempIn, unsigned int dt)
+{
+    float rhoWater = pDEC->getRho();
+    applyHeatTransportToWaterVolumes(pDEC, exteriorTemp, dt);
+    advectWaterVolumes(rhoWater, tempIn, dt);
+}
+
+void Pipe::advectWaterVolumes(float const& rhoWater, float const& tempIn, unsigned int dt)
+{
+    if (massFlow > 0.0f or massFlow < 0.0f)
+    {
+        bool flowIsPositive = massFlow > 0.f;
+        lastFlowWasPositive = flowIsPositive;
+        float deltaV = dt * abs(massFlow) / (rhoWater);
+        float alpha = max(0.f, (deltaV - innerVolume) / deltaV);
+        float volumeToRemove = deltaV;
+        float energyWeightedSum = 0.f;
+
+        while (volumeToRemove > 0.f && !waterVolumes.empty())
+        {
+            WaterVolume& waterVolume = flowIsPositive ? waterVolumes.back() : waterVolumes.front();
+
+            if (waterVolume.volume <= volumeToRemove)
+            {
+                energyWeightedSum += waterVolume.volume * waterVolume.temperature;
+                volumeToRemove -= waterVolume.volume;
+                if (flowIsPositive) { waterVolumes.pop_back(); }
+                else { waterVolumes.pop_front(); }
+            }
+            else
+            {
+                energyWeightedSum += volumeToRemove * waterVolume.temperature;
+                waterVolume.volume -= volumeToRemove;
+                volumeToRemove = 0.f;
+            }
+        }
+
+        float effectiveVolumeRemoved = deltaV - volumeToRemove;
+        if (effectiveVolumeRemoved > 0.0f)
+        {
+            downstreamTemp = alpha * tempIn + (1-alpha) * (energyWeightedSum / effectiveVolumeRemoved);
+        }
+        else { downstreamTemp = tempIn; }
+
+        // Only replace the volume that physically left the pipe. This also keeps
+        // sum(V_i)=V_pipe when one advancement exceeds the complete pipe volume.
+        const float volumeToInject = effectiveVolumeRemoved;
+        if (volumeToInject > 0.f) {
+            if (flowIsPositive) { waterVolumes.push_front({tempIn, volumeToInject}); }
+            else                { waterVolumes.push_back({tempIn, volumeToInject}); }
+        }
+    }
+    else if (!waterVolumes.empty())
+    {
+        downstreamTemp = lastFlowWasPositive ? waterVolumes.back().temperature : waterVolumes.front().temperature;
+    }
+}
 
 #pragma GCC diagnostic warning "-Wunused-parameter"

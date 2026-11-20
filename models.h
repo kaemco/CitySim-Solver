@@ -30,6 +30,20 @@ public :
     static const unsigned int dt = 3600;
     static const unsigned int dt2 = 300; //time step for stochastic model (5 min)
 
+    // Default values for DHC pipes
+    static const float defaultPipeWallRho;
+    static const float defaultPipeWallCp;
+    static const float defaultPipeWallThermalConductivity;
+    static const float defaultPipeInsulationRho;
+    static const float defaultPipeInsulationCp;
+    static const float defaultPipeInsulationThermalConductivity;
+    static const float defaultPI;
+    static const float defaultPipeCasingThermalConductivity;
+    static const float defaultPipeCasingRho;
+    static const float defaultPipeCasingCp;
+    static const float defaultAirConvectiveCoefficient;
+    static const float defaultPipeRoughness;
+
     static bool thermalExplicit;
     static void setThermalExplicit(bool value) { thermalExplicit = value; }
 

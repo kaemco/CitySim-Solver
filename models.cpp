@@ -12,6 +12,20 @@ float temperaturePrecision = 0.1f; // temperature precision for the models
 
 bool Model::thermalExplicit = false; // is the thermal implicit model used
 
+// Default values for DHC pipes
+const float Model::defaultPipeWallRho = 940.0f; // [kg/m3]
+const float Model::defaultPipeWallCp = 2000.0f; // [J/kg/K]
+const float Model::defaultPipeWallThermalConductivity = 0.35f; // [W/m/K]
+const float Model::defaultPipeInsulationRho = 50.0f; // [kg/m3]
+const float Model::defaultPipeInsulationCp = 1500.0f; // [J/kg/K]
+const float Model::defaultPipeInsulationThermalConductivity = 0.026f; // [W/m/K]
+const float Model::defaultPI = 3.14159f; // used value of PI to ensure uniformity
+const float Model::defaultPipeCasingThermalConductivity = 0.4f;
+const float Model::defaultPipeCasingRho = 950.0f; // [kg/m3], typical HDPE casing
+const float Model::defaultPipeCasingCp = 1900.0f; // [J/kg/K], typical HDPE casing
+const float Model::defaultAirConvectiveCoefficient = 8.0f; // [W/m2/K]
+const float Model::defaultPipeRoughness = 0.000045f; // absolute rougness in (m)
+
 int Model::ThermalWarmUpTime(Building *pBuilding) {
 
     // liens
